@@ -1,0 +1,7 @@
+# Files that run inside the Linux container MUST keep LF endings. Git on Windows
+# would otherwise check them out with CRLF, and the kernel fails the shebang with
+# a maddening "no such file or directory" that names the interpreter, not the file.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+docker-entrypoint.sh text eol=lf
+*.toml          text eol=lf

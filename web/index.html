@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Ski Conditions</title>
+<meta name="description" content="Snow-condition scorecards and a within-region leaderboard for tracked ski mountains worldwide.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%9D%84%EF%B8%8F%3C/text%3E%3C/svg%3E">
+
+<!-- MapLibre GL: keyless vector maps. Pinned; loaded from CDN so the site stays
+     build-step-free and hostable on GitHub Pages as static files. -->
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#leaderboard">Skip to leaderboard</a>
+
+<div id="app">
+  <aside id="sidebar" aria-label="Controls and leaderboard">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">❄</span>
+        <div>
+          <h1>Ski Conditions</h1>
+          <p id="tagline" class="tagline">Loading roster…</p>
+        </div>
+      </div>
+      <button id="theme-toggle" class="icon-btn" type="button"
+              aria-label="Switch to light theme" title="Toggle light / dark">
+        <span aria-hidden="true">◐</span>
+      </button>
+    </header>
+
+    <form class="controls" aria-label="Scoring options" onsubmit="return false">
+      <div class="field-row">
+        <div class="field">
+          <label for="profile">Profile</label>
+          <select id="profile" name="profile"></select>
+        </div>
+        <div class="field">
+          <label for="asof">As of</label>
+          <input type="date" id="asof" name="asof">
+        </div>
+      </div>
+      <div class="field">
+        <label for="region">Region</label>
+        <select id="region" name="region">
+          <option value="All">All regions (global)</option>
+        </select>
+      </div>
+      <label class="check" id="network-field" hidden>
+        <input type="checkbox" id="network">
+        <span>Fetch live forecast (slower)</span>
+      </label>
+      <button id="fitall" class="btn" type="button">
+        <span aria-hidden="true">⤢</span> Fit all mountains
+      </button>
+    </form>
+
+    <div class="legend" id="legend" aria-label="Grade legend"></div>
+
+    <div class="list-head">
+      <h2 id="list-title">Leaderboard</h2>
+      <p id="rank-note" class="rank-note"></p>
+    </div>
+    <ol id="leaderboard" class="list" tabindex="-1"
+        aria-label="Mountains ranked by score" aria-describedby="rank-note">
+      <li class="placeholder">Loading…</li>
+    </ol>
+  </aside>
+
+  <main id="main" aria-label="Map">
+    <div id="map"></div>
+    <div id="map-tooltip" class="map-tooltip" role="status" hidden></div>
+  </main>
+</div>
+
+<!-- Detail card: a modal-less dialog that slides in over the map. -->
+<section id="detail" class="detail" role="dialog" aria-labelledby="detail-title"
+         aria-modal="false" hidden></section>
+
+<!-- Screen-reader announcements for stream / selection changes. Visually hidden,
+     polite so it never interrupts. -->
+<div id="live-region" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

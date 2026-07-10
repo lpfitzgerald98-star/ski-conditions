@@ -1,0 +1,111 @@
+/* Design tokens: the whole visual system in one place.
+ *
+ * Theming is two-layer. `prefers-color-scheme` sets the default, and a
+ * `data-theme` attribute on <html> (set by the toggle) overrides it and wins in
+ * both directions. Every surface/text/line color is a token so a theme is just a
+ * different set of values, never a component rewrite.
+ *
+ * Grade colors are deliberately NOT here -- they come from the backend /grades
+ * scale at runtime so the map, list, and card can never drift onto a different
+ * palette than the scoring engine. */
+
+:root {
+  color-scheme: dark;
+
+  /* Cool, glacial palette. Dark is the default -- a night-on-the-mountain look. */
+  --bg:            #0b1220;
+  --bg-elev:       #111a2b;
+  --panel:         #131d30;
+  --panel-2:       #1a2740;
+  --line:          #24334f;
+  --line-soft:     #1b2740;
+
+  --text:          #eaf1fb;
+  --text-muted:    #93a2be;
+  --text-faint:    #64748b;
+
+  --accent:        #56c2ff;   /* glacier blue */
+  --accent-strong: #2b9fe6;
+  --accent-contrast:#04121f;
+  --alert:         #ffcb47;   /* storm gold */
+
+  --focus:         #8fd3ff;   /* focus ring; high-contrast against both themes */
+
+  /* Elevation */
+  --shadow-card:   0 16px 44px -12px rgba(0, 0, 0, .65);
+  --shadow-pop:    0 6px 20px -6px rgba(0, 0, 0, .6);
+
+  /* Shape */
+  --radius-sm: 7px;
+  --radius:    11px;
+  --radius-lg: 16px;
+
+  /* Spacing scale */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;
+  --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+
+  /* Type */
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Motion. Wrapped so prefers-reduced-motion can zero them everywhere at once. */
+  --dur-fast: 140ms;
+  --dur:      280ms;
+  --dur-slow: 520ms;
+  --ease:     cubic-bezier(.2, .7, .2, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:            #eef3fb;
+  --bg-elev:       #ffffff;
+  --panel:         #ffffff;
+  --panel-2:       #f1f5fc;
+  --line:          #d3deee;
+  --line-soft:     #e4ebf6;
+
+  --text:          #0f1b2d;
+  --text-muted:    #55647d;
+  --text-faint:    #8494ac;
+
+  --accent:        #1f8fd6;
+  --accent-strong: #1478ba;
+  --accent-contrast:#ffffff;
+  --alert:         #c98a00;
+
+  --focus:         #1478ba;
+
+  --shadow-card:   0 16px 40px -16px rgba(31, 56, 92, .35);
+  --shadow-pop:    0 6px 18px -8px rgba(31, 56, 92, .3);
+}
+
+/* System-preference default, only when the user hasn't forced a theme. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg:#eef3fb; --bg-elev:#ffffff; --panel:#ffffff; --panel-2:#f1f5fc;
+    --line:#d3deee; --line-soft:#e4ebf6;
+    --text:#0f1b2d; --text-muted:#55647d; --text-faint:#8494ac;
+    --accent:#1f8fd6; --accent-strong:#1478ba; --accent-contrast:#ffffff; --alert:#c98a00;
+    --focus:#1478ba;
+    --shadow-card:0 16px 40px -16px rgba(31,56,92,.35);
+    --shadow-pop:0 6px 18px -8px rgba(31,56,92,.3);
+  }
+}
+
+/* Respect the OS "reduce motion" setting globally: collapse all durations so
+ * transitions/animations resolve instantly, and stop the map from animating. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur:      0ms;
+    --dur-slow: 0ms;
+  }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

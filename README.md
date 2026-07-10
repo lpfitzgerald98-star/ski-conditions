@@ -1,0 +1,240 @@
+# Ski-Conditions Tracker
+
+Tracks snow/weather at specific ski resorts, grades the season against each
+station's own historical record, and (Phase 2) alerts on incoming/just-happened
+storms. Two outputs kept deliberately separate:
+
+- **Season grade** — "how good is this season/month so far vs history" (a letter grade)
+- **Storm alert** — "is something big incoming or just happened" (Phase 2)
+
+## Status
+
+- **Phase 1 (done):** Alta, UT. Live SNOTEL history + NWS forecast/alerts,
+  season-to-date percentile → letter grade vs the station's full record.
+- **Curve tuned against 37 yrs of real data** (see [docs/tuning.md](docs/tuning.md)):
+  SWE-based season metric, granular top-end letters, storm grading with two
+  baselines + alerting.
+- **Rolling-30-day "hot month" grade (done):** trailing-window total ranked
+  against the *same* calendar window in every historical year (date-matched).
+- **Forecast-based incoming-storm alerts (done):** sums NWS quantitative
+  `snowfallAmount` over the next 24/72h and grades it against storm history.
+- **Base grade (done):** current snow depth (or SWE) vs the same calendar date in
+  history — a *stock*, so it reflects melt/settling and can diverge from season.
+- **Adaptive alert floors (done):** the storm alert floor is per-mountain and
+  season-relative (lean years lower the bar — 6" matters more in a drought).
+- **Overall score engine (done):** one 0-100 score + letter, a weighted blend of
+  season / in-season / forecast / conditions sub-scores. Four toggles:
+  **`dynamic`** (default) auto-shifts weight from season-history early to current
+  conditions late, using each mountain's own `season_window` (works in either
+  hemisphere); plus manual **`weekend` / `month` / `season`** lenses. Forecast
+  only ever helps (drops out when dry). The blend is a **power mean** (exponent
+  `SCORE_BLEND_EXPONENT`) so a weak component drags harder than a plain average --
+  a great season can't hide bad conditions. See `python cli.py score`.
+- **JSON scorecard + HTTP API (done):** `ski/card.py` flattens the whole engine
+  into one JSON-serializable dict (the data contract a frontend renders), exposed
+  over HTTP by a thin FastAPI layer (`api.py`: `GET /mountains`, `GET /score/{mountain}`).
+- **79-mountain roster (done):** North America (US West, Northeast, eastern
+  Sierra, Canada incl. Banff/Jasper) **plus the Southern Hemisphere** (Australia,
+  New Zealand, Chile, Argentina) — see [Mountain roster](#mountain-roster).
+- **Multi-source ingest (done):** six historical networks behind one
+  `raw_observations` schema and a `pipeline.SOURCES` registry — SNOTEL (US West),
+  CDEC (eastern Sierra) and BC ASWS (interior BC) for SWE; ACIS (US Northeast COOP)
+  and ECCC (Canada COOP) for snowfall; and **Open-Meteo ERA5 reanalysis** as a
+  global fallback for the Southern Hemisphere (no station network exists there).
+  SWE networks grade on `swe_gain`, snowfall ones on `new_snow`.
+- **Hemisphere-aware (done):** the accumulation water year starts in Oct for the
+  Northern Hemisphere and May for the Southern (auto by latitude), so a Jun–Oct
+  season never splits across a boundary. Off-season resorts read low on purpose,
+  so a July map shows NH quiet and SH in prime — a global "where's it snowing now".
+- **Interactive map (done):** `web/index.html` — a Leaflet map of every mountain,
+  pins coloured by overall grade, score-sorted leaderboard, click-through detail
+  panel, profile + as-of + live-NWS controls. Served by the API at `/`.
+- **Forecast everywhere + thaw downside (done):** a provider-neutral forecast
+  outlook — NWS on US grids, the global Open-Meteo forecast API everywhere else
+  (Canada, Southern Hemisphere) — so every mountain gets forecast + live-weather
+  sub-scores. The forecast is two-sided: incoming snow boosts, incoming rain or
+  a sustained warm spell (thaw) drags, and a dry benign forecast drops out.
+  Cards expose `sources` (who supplied what) and `outlook` (rain/tmax/thaw).
+- **Later:** Alberta pillow network for Banff/Lake Louise/Marmot.
+
+## Confirmed data sources for Alta
+
+| Source | Value | Notes |
+|---|---|---|
+| NWS grid | office `SLC`, grid `108,167` | Verified live; the points API resolves the coords to "Alta UT". |
+| SNOTEL station | `766:UT:SNTL` (Snowbird, Little Cottonwood, ~9,177 ft) | **Verified:** NRCS header returns `SNOTEL 766: Snowbird, UT`; its coords reverse-geocode to "Alta UT" up-canyon, not the SLC valley. Record 1989–present (~37 yrs). |
+
+## Setup
+
+```bash
+cd projects/ski-conditions
+pip install -r requirements.txt
+```
+
+## Use
+
+```bash
+# 1. Pull the full SNOTEL period of record into SQLite (run once, then periodically)
+python cli.py ingest --mountain alta
+
+# 2. Print the season grade + this season's storms + NWS forecast + active alerts
+python cli.py report --mountain alta
+
+# Overall mountain score under each weighting profile (weekend / month / season)
+python cli.py score --mountain alta
+python cli.py score --mountain alta --profile weekend
+
+# Backtest the grade curve against the full historical record
+# (per-year grades, grade distribution, calibration, last season's storms)
+python cli.py analyze --mountain alta
+
+# Backtest the grade as of any date, or skip the network:
+python cli.py report --mountain alta --as-of 2025-02-01
+python cli.py report --mountain alta --no-nws
+
+# Emit the JSON scorecard (the frontend data contract)
+python cli.py card --mountain alta
+python cli.py card --mountain alta --as-of 2025-02-01 --no-nws
+```
+
+Serve the HTTP API + **interactive map** (optional — needs `fastapi` + `uvicorn`):
+
+```bash
+pip install fastapi "uvicorn[standard]"
+uvicorn api:app --reload
+#   http://127.0.0.1:8000/              interactive map (web/index.html)
+#   http://127.0.0.1:8000/scores        all mountains' overall score+grade (map/leaderboard)
+#   http://127.0.0.1:8000/score/alta    full scorecard (?as_of=YYYY-MM-DD&network=false)
+#   http://127.0.0.1:8000/mountains     roster
+#   http://127.0.0.1:8000/docs          auto OpenAPI
+```
+
+The map (`web/index.html`, Leaflet) paints every mountain as a pin coloured by its
+overall grade, with a score-sorted leaderboard and a click-through detail panel
+(sub-scores, season/base grades, incoming storms). A profile toggle, an *as-of*
+date picker (backtest any day), and a live-NWS switch drive it off `/scores`.
+Run `ingest` for the mountains you want populated first — un-ingested ones show
+grey/`n/a`.
+
+Run the tests (no network needed):
+
+```bash
+python tests/test_grading.py        # grading math
+python tests/test_card.py           # JSON scorecard contract
+python tests/test_acis.py           # ACIS/COOP parsing (Northeast source)
+# or, with pytest installed:  python -m pytest tests/ -q
+```
+
+## Architecture / design decisions
+
+- **Raw-only storage, compute-on-read.** SQLite stores only
+  `raw_observations(station_id, date, swe_inches, snow_depth_inches, new_snow_24hr)`.
+  Percentiles, grades and alerts are computed when you *read*, never stored — so
+  retuning the grade curve is a `config.py` edit, never a DB migration.
+- **Different metric per time horizon.** Season = cumulative SWE-gain to date
+  (full 37-yr record; depth-based new-snow only exists from ~2003); storm =
+  24/72 hr new-snow totals. One number can't answer every question, so they don't
+  share one. A season can grade **D** while it contained the biggest storm on
+  record (real WY2026 case) — that's the point.
+- **Storms use two baselines.** Letter grade ranks vs real-storm windows (so it
+  discriminates); alert ranks vs all windows + an absolute inch floor (so a
+  dusting in a dry microclimate can't page you). See [docs/tuning.md](docs/tuning.md).
+- **Percentile, not z-score.** Snowfall is right-skewed; ranking is
+  `(# historical years below current) / (total years) * 100`. Median/percentile
+  based throughout.
+- **Same day-of-water-year comparison.** Water year starts Oct 1; the current
+  year's season-to-date total is ranked against every historical year's total at
+  the *same* day-of-water-year.
+- **Honest about missing data.** Historical years with < 90% coverage in the
+  window are *skipped*, not interpolated (interpolation fakes signal). Stations
+  with < 10 usable years still show a grade, flagged `[LOW CONFIDENCE]`.
+
+## Tuning (all in `config.py`)
+
+- `MOUNTAINS` — resort → SNOTEL station + NWS grid. Add a mountain = add a dict entry.
+- `GRADE_THRESHOLDS` — percentile → letter grade curve.
+- `STORM_THRESHOLDS` — absolute floor + percentile bar for alerts (Phase 2).
+- `SEASON_COVERAGE_MIN`, `LOW_CONFIDENCE_YEARS` — data-quality knobs.
+
+## Layout
+
+```
+config.py              tunable config (mountains, grade curve, storm thresholds)
+cli.py                 ingest / report / analyze / score / card commands
+api.py                 FastAPI layer (/scores, /score/{mountain}, /mountains) + serves the map
+web/index.html         interactive Leaflet map frontend (self-contained)
+ski/
+  watercalendar.py     water-year + day-of-water-year helpers
+  db.py                sqlite raw_observations store (raw only)
+  grading.py           percentile_rank, letter_grade, season + storm grading
+  score.py             sub-score blend + weighting profiles (the score engine)
+  card.py              scorecard() -> pure JSON data contract for a frontend
+  analysis.py          backtest / calibration helpers (the tuning tools)
+  sources/snotel.py    NRCS SNOTEL client -> daily obs (the West)
+  sources/acis.py      NOAA ACIS/COOP client -> daily obs (the Northeast)
+  sources/cdec.py      California CDEC client -> daily obs (eastern Sierra, SWE)
+  sources/bcsws.py     BC ASWS client -> daily obs (interior BC, SWE)
+  sources/eccc.py      Environment Canada client -> daily obs (Canada COOP)
+  sources/openmeteo.py Open-Meteo ERA5 client -> daily obs (global; Southern Hemisphere)
+  sources/nws.py       forecast + active alerts (US only)
+  pipeline.py          ingest / grade / fetch_nws; SOURCES registry (source dispatch)
+tests/test_grading.py  grading math proofs, no network
+tests/test_card.py     JSON scorecard contract, no network
+tests/test_acis.py     ACIS/COOP parsing, no network
+tests/test_sources.py  CDEC + ECCC parsing, no network
+docs/tuning.md         why the curve/thresholds are what they are
+```
+
+## Mountain roster
+
+`MOUNTAINS` covers **79 resorts** across six historical networks. The breakdown
+by `data_source`: **36 SNOTEL** (US West + AK), **20 Open-Meteo** (Southern
+Hemisphere + Alberta/Banff), **9 ACIS** (US Northeast), **9 ECCC** (Canada COOP),
+**3 BC ASWS** (interior BC), **2 CDEC** (eastern Sierra). Every entry was built
+from live data, not guesses:
+
+- **Station** — the nearest station in the relevant network, chosen from live
+  metadata. Many sit right on the mountain (`Vail Mountain`, `Grand Targhee`,
+  `Lone Mountain` = Big Sky, `Mammoth Pass`, `Mount Revelstoke`, `Silver Star
+  Mountain`, `Pinkham Notch`, `Taos Powderhorn`).
+- **NWS grid** (US only) — resolved live via `api.weather.gov/points/<lat>,<lon>`.
+- **`verified: False`** flags the handful where the nearest station is a genuine
+  compromise (distance or elevation) — e.g. `aspen` (Chapman Tunnel, 11 mi),
+  `sun_valley`, `bachelor`, and several valley-proxy Canadian stations.
+
+Alberta's Banff-area resorts (**Lake Louise, Sunshine Village, Mt Norquay,
+Marmot Basin**) have no COOP snow record and no open Alberta-pillow API, so they
+use the Open-Meteo reanalysis fallback (same as the Southern Hemisphere). A couple
+of US resorts remain **left out** for want of any representative station:
+**Whitefish** (19 mi) and **Snowbasin** (~12 mi, wrong drainage).
+
+### Sources beyond SNOTEL
+
+- **CDEC** (`ski/sources/cdec.py`) — California's snow-pillow network reaches the
+  **eastern Sierra**, where SNOTEL doesn't. SWE-based, so Mammoth/June grade on
+  `swe_gain` like SNOTEL.
+- **BC ASWS** (`ski/sources/bcsws.py`) — British Columbia's alpine snow pillows,
+  several on-mountain (`Mount Revelstoke`, `Silver Star Mountain`). SWE-based
+  (`swe_gain`); adds Revelstoke, Silver Star, Big White. Reads the province's wide
+  daily-archive CSV (cached on disk); snow depth is skipped (a separate 38 MB
+  file), so base/storm grades are N/A and the score rests on season + in-season.
+
+### Northeast (ACIS/COOP source)
+
+SNOTEL has *zero* stations in the Northeast (verified against the full NRCS list —
+0 in VT/NH/ME/NY), so the 9 East Coast resorts use a second historical source:
+**NOAA ACIS** (`data.rcc-acis.org`, `ski/sources/acis.py`), which serves daily
+snowfall + snow depth from NWS COOP stations with decades of record and no API
+key. A mountain opts in with `data_source: "acis"` + an `acis_sid` (GHCN id).
+COOP has no SWE, so these grade on the **`new_snow`** season metric via a
+per-mountain `season_metric` override — everything downstream (curve, storms,
+scorecard, API) is unchanged.
+
+Two station flavors are handled transparently: most COOP stations report daily
+snowfall directly; a few (e.g. the Mount Mansfield stake) report only depth, from
+which new-snow is derived by consecutive-day depth change. Because Mansfield only
+logs depth every *other* day (breaking a derived season total), Stowe instead uses
+nearby **Jeffersonville**, which reports daily snowfall. **Wildcat** uses **Pinkham
+Notch** — on-mountain, 96 yr. Storm floors are lower here (`{24: 4, 72: 8}`);
+Eastern storms are smaller. NE resorts with a valley-floor or short-record proxy
+are marked `verified: False`.

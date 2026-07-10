@@ -1,0 +1,11 @@
+pandas>=2.0
+numpy>=1.24
+requests>=2.28
+
+# optional (for `python -m pytest tests/`); the standalone
+# `python tests/test_grading.py` runner needs none of these
+pytest>=7.0
+
+# optional (only for the HTTP API in api.py; the CLI + engine don't need these)
+fastapi>=0.110
+uvicorn[standard]>=0.29

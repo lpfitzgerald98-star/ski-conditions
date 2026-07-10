@@ -1,0 +1,13 @@
+# Runtime data
+data/*.db
+data/*.sqlite
+
+# Generated static snapshot (rebuilt by the daily Action / build_snapshot.py)
+web/data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/

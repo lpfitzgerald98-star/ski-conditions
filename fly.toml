@@ -1,0 +1,62 @@
+app = "ski-conditions"
+primary_region = "sea"          # near the Cascades/NWS; change to taste
+
+[build]
+
+[env]
+  SKI_DB_PATH = "/data/ski.db"
+
+# The SQLite file lives here. A Fly volume is block storage attached to ONE
+# machine -- it is not shared, and it cannot be mounted by two machines at once.
+# That constraint is why the http_service below is pinned to a single machine.
+[mounts]
+  source = "ski_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # --- The two settings that make or break this app -----------------------
+  #
+  # auto_stop_machines: a stopped machine drops every open SSE connection and
+  # cold-starts on the next request, so the "instant" cached first paint becomes
+  # a 10s boot. Keep one machine warm.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # SQLite + a volume cannot be replicated. If Fly ever scaled this to 2 machines
+  # they would fight over one volume (or, worse, get separate volumes and serve
+  # divergent data). Pin it.
+  max_machines_running = 1
+
+  [http_service.concurrency]
+    # Each browser tab holds an SSE connection open for the whole ~24s refresh.
+    # Fly's default hard_limit of 25 would start refusing tabs early; these are
+    # cheap idle connections, not workers.
+    type = "connections"
+    soft_limit = 50
+    hard_limit = 200
+
+# Fly's proxy streams responses through without buffering, so SSE works without
+# special configuration -- unlike an nginx-fronted host, where a proxy read buffer
+# holds the whole response until the stream ends and the map never fills in. The
+# app sends `X-Accel-Buffering: no` anyway (api.py), which is what nginx honours;
+# it is harmless here and means the app can move hosts without breaking.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # 1GB, not the 256MB default. Scoring loads a station's full observation history
+  # into pandas (Fernie alone is 39k rows) across 3 concurrent worker threads, and
+  # the roster refresh peaked around 400MB locally. 256MB gets OOM-killed mid-stream.
+  memory = "1gb"
+
+[checks]
+  [checks.health]
+    type = "http"
+    port = 8080
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"

@@ -1,0 +1,16 @@
+.git
+.github
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+tests/
+docs/
+.claude/
+
+# NOTE: data/ski.db is deliberately NOT ignored. It is gitignored, but the image
+# needs it as the seed snapshot that docker-entrypoint.sh copies onto an empty
+# volume on first boot. Excluding it here would deploy an app with no history to
+# grade against, and every mountain would score N/A until a full re-ingest.
