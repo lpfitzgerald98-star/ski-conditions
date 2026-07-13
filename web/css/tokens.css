@@ -54,13 +54,11 @@
   --dur-slow: 520ms;
   --ease:     cubic-bezier(.2, .7, .2, 1);
 
-  /* Basemap tint. Positron is a very light greyscale style -- inverting it for a
-     "dark map" pushes the water to pure black (unrecoverable), so we DON'T. The
-     light map reads as a clean cartographic canvas with the colored grade badges
-     floating on top, in both themes. A subtle dim keeps it from glaring next to
-     the dark UI. (To get a true dark basemap later, switch MAP_STYLE to Liberty
-     and set this to an invert() recipe -- Liberty's color survives inversion.) */
-  --map-filter: saturate(0.92) brightness(0.98);
+  /* Dark basemap. Liberty is colorful, so invert + hue-rotate turns it into a
+     genuine dark map (land dark, water stays blue-ish) instead of the near-black
+     an already-light style would give. Only the tile canvas is filtered; the DOM
+     markers/clusters sit above it untouched. */
+  --map-filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.82);
 }
 
 :root[data-theme="light"] {

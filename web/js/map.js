@@ -7,9 +7,12 @@
 // perf cost is nil. Each marker is a <button> wrapping the shared SVG badge, so
 // grade reads as color + shape + letter and Tab walks the pins in order.
 
-import { MAP_STYLE, MAP_START, MAP_MIN_ZOOM, MAP_MAX_ZOOM, MARKER_SIZE } from "./config.js";
+import {
+  MAP_STYLE, MAP_START, MAP_MIN_ZOOM, MAP_MAX_ZOOM,
+  CLUSTER_PX, CLUSTER_MAX_ZOOM, MARKER_SIZE,
+} from "./config.js";
 import { badgeSVG, shapeFor, colorFor, naColor } from "./grades.js";
-import { state, visibleScores, displayValue, setSelected } from "./state.js";
+import { state, visibleScores, displayValue, setSelected, emit } from "./state.js";
 import { prefersReducedMotion } from "./a11y.js";
 
 let map = null;
@@ -146,16 +149,19 @@ function paint(el, row, d, st, face) {
   el.dataset.state = st;
 }
 
-// Pixel radius within which pins merge into one cluster bubble. Bigger = more
-// aggressive grouping.
-const CLUSTER_PX = 42;
 let reclusterQueued = false;
 
 // Group the visible pins by screen proximity at the current zoom: nearby pins
 // become one count bubble (click/Enter to zoom in and expand), lone pins render
 // as their normal grade badge. This is what makes a 79-pin global map navigable
 // instead of a pile of overlapping badges over the US West and NZ.
+//
+// Past CLUSTER_MAX_ZOOM, clustering is OFF -- every pin stands alone so you can
+// always zoom in far enough to read every individual rating.
 function clusterPoints(rows) {
+  if (map.getZoom() >= CLUSTER_MAX_ZOOM) {
+    return rows.map(row => ({ members: [row] }));
+  }
   const groups = [];
   rows.forEach(row => {
     const p = map.project([row.longitude, row.latitude]);
@@ -208,7 +214,25 @@ export function renderMarkers() {
 function scheduleRecluster() {
   if (reclusterQueued || !map) return;
   reclusterQueued = true;
-  requestAnimationFrame(() => { reclusterQueued = false; renderMarkers(); });
+  requestAnimationFrame(() => {
+    reclusterQueued = false;
+    renderMarkers();
+    emit("viewport", viewportKeys());   // let the leaderboard follow the map
+  });
+}
+
+// The keys of the mountains currently inside the map viewport -- what the sidebar
+// narrows to, so the leaderboard shows only what you're looking at.
+function viewportKeys() {
+  const b = map.getBounds();
+  const keys = new Set();
+  visibleScores().forEach(m => {
+    if (m.latitude != null && m.longitude != null &&
+        b.contains([m.longitude, m.latitude])) {
+      keys.add(m.key);
+    }
+  });
+  return keys;
 }
 
 // A cluster bubble: a focusable count badge that zooms to fit its members.
@@ -226,7 +250,9 @@ function makeClusterEl(g) {
   const regions = [...new Set(g.members.map(m => m.region))];
   el.setAttribute("aria-label",
     `Cluster of ${n} mountains${regions.length === 1 ? ` in ${regions[0]}` : ""}, ${skiable} in season. Activate to zoom in.`);
-  const zoomIn = () => fitBounds(g.members);
+  // Zoom past CLUSTER_MAX_ZOOM so even a tight bundle comes fully apart into
+  // individual badges rather than re-forming a smaller bubble.
+  const zoomIn = () => fitBounds(g.members, CLUSTER_MAX_ZOOM + 2);
   el.addEventListener("click", zoomIn);
   el.addEventListener("keydown", e => {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); zoomIn(); }
@@ -269,7 +295,7 @@ export function fitAll() {
 export function fitRegion() {
   fitBounds(visibleScores().filter(m => m.latitude != null));
 }
-function fitBounds(pts) {
+function fitBounds(pts, maxZoom = 8) {
   if (!pts.length) return;
   const run = () => {
     const b = new maplibregl.LngLatBounds();
@@ -278,7 +304,7 @@ function fitBounds(pts) {
     const wide = window.innerWidth > 780;
     map.fitBounds(b, {
       padding: { top: 50, bottom: 50, left: 50, right: wide ? 90 : 50 },
-      maxZoom: 8, duration: prefersReducedMotion() ? 0 : 700,
+      maxZoom, duration: prefersReducedMotion() ? 0 : 700,
     });
   };
   // Fitting before the style loads throws; defer to first load in that case.

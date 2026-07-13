@@ -6,7 +6,7 @@ import { LIVE } from "./config.js";
 import { setScale, badgeSVG, LEGEND_GRADES, naColor } from "./grades.js";
 import { loadGrades, loadMeta, loadScores } from "./api.js";
 import {
-  state, on, setScores, upsertRow, setRegion, setSelected, visibleScores,
+  state, on, setScores, upsertRow, setRegion, setSelected, setInView, visibleScores,
 } from "./state.js";
 import { announce } from "./a11y.js";
 import * as sse from "./sse.js";
@@ -177,6 +177,19 @@ function wireControls() {
   // Re-render markers when the map finishes moving isn't needed (MapLibre keeps
   // HTML markers pinned), but do keep the selected card in sync on selection.
   on("selected", key => { if (key) { mapMarkSelected(key); listMarkSelected(key); } });
+
+  // The leaderboard follows the map: on every settle, narrow the list to the pins
+  // now in view. Guarded so a pan that doesn't change the in-view set doesn't
+  // needlessly re-render (which would reset the list's scroll).
+  let lastViewSig = null;
+  on("viewport", keys => {
+    const sig = [...keys].sort().join(",");
+    if (sig === lastViewSig) return;
+    lastViewSig = sig;
+    setInView(keys);
+    renderList();
+    updateTagline();
+  });
 }
 
 function initProfiles(meta) {

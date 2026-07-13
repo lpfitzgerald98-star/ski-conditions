@@ -66,17 +66,31 @@ function itemHTML(m, rank) {
   </li>`;
 }
 
+// The leaderboard follows the map: it lists only mountains whose pin is inside the
+// current viewport (state.inViewKeys, set on every map move). Null = show all
+// (before the map has settled once).
+function inView(rows) {
+  return state.inViewKeys ? rows.filter(m => state.inViewKeys.has(m.key)) : rows;
+}
+
 export function renderList() {
-  const rows = sortRows(visibleScores());
+  const inRegion = visibleScores();
+  const rows = sortRows(inView(inRegion));
   const note = document.getElementById("rank-note");
-  note.textContent = state.region === "All"
-    ? `${rows.length} mountains by overall score`
-    : `within ${state.region}: best = A, worst = F`;
+  const shown = rows.length, total = inRegion.length;
+  if (shown === total) {
+    note.textContent = state.region === "All"
+      ? `${total} mountains by overall score`
+      : `within ${state.region}: best = A, worst = F`;
+  } else {
+    note.textContent = `${shown} in view of ${total}` +
+      (state.region === "All" ? "" : ` in ${state.region}`);
+  }
 
   listEl.setAttribute("role", "listbox");
   listEl.innerHTML = rows.length
     ? rows.map((m, i) => itemHTML(m, i + 1)).join("")
-    : '<li class="placeholder">No mountains in this region.</li>';
+    : `<li class="placeholder">No mountains ${state.inViewKeys ? "in view — zoom out or drag the map" : "in this region"}.</li>`;
 
   // Roving tabindex: exactly one item is Tab-reachable; arrows move focus among them.
   const items = [...listEl.querySelectorAll(".item")];

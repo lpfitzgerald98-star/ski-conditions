@@ -20,7 +20,10 @@ export const state = {
   region: "All",
   selected: null,    // selected mountain key
   complete: false,   // stream finished (always true in static mode)
+  inViewKeys: null,  // Set of keys currently in the map viewport (null = all)
 };
+
+export function setInView(keys) { state.inViewKeys = keys; emit("inview", keys); }
 
 export function setScores(rows) {
   state.scores = rows;

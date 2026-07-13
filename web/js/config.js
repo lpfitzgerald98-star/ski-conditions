@@ -13,13 +13,14 @@ export const LIVE = API_BASE !== "";
 export const DATA_BASE = "data";
 
 // Base map. Any OpenFreeMap style URL works, no API key:
-//   https://tiles.openfreemap.org/styles/positron  (muted greyscale -- current)
-//   https://tiles.openfreemap.org/styles/liberty    (fuller color)
+//   https://tiles.openfreemap.org/styles/liberty    (fuller color -- current)
+//   https://tiles.openfreemap.org/styles/positron   (muted greyscale)
 //   https://tiles.openfreemap.org/styles/bright
-// Positron is the pick because it recedes behind the colored grade badges and,
-// with the dark-mode CSS tint (styles.css --map-filter), reads as a clean dark
-// map. Swap this one line to change the basemap.
-export const MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+// Liberty is the pick because its color survives the dark-mode invert filter
+// (styles.css --map-filter) into a proper DARK basemap; Positron is too light and
+// inverts to near-black. In light theme Liberty shows in full color. Swap this
+// one line to change the basemap.
+export const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
 // Initial camera. Only used until the roster loads -- then the map frames all
 // pins (map.fitAll on first load), so this is just the pre-fit fallback.
@@ -28,7 +29,15 @@ export const MAP_START = { center: [-100, 40], zoom: 2 };
 // Zoom the map won't go below/above -- keeps the world from tiling sideways at
 // the bottom and stops runaway zoom-in on a single pin.
 export const MAP_MIN_ZOOM = 1.4;
-export const MAP_MAX_ZOOM = 11;
+export const MAP_MAX_ZOOM = 12;
+
+// Clustering. Pins within CLUSTER_PX screen pixels merge into one count bubble --
+// but ONLY below CLUSTER_MAX_ZOOM. At or past that zoom every pin stands alone
+// (even a couple overlapping), so you can always zoom in far enough to read every
+// individual rating. Cluster-click zooms to at least CLUSTER_MAX_ZOOM to guarantee
+// the bubble comes apart.
+export const CLUSTER_PX = 40;
+export const CLUSTER_MAX_ZOOM = 8;
 
 // Marker pixel size (the SVG badge is drawn in a viewBox of this many units).
 export const MARKER_SIZE = 28;
