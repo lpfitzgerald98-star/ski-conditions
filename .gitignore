@@ -2,8 +2,11 @@
 data/*.db
 data/*.sqlite
 
-# Generated static snapshot (rebuilt by the daily Action / build_snapshot.py)
-web/data/
+# Generated static snapshot (today's scores/cards/meta -- rebuilt every run).
+web/data/*
+# ...but KEEP the retrospective history: it's immutable + incremental (built once
+# per date, then persisted so the daily build only appends new dates).
+!web/data/hist/
 
 # Python
 __pycache__/

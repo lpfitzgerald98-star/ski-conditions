@@ -213,13 +213,20 @@ def fetch_nws(key: str):
 
 
 def mountain_scorecard(
-    key: str, db_path: str = DB_PATH, as_of: date | None = None, use_network: bool = True
+    key: str, db_path: str = DB_PATH, as_of: date | None = None,
+    use_network: bool = True, retro: bool = False,
 ) -> dict:
     """Assemble all sub-scores for the mountain card.
 
     Returns the individual grade objects plus a `subscores` dict (0-100 each) ready
     to feed `score.overall_score(subscores, profile)`. Network failures degrade
     gracefully: forecast falls back to neutral, weather to base-depth-only.
+
+    `retro` scores a PAST `as_of` with no live data: the "incoming" storm is
+    reconstructed from the snow the station actually recorded in the forward window
+    (what a weekend outlook really turned out to be). Thaw/weather stay absent --
+    the DB stores snow, not temperature. `retro` and `use_network` are exclusive;
+    retro implies offline.
     """
     m = get_mountain(key)
     obs = read_observations(db_path, mountain_station(m))
@@ -271,6 +278,15 @@ def mountain_scorecard(
         if weather is not None:
             weather_q = score_mod.weather_quality(
                 weather.temperature_f, weather.wind_mph, weather.sky_cover_pct)
+    elif retro:
+        # Historical date: the "incoming" storm is what actually fell next, read
+        # from the DB. Snow only -- no thaw/weather without stored temperature.
+        inc = retro_incoming_storms(key, as_of, db_path)
+        incoming = max(inc, key=lambda s: s.total_inches) if inc else None
+        has = incoming is not None and \
+            incoming.total_inches >= STORM_THRESHOLDS["grade_baseline_min_inches"]
+        forecast_sub = score_mod.forecast_score(
+            incoming.percentile if incoming else None, has, thaw=0.0)
 
     conditions_sub = score_mod.conditions_score(
         base.percentile, fresh_7d_inches=fresh, weather_q=weather_q)
@@ -450,4 +466,32 @@ def forecast_incoming_storms(
         end_date = (now + pd.Timedelta(hours=wh)).date()
         floor = mountain_alert_floor(key, wh, season_pct)
         out.append(grade_storm(total, obs, wh, end_date, alert_floor=floor))
+    return out
+
+
+def retro_incoming_storms(
+    key: str, as_of: date, db_path: str = DB_PATH, windows_hours=(24, 72)
+) -> list[StormGrade]:
+    """The RETROSPECTIVE incoming storm for a past `as_of`: instead of a live
+    forecast, grade the snow the station actually recorded in the forward window
+    (as_of, as_of + wh]. Same storm-grading scale as the live path, so a
+    historical "good weekend" reads on the same curve as a forecast one.
+    """
+    m = get_mountain(key)
+    obs = read_observations(db_path, mountain_station(m))
+    if obs.empty:
+        return []
+    season_pct = grade_season_to_date(
+        obs, as_of=as_of, metric=mountain_metric(m),
+        season_start_dowy=mountain_season_start(m),
+        wy_start_month=mountain_wy_start(m)).percentile
+    start = pd.Timestamp(as_of)
+    out = []
+    for wh in windows_hours:
+        window_days = max(1, wh // 24)
+        end = start + pd.Timedelta(days=window_days)
+        fwd = obs[(obs["date"] > start) & (obs["date"] <= end)]["new_snow_24hr"]
+        total = float(fwd.sum(skipna=True)) if fwd.notna().any() else 0.0
+        floor = mountain_alert_floor(key, wh, season_pct)
+        out.append(grade_storm(total, obs, wh, end.date(), alert_floor=floor))
     return out

@@ -4,7 +4,7 @@
 
 import { LIVE } from "./config.js";
 import { setScale, badgeSVG, LEGEND_GRADES, naColor } from "./grades.js";
-import { loadGrades, loadMeta, loadScores } from "./api.js";
+import { loadGrades, loadMeta, loadScores, loadHistoryIndex, loadHistoryDate } from "./api.js";
 import {
   state, on, setScores, upsertRow, setRegion, setSelected, setInView, visibleScores,
 } from "./state.js";
@@ -21,6 +21,7 @@ import { initCard, openCard, close as closeCard } from "./card.js";
 const $ = id => document.getElementById(id);
 let renderListQueued = false;
 let framedOnce = false;
+let histIndex = null;   // retrospective-history manifest (static mode)
 
 // Frame the whole roster the first time data lands, so the map opens on all the
 // pins instead of an arbitrary start view. Later profile/region changes manage
@@ -53,6 +54,57 @@ function viewAll() {
   renderList();
   updateTagline();
   fitAll();
+}
+
+// -- retrospective history (static mode) -----------------------------------
+// Wire the date picker to the prebuilt per-date files. Picking a past date shows
+// the roster scored as of that day, forward-window snow included; picking today
+// (or the max) returns to the live/snapshot view.
+function setupHistory(idx) {
+  histIndex = idx;
+  const asof = $("asof");
+  asof.disabled = false;
+  asof.min = idx.min;
+  asof.max = state.meta?.as_of || idx.max;
+  asof.title = "Pick a past date to see its score (history back to " + idx.min + ")";
+}
+
+async function onAsOfChange() {
+  if (LIVE) { loadProfile(state.profile); return; }
+  if (!histIndex) return;
+  const d = $("asof").value;
+  const today = state.meta?.as_of;
+  if (!d || (today && d >= today)) return exitHistory();
+  if (d < histIndex.min) { $("asof").value = histIndex.min; }
+  await enterHistory($("asof").value);
+}
+
+async function enterHistory(d) {
+  // History is built for one profile (dynamic), so the selector adds nothing here
+  // -- hide it (the "As of" field widens to fill). Restored in exitHistory.
+  $("profile").value = histIndex.profile;
+  $("profile-field").hidden = true;
+  state.profile = histIndex.profile;
+  try {
+    const rows = await loadHistoryDate(d);
+    state.histDate = d;
+    setScores(rows);
+    populateRegions();
+    renderMarkers();
+    renderList();
+    updateTagline();
+    if (state.selected) openCard(state.selected);
+    announce(`Showing scores as of ${d}.`);
+  } catch {
+    $("tagline").textContent = `no history for ${d}`;
+  }
+}
+
+async function exitHistory() {
+  if (state.histDate == null) return;
+  state.histDate = null;
+  $("profile-field").hidden = false;
+  await loadProfile(state.profile);
 }
 
 // -- roster load (static) or stream (live) ---------------------------------
@@ -90,14 +142,17 @@ function updateTagline() {
   const vis = visibleScores();
   const scored = vis.filter(m => m.score != null).length;
   const where = state.region === "All" ? `${vis.length} mountains` : `${state.region} · ${vis.length} resorts`;
-  let feed;
-  if (LIVE) {
+  let feed, asOf = state.meta?.as_of || "";
+  if (state.histDate) {
+    feed = "historical · snow-based";
+    asOf = state.histDate;
+  } else if (LIVE) {
     const live = vis.filter(m => m.status === "live").length;
     feed = state.complete ? "live" : `going live… ${live}/${vis.length}`;
   } else {
     feed = "daily snapshot";
   }
-  $("tagline").textContent = `${where} · ${scored} with data · as of ${state.meta?.as_of || state.asof || ""} · ${feed}`;
+  $("tagline").textContent = `${where} · ${scored} with data · as of ${asOf} · ${feed}`;
 }
 
 // Batch list re-renders during a burst of stream updates (one per animation frame).
@@ -179,7 +234,7 @@ function wireControls() {
     announce(`Showing ${state.region === "All" ? "all regions" : state.region}.`);
   });
   $("fitall").addEventListener("click", viewAll);
-  $("asof").addEventListener("change", () => { if (LIVE) loadProfile(state.profile); });
+  $("asof").addEventListener("change", onAsOfChange);
 
   // Re-render markers when the map finishes moving isn't needed (MapLibre keeps
   // HTML markers pinned), but do keep the selected card in sync on selection.
@@ -225,8 +280,9 @@ async function boot() {
 
   const defaultProfile = initProfiles(meta);
 
-  // The as-of control is snapshot-fixed in static mode (there's only one snapshot);
-  // it's live and re-queries in backend mode. The forecast toggle is live-only.
+  // The as-of control defaults to the snapshot date. In static mode it's enabled
+  // only if retrospective history was built (setupHistory below); in live mode it
+  // re-queries the backend. The forecast toggle is live-only.
   const asof = $("asof");
   asof.value = meta.as_of || new Date().toISOString().slice(0, 10);
   if (!LIVE) { asof.disabled = true; asof.title = "Fixed to the daily snapshot"; }
@@ -234,6 +290,14 @@ async function boot() {
 
   wireControls();
   await loadProfile(defaultProfile);
+
+  // Retrospective history: if the prebuilt per-date files exist, open up the date
+  // picker so you can browse past scores. Loaded after first paint so it never
+  // delays the map.
+  if (!LIVE) {
+    const idx = await loadHistoryIndex();
+    if (idx && idx.min) setupHistory(idx);
+  }
 
   // Close the card when clicking empty map space is handled by its own ✕/Esc;
   // nothing else to wire.

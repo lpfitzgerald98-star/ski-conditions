@@ -16,8 +16,11 @@ on:
   push:
     branches: [main]           # rebuild when the site or scoring changes
 
+# contents:write lets the job commit newly-settled history dates back to the repo
+# (the retrospective history is immutable + append-only; persisting it means each
+# run only computes the few new dates instead of the whole season).
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -42,8 +45,16 @@ jobs:
       - name: Install dependencies
         run: pip install pandas numpy requests
 
-      - name: Build snapshot (ingest + score, forecasts on)
-        run: python scripts/build_snapshot.py
+      - name: Build snapshot + retrospective history (ingest + score)
+        run: python scripts/build_snapshot.py --history
+
+      - name: Persist new history dates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/data/hist
+          git diff --cached --quiet || git commit -m "History: new retrospective dates [skip ci]"
+          git push || true
 
       - uses: actions/configure-pages@v5
 

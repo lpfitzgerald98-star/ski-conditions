@@ -28,7 +28,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 # Allow `python scripts/build_snapshot.py` from the project root.
@@ -169,6 +169,57 @@ def build(keys: list[str], as_of: date, use_network: bool) -> dict:
     return meta
 
 
+def build_history(keys: list[str], start: date, end: date,
+                  profile: str = DEFAULT_PROFILE, forward_window_days: int = 3) -> dict:
+    """Per-date retrospective roster files for browsing PAST scores.
+
+    For each date in [start, end] we score the whole roster `as_of` that day with
+    `retro=True`: history-to-date grades plus the snow that ACTUALLY fell in the
+    forward window (the real "was it a good weekend"). Written one file per date so
+    the frontend lazy-loads only the day you're viewing -- page load is unaffected
+    no matter how much history accumulates.
+
+    Immutable + incremental: a settled date's score never changes, so existing
+    files are skipped. Only dates whose forward window has fully elapsed are built
+    (up to today - forward_window_days), so the retrospective snow is complete.
+    """
+    hist_dir = WEB_DATA / "hist"
+    hist_dir.mkdir(parents=True, exist_ok=True)
+    cutoff = date.today() - timedelta(days=forward_window_days)
+    end = min(end, cutoff)
+
+    built = 0
+    d = start
+    while d <= end:
+        f = hist_dir / f"{d.isoformat()}.json"
+        if not f.exists():
+            rows = []
+            for key in keys:
+                try:
+                    card = scorecard(key, as_of=d, use_network=False, retro=True,
+                                     default_profile=profile)
+                    rows.append(_row_from_card(key, card, profile))
+                except Exception as exc:  # noqa: BLE001
+                    rows.append(_null_row(key, str(exc)))
+            rank_within_regions(rows)
+            f.write_text(json.dumps(rows, separators=(",", ":")), encoding="utf-8")
+            built += 1
+            if built % 10 == 0:
+                print(f"[history] built {built} new dates (…{d.isoformat()})")
+        d += timedelta(days=1)
+
+    # Manifest: the contiguous list of available dates for the date picker's bounds.
+    dates = sorted(p.stem for p in hist_dir.glob("*.json") if p.stem != "index")
+    (hist_dir / "index.json").write_text(json.dumps({
+        "dates": dates,
+        "min": dates[0] if dates else None,
+        "max": dates[-1] if dates else None,
+        "profile": profile,
+        "forward_window_days": forward_window_days,
+    }), encoding="utf-8")
+    return {"built": built, "total": len(dates)}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Build the static Pages snapshot.")
     ap.add_argument("--no-ingest", action="store_true",
@@ -176,6 +227,12 @@ def main() -> int:
     ap.add_argument("--no-network", action="store_true",
                     help="skip live forecasts/weather (fast; for local testing)")
     ap.add_argument("--as-of", default=None, help="score as of YYYY-MM-DD (default today)")
+    ap.add_argument("--history", action="store_true",
+                    help="also build the retrospective per-date history files")
+    ap.add_argument("--hist-start", default=None, help="history range start YYYY-MM-DD")
+    ap.add_argument("--hist-end", default=None, help="history range end YYYY-MM-DD (default today)")
+    ap.add_argument("--history-only", action="store_true",
+                    help="build ONLY history (skip today's snapshot)")
     args = ap.parse_args()
 
     as_of = (datetime.strptime(args.as_of, "%Y-%m-%d").date()
@@ -186,13 +243,26 @@ def main() -> int:
         print(f"== Ingesting {len(keys)} stations ==")
         ingest_all(keys)
 
-    print(f"== Scoring {len(keys)} mountains (network={not args.no_network}) ==")
-    meta = build(keys, as_of, use_network=not args.no_network)
+    if not args.history_only:
+        print(f"== Scoring {len(keys)} mountains (network={not args.no_network}) ==")
+        meta = build(keys, as_of, use_network=not args.no_network)
+        print(f"\nDone: {meta['ok']}/{len(keys)} scored, "
+              f"{len(meta['failed'])} failed -> {WEB_DATA}")
+        if meta["failed"]:
+            print("  failed:", ", ".join(meta["failed"]))
+    else:
+        meta = {"ok": len(keys), "failed": []}
 
-    print(f"\nDone: {meta['ok']}/{len(keys)} scored, "
-          f"{len(meta['failed'])} failed -> {WEB_DATA}")
-    if meta["failed"]:
-        print("  failed:", ", ".join(meta["failed"]))
+    if args.history or args.history_only:
+        # Default range: the current + previous water years back to Nov 1, which
+        # covers a full NH winter. Incremental, so the big first pass happens once.
+        start = (datetime.strptime(args.hist_start, "%Y-%m-%d").date()
+                 if args.hist_start else date(date.today().year - 1, 11, 1))
+        end = (datetime.strptime(args.hist_end, "%Y-%m-%d").date()
+               if args.hist_end else date.today())
+        print(f"== Building history {start} -> {end} ==")
+        h = build_history(keys, start, end)
+        print(f"History: +{h['built']} new dates, {h['total']} total")
     # A snapshot with a handful of dead stations is still worth publishing; only a
     # near-total failure (bad deploy, no deps) should fail the Action.
     return 1 if meta["ok"] < len(keys) * 0.5 else 0

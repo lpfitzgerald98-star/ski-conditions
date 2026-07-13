@@ -29,6 +29,19 @@ export async function loadScores(profile) {
   return data.mountains;
 }
 
+// The retrospective-history manifest (available dates + bounds). Static only;
+// null when history hasn't been built or in live mode.
+export async function loadHistoryIndex() {
+  if (LIVE) return null;
+  try { return await getJSON(`${DATA_BASE}/hist/index.json`); }
+  catch { return null; }
+}
+
+// The ranked roster for one PAST date (retro scores).
+export async function loadHistoryDate(dateStr) {
+  return getJSON(`${DATA_BASE}/hist/${dateStr}.json`);
+}
+
 // One mountain's full scorecard.
 export async function loadCard(key, { network = false } = {}) {
   if (!LIVE) return getJSON(`${DATA_BASE}/cards/${key}.json`);

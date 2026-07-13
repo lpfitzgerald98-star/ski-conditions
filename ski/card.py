@@ -95,6 +95,7 @@ def scorecard(
     as_of: date | None = None,
     use_network: bool = True,
     default_profile: str = DEFAULT_PROFILE,
+    retro: bool = False,
 ) -> dict:
     """Full JSON-serializable scorecard for one mountain.
 
@@ -116,7 +117,8 @@ def scorecard(
     m = MOUNTAINS[key]
     as_of = as_of or date.today()
     kwargs = {} if db_path is None else {"db_path": db_path}
-    card = pipeline.mountain_scorecard(key, as_of=as_of, use_network=use_network, **kwargs)
+    card = pipeline.mountain_scorecard(key, as_of=as_of, use_network=use_network,
+                                       retro=retro, **kwargs)
 
     sub = card["subscores"]
     base = card["base"]

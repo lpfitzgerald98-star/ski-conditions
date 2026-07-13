@@ -21,6 +21,7 @@ export const state = {
   selected: null,    // selected mountain key
   complete: false,   // stream finished (always true in static mode)
   inViewKeys: null,  // Set of keys currently in the map viewport (null = all)
+  histDate: null,    // ISO date being viewed retrospectively (null = today/live)
 };
 
 export function setInView(keys) { state.inViewKeys = keys; emit("inview", keys); }

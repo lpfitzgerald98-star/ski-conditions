@@ -22,6 +22,9 @@ export async function openCard(key, { network = false } = {}) {
   lastFocus = document.activeElement;
   el.hidden = false;
   const row = state.byKey[key];
+  // Historical dates have no per-date card file (that'd be 79 x N files); render a
+  // compact card straight from the roster row, which already carries the grades.
+  if (state.histDate) { el.dataset.key = key; renderHistCard(row, key); return; }
   if (el.dataset.key !== key) {
     el.innerHTML = `<div class="placeholder">Loading ${row ? escapeHTML(row.name) : key}…</div>`;
   }
@@ -161,6 +164,48 @@ function render(card, key) {
   el.querySelector(".close").addEventListener("click", close);
   focusSilently(el.querySelector(".close"));
   announce(`${card.mountain.name}. Overall ${o.grade || "not scored"}.`);
+}
+
+// A compact card for a historical date, built from the roster row (no per-date
+// card files). Snow-based: no live weather/thaw, and the "incoming" is the snow
+// the station actually recorded in the forward window.
+function renderHistCard(row, key) {
+  if (!row) { el.innerHTML = '<div class="placeholder">No data.</div>'; return; }
+  const oc = row.grade && row.grade !== "N/A" ? colorFor(row.grade) : naColor();
+  const rTile = row.region_score == null
+    ? `<div class="side"><div class="lbl">Within ${row.region}</div>
+         <div class="score-row"><span class="badge">${badgeSVG("—", "—", { size: 34 })}</span>
+         <span class="num">—</span></div>
+         <div class="of">${row.in_season === false ? "off-season" : row.in_season == null ? "no recent data" : "not enough data"}</div></div>`
+    : `<div class="side"><div class="lbl">Within ${row.region}</div>
+         <div class="score-row"><span class="badge">${badgeSVG(row.region_grade, row.region_grade, { size: 34 })}</span>
+         <span class="num">${Math.round(row.region_score)}<span>th pct</span></span></div>
+         <div class="of">ranked in ${row.region}</div></div>`;
+
+  el.innerHTML = `<button class="close" type="button" aria-label="Close details">✕</button>
+    <h2 id="detail-title">${escapeHTML(row.name)}</h2>
+    <div class="sub">as of ${state.histDate} · historical (snow-based)</div>
+    <div class="duo">
+      <div class="side">
+        <div class="lbl">Overall</div>
+        <div class="score-row"><span class="badge">${badgeSVG(row.grade || "—", row.grade || "—", { size: 34 })}</span>
+          <span class="num">${row.score != null ? Math.round(row.score) : "—"}<span> / 100</span></span></div>
+        <div class="of">across all tracked mountains</div>
+      </div>
+      ${rTile}
+    </div>
+    <div class="grid2">
+      <div class="cell"><div class="k">Season</div><div class="v">${row.season_grade || "—"}</div></div>
+      <div class="cell"><div class="k">Base</div><div class="v">${row.base_depth != null ? row.base_depth + '"' : "—"}
+        ${row.base_grade && row.base_grade !== "N/A" ? `<small>${row.base_grade}</small>` : ""}</div></div>
+      <div class="cell"><div class="k">Fresh (7d)</div><div class="v">${row.fresh_7d != null ? row.fresh_7d + '"' : "—"}</div></div>
+      <div class="cell"><div class="k">Snow next 3d</div><div class="v">${row.incoming_inches != null ? row.incoming_inches + '"' : "—"}</div></div>
+    </div>
+    <div class="note">Retrospective score: history up to ${state.histDate} plus the snow that
+      actually fell over the next 3 days. Thaw/weather aren't part of historical scores.</div>`;
+  el.querySelector(".close").addEventListener("click", close);
+  focusSilently(el.querySelector(".close"));
+  announce(`${row.name}. As of ${state.histDate}, overall ${row.grade || "not scored"}.`);
 }
 
 function escapeHTML(s) {
