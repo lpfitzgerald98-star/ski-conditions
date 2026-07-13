@@ -41,6 +41,20 @@ function select(key) {
   openCard(key, { network: LIVE && $("network").checked });
 }
 
+// Return to the standard global view: clear the region filter and any selection,
+// close the detail card, and frame every mountain. The "back to all" reset behind
+// both the sidebar button and the on-map ⤢ control.
+function viewAll() {
+  closeCard();
+  setSelected(null);
+  setRegion("All");
+  $("region").value = "All";
+  renderMarkers();
+  renderList();
+  updateTagline();
+  fitAll();
+}
+
 // -- roster load (static) or stream (live) ---------------------------------
 async function loadProfile(profile) {
   state.profile = profile;
@@ -164,14 +178,7 @@ function wireControls() {
     if (state.region !== "All") fitRegion();
     announce(`Showing ${state.region === "All" ? "all regions" : state.region}.`);
   });
-  $("fitall").addEventListener("click", () => {
-    setRegion("All");
-    $("region").value = "All";
-    renderMarkers();
-    renderList();
-    updateTagline();
-    fitAll();
-  });
+  $("fitall").addEventListener("click", viewAll);
   $("asof").addEventListener("change", () => { if (LIVE) loadProfile(state.profile); });
 
   // Re-render markers when the map finishes moving isn't needed (MapLibre keeps
@@ -208,7 +215,7 @@ async function boot() {
   initTheme();
   initCard();
   initSidebar(select);
-  initMap(select);
+  initMap(select, viewAll);
   if (LIVE) wireStream();
 
   const [grades, meta] = await Promise.all([loadGrades(), loadMeta()]);

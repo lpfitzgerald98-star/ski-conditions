@@ -19,7 +19,7 @@ let map = null;
 let markers = {};      // key -> { marker, el }
 let tooltipEl = null;
 
-export function initMap(onSelect) {
+export function initMap(onSelect, onViewAll) {
   map = new maplibregl.Map({
     container: "map",
     style: MAP_STYLE,
@@ -43,7 +43,9 @@ export function initMap(onSelect) {
   // Zoom buttons (no compass -- there's no rotation to reset) + a one-tap "frame
   // everything" control so you're never lost after zooming into one mountain.
   map.addControl(new maplibregl.NavigationControl({ showCompass: false, visualizePitch: false }), "top-right");
-  map.addControl(new FitAllControl(() => fitAll()), "top-right");
+  // "View all mountains": the standard global view. Prefer the full reset callback
+  // (clears region/selection/card, then frames everything); fall back to a bare fit.
+  map.addControl(new FitAllControl(onViewAll || (() => fitAll())), "top-right");
 
   // Declutter the world view: badges shrink when zoomed out (so 79 pins don't
   // pile up) and grow back as you zoom in. Driven by a CSS var on #map.
@@ -72,8 +74,8 @@ class FitAllControl {
     c.className = "maplibregl-ctrl maplibregl-ctrl-group";
     const b = document.createElement("button");
     b.type = "button";
-    b.title = "Fit all mountains";
-    b.setAttribute("aria-label", "Fit all mountains in view");
+    b.title = "View all mountains";
+    b.setAttribute("aria-label", "View all mountains (reset to global view)");
     b.innerHTML = '<span aria-hidden="true" style="font-size:15px;line-height:29px">⤢</span>';
     b.addEventListener("click", this._onClick);
     c.appendChild(b);
