@@ -190,6 +190,27 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .marker.is-stale { opacity: .45; }
 .marker.is-alert svg .alert-ring { opacity: 1; }
 
+/* Cluster bubble: a focusable count badge that zooms to its members. The ring is
+   a conic slice showing the in-season share (--skiable) without color-coding. */
+.cluster-marker {
+  cursor: pointer; border: 0; padding: 0; display: grid; place-items: center;
+  border-radius: 50%; color: var(--text); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background:
+    radial-gradient(circle at center,
+      color-mix(in srgb, var(--accent) 26%, var(--panel)) 0 62%, transparent 63%),
+    conic-gradient(var(--accent) calc(var(--skiable, 0) * 360deg),
+      color-mix(in srgb, var(--text-faint) 55%, transparent) 0);
+  box-shadow: var(--shadow-pop);
+  transition: transform var(--dur) var(--ease);
+}
+.cluster-marker .cnt {
+  display: grid; place-items: center; width: 76%; height: 76%;
+  border-radius: 50%; background: var(--panel); font-size: 12.5px;
+}
+.cluster-marker:hover, .cluster-marker:focus-visible { transform: scale(1.12); z-index: 5; }
+.cluster-marker:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
 .map-tooltip {
   position: absolute; z-index: 6; pointer-events: none;
   background: var(--panel); color: var(--text);

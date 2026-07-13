@@ -52,6 +52,10 @@ export function initMap(onSelect) {
   map.on("zoom", applyMarkerScale);
   map.on("load", applyMarkerScale);
 
+  // Re-cluster after every pan/zoom settles. moveend (not move) fires once per
+  // gesture, so markers pan smoothly during a drag and only regroup when it stops.
+  map.on("moveend", scheduleRecluster);
+
   tooltipEl = document.getElementById("map-tooltip");
   map._onSelect = onSelect;
   return map;
@@ -142,20 +146,96 @@ function paint(el, row, d, st, face) {
   el.dataset.state = st;
 }
 
+// Pixel radius within which pins merge into one cluster bubble. Bigger = more
+// aggressive grouping.
+const CLUSTER_PX = 42;
+let reclusterQueued = false;
+
+// Group the visible pins by screen proximity at the current zoom: nearby pins
+// become one count bubble (click/Enter to zoom in and expand), lone pins render
+// as their normal grade badge. This is what makes a 79-pin global map navigable
+// instead of a pile of overlapping badges over the US West and NZ.
+function clusterPoints(rows) {
+  const groups = [];
+  rows.forEach(row => {
+    const p = map.project([row.longitude, row.latitude]);
+    let best = null, bestDist = CLUSTER_PX;
+    for (const g of groups) {
+      const dist = Math.hypot(g.px - p.x, g.py - p.y);
+      if (dist <= bestDist) { best = g; bestDist = dist; }
+    }
+    if (best) {
+      best.members.push(row);
+      best.sx += p.x; best.sy += p.y;
+      best.px = best.sx / best.members.length;
+      best.py = best.sy / best.members.length;
+    } else {
+      groups.push({ members: [row], sx: p.x, sy: p.y, px: p.x, py: p.y });
+    }
+  });
+  groups.forEach(g => { g.center = map.unproject([g.px, g.py]); });
+  return groups;
+}
+
 export function renderMarkers() {
+  // map.project() is available as soon as the map is constructed (it uses the
+  // transform, not the tiles), so we can cluster + place markers before the style
+  // finishes loading -- no need to gate on it.
+  if (!map) return;
+  hideTooltip();
   Object.values(markers).forEach(({ marker }) => marker.remove());
   markers = {};
-  visibleScores().forEach(row => {
-    if (row.latitude == null || row.longitude == null) return;
-    const d = displayValue(row);
-    const st = markerState(row, d);
-    const el = makeMarkerEl(row, d);
-    const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-      .setLngLat([row.longitude, row.latitude])
-      .addTo(map);
-    markers[row.key] = { marker, el };
-  });
+
+  clusterPoints(visibleScores().filter(m => m.latitude != null && m.longitude != null))
+    .forEach((g, i) => {
+      if (g.members.length === 1) {
+        const row = g.members[0];
+        const d = displayValue(row);
+        const el = makeMarkerEl(row, d);
+        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat([row.longitude, row.latitude]).addTo(map);
+        markers[row.key] = { marker, el };
+      } else {
+        const el = makeClusterEl(g);
+        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat(g.center).addTo(map);
+        markers[`cluster-${i}`] = { marker, el };
+      }
+    });
   markSelected(state.selected);
+}
+
+function scheduleRecluster() {
+  if (reclusterQueued || !map) return;
+  reclusterQueued = true;
+  requestAnimationFrame(() => { reclusterQueued = false; renderMarkers(); });
+}
+
+// A cluster bubble: a focusable count badge that zooms to fit its members.
+function makeClusterEl(g) {
+  const n = g.members.length;
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = "cluster-marker";
+  const size = Math.round(30 + Math.min(n, 24) * 0.8);
+  el.style.width = el.style.height = `${size}px`;
+  // A slice ring hints how many are in-season (skiable) vs not, without color-coding.
+  const skiable = g.members.filter(m => m.in_season === true).length;
+  el.style.setProperty("--skiable", (n ? skiable / n : 0).toFixed(3));
+  el.innerHTML = `<span class="cnt">${n}</span>`;
+  const regions = [...new Set(g.members.map(m => m.region))];
+  el.setAttribute("aria-label",
+    `Cluster of ${n} mountains${regions.length === 1 ? ` in ${regions[0]}` : ""}, ${skiable} in season. Activate to zoom in.`);
+  const zoomIn = () => fitBounds(g.members);
+  el.addEventListener("click", zoomIn);
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); zoomIn(); }
+  });
+  el.addEventListener("mouseenter", () => showClusterTip(g));
+  el.addEventListener("focus", () => showClusterTip(g));
+  el.addEventListener("mouseleave", hideTooltip);
+  el.addEventListener("blur", hideTooltip);
+  return el;
 }
 
 // Recolor one marker in place as its live update lands -- the whole point of the
@@ -220,4 +300,16 @@ function showTooltip(row, d) {
   tooltipEl.style.top = `${p.y - MARKER_SIZE * 0.7}px`;
   tooltipEl.hidden = false;
 }
+function showClusterTip(g) {
+  if (!tooltipEl) return;
+  const names = g.members.slice(0, 6).map(m => m.name);
+  const more = g.members.length - names.length;
+  tooltipEl.innerHTML = `<b>${g.members.length} mountains</b><br>` +
+    `<small>${names.join(", ")}${more > 0 ? ` +${more} more` : ""}<br>click to zoom in</small>`;
+  const p = map.project(g.center);
+  tooltipEl.style.left = `${p.x}px`;
+  tooltipEl.style.top = `${p.y - 26}px`;
+  tooltipEl.hidden = false;
+}
+
 function hideTooltip() { if (tooltipEl) tooltipEl.hidden = true; }
