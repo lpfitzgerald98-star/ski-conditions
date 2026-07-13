@@ -36,8 +36,8 @@ export const MAP_MAX_ZOOM = 12;
 // (even a couple overlapping), so you can always zoom in far enough to read every
 // individual rating. Cluster-click zooms to at least CLUSTER_MAX_ZOOM to guarantee
 // the bubble comes apart.
-export const CLUSTER_PX = 40;
-export const CLUSTER_MAX_ZOOM = 8;
+export const CLUSTER_PX = 28;
+export const CLUSTER_MAX_ZOOM = 5.5;
 
 // Marker pixel size (the SVG badge is drawn in a viewBox of this many units).
 export const MARKER_SIZE = 28;
