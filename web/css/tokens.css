@@ -53,6 +53,14 @@
   --dur:      280ms;
   --dur-slow: 520ms;
   --ease:     cubic-bezier(.2, .7, .2, 1);
+
+  /* Basemap tint. Positron is a very light greyscale style -- inverting it for a
+     "dark map" pushes the water to pure black (unrecoverable), so we DON'T. The
+     light map reads as a clean cartographic canvas with the colored grade badges
+     floating on top, in both themes. A subtle dim keeps it from glaring next to
+     the dark UI. (To get a true dark basemap later, switch MAP_STYLE to Liberty
+     and set this to an invert() recipe -- Liberty's color survives inversion.) */
+  --map-filter: saturate(0.92) brightness(0.98);
 }
 
 :root[data-theme="light"] {
@@ -78,6 +86,8 @@
 
   --shadow-card:   0 16px 40px -16px rgba(31, 56, 92, .35);
   --shadow-pop:    0 6px 18px -8px rgba(31, 56, 92, .3);
+
+  --map-filter:    none;   /* light theme shows Positron as-is */
 }
 
 /* System-preference default, only when the user hasn't forced a theme. */
@@ -91,6 +101,7 @@
     --focus:#1478ba;
     --shadow-card:0 16px 40px -16px rgba(31,56,92,.35);
     --shadow-pop:0 6px 18px -8px rgba(31,56,92,.3);
+    --map-filter:none;
   }
 }
 

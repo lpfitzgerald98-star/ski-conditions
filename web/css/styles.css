@@ -51,6 +51,9 @@ button { font-family: inherit; }
 }
 #main { position: relative; min-width: 0; }
 #map { position: absolute; inset: 0; background: var(--bg-elev); }
+/* Recolor the basemap tiles to match the theme (dark tint in dark mode, none in
+   light). Only the tile canvas is filtered; DOM markers/controls sit above it. */
+#map .maplibregl-canvas { filter: var(--map-filter, none); transition: filter var(--dur) var(--ease); }
 
 /* ---- Header ------------------------------------------------------------- */
 .app-header {
@@ -168,7 +171,16 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
   line-height: 0; display: block;
   transition: transform var(--dur) var(--ease);
 }
-.marker svg { display: block; overflow: visible; }
+/* Badges shrink at world zoom and grow when zoomed in (--marker-scale is set by
+   map.js on zoom), so the global view isn't a pile of overlapping pins. The
+   drop-shadow lifts them off the basemap. */
+.marker svg {
+  display: block; overflow: visible;
+  transform: scale(var(--marker-scale, 1));
+  transform-origin: center;
+  transition: transform var(--dur) var(--ease);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5));
+}
 /* The badge fill fades from neutral to its grade color as the live update lands
  * (or, in static mode, just eases in on first paint). */
 .marker .badge-fill { transition: fill var(--dur-slow) var(--ease); }

@@ -20,6 +20,16 @@ import { initCard, openCard, close as closeCard } from "./card.js";
 
 const $ = id => document.getElementById(id);
 let renderListQueued = false;
+let framedOnce = false;
+
+// Frame the whole roster the first time data lands, so the map opens on all the
+// pins instead of an arbitrary start view. Later profile/region changes manage
+// their own framing (or leave the camera where the user put it).
+function frameOnce() {
+  if (framedOnce || !state.scores.length) return;
+  framedOnce = true;
+  fitAll();
+}
 
 // -- selection -------------------------------------------------------------
 function select(key) {
@@ -44,6 +54,7 @@ async function loadProfile(profile) {
   renderMarkers();
   renderList();
   updateTagline();
+  frameOnce();
 }
 
 // -- regions ---------------------------------------------------------------
@@ -119,6 +130,7 @@ function wireStream() {
     renderMarkers();
     renderList();
     updateTagline();
+    frameOnce();
     announce(`Snapshot loaded: ${data.mountains.length} mountains. Live data updating.`);
   });
   on("sse:update", row => { upsertRow(row); updateMarker(row); queueList(); });

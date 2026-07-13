@@ -7,7 +7,7 @@
 // perf cost is nil. Each marker is a <button> wrapping the shared SVG badge, so
 // grade reads as color + shape + letter and Tab walks the pins in order.
 
-import { MAP_STYLE, MAP_START, MARKER_SIZE } from "./config.js";
+import { MAP_STYLE, MAP_START, MAP_MIN_ZOOM, MAP_MAX_ZOOM, MARKER_SIZE } from "./config.js";
 import { badgeSVG, shapeFor, colorFor, naColor } from "./grades.js";
 import { state, visibleScores, displayValue, setSelected } from "./state.js";
 import { prefersReducedMotion } from "./a11y.js";
@@ -22,13 +22,58 @@ export function initMap(onSelect) {
     style: MAP_STYLE,
     center: MAP_START.center,
     zoom: MAP_START.zoom,
+    minZoom: MAP_MIN_ZOOM,
+    maxZoom: MAP_MAX_ZOOM,
     attributionControl: { compact: true },
+    dragRotate: false,          // a 2D data map -- rotating/tilting only disorients
+    pitchWithRotate: false,
+    renderWorldCopies: true,
   });
-  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+  // Kill every gesture that tilts or spins the map: the #1 "I can't control this
+  // map" complaint is accidentally rotating it and not knowing how to get back.
+  map.touchZoomRotate.disableRotation();
+  map.touchPitch.disable();
   map.keyboard.enable();
+  map.scrollZoom.setWheelZoomRate(1 / 260);   // gentler, less jumpy wheel zoom
+
+  // Zoom buttons (no compass -- there's no rotation to reset) + a one-tap "frame
+  // everything" control so you're never lost after zooming into one mountain.
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false, visualizePitch: false }), "top-right");
+  map.addControl(new FitAllControl(() => fitAll()), "top-right");
+
+  // Declutter the world view: badges shrink when zoomed out (so 79 pins don't
+  // pile up) and grow back as you zoom in. Driven by a CSS var on #map.
+  const applyMarkerScale = () => {
+    const z = map.getZoom();
+    const s = Math.max(0.62, Math.min(1, (z - MAP_MIN_ZOOM) / (6 - MAP_MIN_ZOOM) * 0.7 + 0.62));
+    map.getContainer().style.setProperty("--marker-scale", s.toFixed(3));
+  };
+  map.on("zoom", applyMarkerScale);
+  map.on("load", applyMarkerScale);
+
   tooltipEl = document.getElementById("map-tooltip");
   map._onSelect = onSelect;
   return map;
+}
+
+// A small on-map button that frames all pins -- MapLibre custom control.
+class FitAllControl {
+  constructor(onClick) { this._onClick = onClick; }
+  onAdd() {
+    const c = document.createElement("div");
+    c.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.title = "Fit all mountains";
+    b.setAttribute("aria-label", "Fit all mountains in view");
+    b.innerHTML = '<span aria-hidden="true" style="font-size:15px;line-height:29px">⤢</span>';
+    b.addEventListener("click", this._onClick);
+    c.appendChild(b);
+    this._c = c;
+    return c;
+  }
+  onRemove() { this._c.remove(); }
 }
 
 // One marker's classification: stale (cached, awaiting live) / off (off-season) /
@@ -146,9 +191,18 @@ export function fitRegion() {
 }
 function fitBounds(pts) {
   if (!pts.length) return;
-  const b = new maplibregl.LngLatBounds();
-  pts.forEach(m => b.extend([m.longitude, m.latitude]));
-  map.fitBounds(b, { padding: 60, maxZoom: 8, duration: prefersReducedMotion() ? 0 : 700 });
+  const run = () => {
+    const b = new maplibregl.LngLatBounds();
+    pts.forEach(m => b.extend([m.longitude, m.latitude]));
+    // Extra left padding so pins clear the detail card; less on small screens.
+    const wide = window.innerWidth > 780;
+    map.fitBounds(b, {
+      padding: { top: 50, bottom: 50, left: 50, right: wide ? 90 : 50 },
+      maxZoom: 8, duration: prefersReducedMotion() ? 0 : 700,
+    });
+  };
+  // Fitting before the style loads throws; defer to first load in that case.
+  if (map.isStyleLoaded()) run(); else map.once("load", run);
 }
 
 // --- tooltip ---------------------------------------------------------------
