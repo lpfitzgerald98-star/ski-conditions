@@ -39,9 +39,10 @@ from __future__ import annotations
 from datetime import date
 
 from config import DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS
+from ski import commentary
 from ski.card import scorecard
 from ski.grading import letter_grade, percentile_rank
-from ski.regions import country_code, country_of, region_of
+from ski.regions import country_code, country_of, region_for
 
 # Grade -> color, the one place a letter becomes a pixel. The frontend looks
 # letters up in here (served via /grades) instead of re-bucketing raw scores
@@ -78,7 +79,7 @@ def mountain_summary(key: str) -> dict:
         "longitude": m.get("longitude"),
         "verified": m.get("verified", False),
         "source": m.get("data_source", "snotel"),
-        "region": region_of(m["name"]),
+        "region": region_for(m),
         "country": country_of(m["name"]),
         "country_code": country_code(country_of(m["name"])),
     }
@@ -212,7 +213,7 @@ def score_card(key: str, as_of: date, use_network: bool = True,
     present but null -- the frontend renders "—" but never has to guess the shape.
     """
     card = scorecard(key, as_of=as_of, use_network=use_network)
-    region = region_of(card["mountain"]["name"])
+    region = region_for(MOUNTAINS[key])
     overall = card["overall"].get(card["default_profile"]) or {}
 
     peers = [
@@ -233,6 +234,10 @@ def score_card(key: str, as_of: date, use_network: bool = True,
         "cohort_size": len(peers) + 1,
     }
     card["roster_size"] = len(MOUNTAINS)
+    # AI phrasing of the grade -- cached per (mountain, day) in SQLite, so only
+    # the first card render of the day pays an API call; off-season cards and
+    # keyless environments get null (see ski/commentary.py for the gates).
+    card["commentary"] = commentary.get_or_generate(key, as_of, card)
     return card
 
 

@@ -993,6 +993,367 @@ MOUNTAINS = {
         "storm_floor_inches": {24: 6, 72: 12},
         "season_window": {"start": (6, 20), "end": (9, 30)},
     },
+    # --- Europe (Open-Meteo ERA5 reanalysis, same rationale as the Southern
+    #     Hemisphere block: no single open station network spans the continent,
+    #     and percentile grading only needs a long internally-consistent record).
+    #     Leaf regions are mountain RANGES (Alps, Pyrenees, ...), not countries:
+    #     France and Italy each straddle two ranges, so the ambiguous resorts set
+    #     an explicit "region" override instead of relying on the country-code
+    #     parse (see ski/regions.py). ---
+    # Alps -- France
+    "chamonix": {
+        "name": "Chamonix, FR",
+        "data_source": "openmeteo",
+        "openmeteo_id": "45.9237,6.8694",
+        "latitude": 45.9237,
+        "longitude": 6.8694,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (12, 1), "end": (5, 1)},
+    },
+    "val_disere": {
+        "name": "Val d'Isere, FR",
+        "data_source": "openmeteo",
+        "openmeteo_id": "45.4489,6.9797",
+        "latitude": 45.4489,
+        "longitude": 6.9797,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 25), "end": (5, 1)},
+    },
+    "val_thorens": {
+        "name": "Val Thorens, FR",
+        "data_source": "openmeteo",
+        "openmeteo_id": "45.2979,6.58",
+        "latitude": 45.2979,
+        "longitude": 6.58,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 20), "end": (5, 5)},
+    },
+    "alpe_dhuez": {
+        "name": "Alpe d'Huez, FR",
+        "data_source": "openmeteo",
+        "openmeteo_id": "45.091,6.0686",
+        "latitude": 45.091,
+        "longitude": 6.0686,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (12, 1), "end": (4, 25)},
+    },
+    "la_plagne": {
+        "name": "La Plagne, FR",
+        "data_source": "openmeteo",
+        "openmeteo_id": "45.5062,6.6786",
+        "latitude": 45.5062,
+        "longitude": 6.6786,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (12, 1), "end": (4, 25)},
+    },
+    # Alps -- Switzerland
+    "zermatt": {
+        "name": "Zermatt, CH",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.0207,7.7491",
+        "latitude": 46.0207,
+        "longitude": 7.7491,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 15), "end": (5, 1)},
+    },
+    "verbier": {
+        "name": "Verbier, CH",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.0964,7.2281",
+        "latitude": 46.0964,
+        "longitude": 7.2281,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 25), "end": (4, 25)},
+    },
+    "st_moritz": {
+        "name": "St. Moritz, CH",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.4908,9.8355",
+        "latitude": 46.4908,
+        "longitude": 9.8355,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 25), "end": (4, 20)},
+    },
+    "engelberg": {
+        "name": "Engelberg, CH",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.8205,8.4013",
+        "latitude": 46.8205,
+        "longitude": 8.4013,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 20), "end": (5, 10)},
+    },
+    "davos": {
+        "name": "Davos, CH",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.8043,9.837",
+        "latitude": 46.8043,
+        "longitude": 9.837,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 25), "end": (4, 15)},
+    },
+    # Alps -- Austria
+    "st_anton": {
+        "name": "St. Anton, AT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "47.1287,10.2643",
+        "latitude": 47.1287,
+        "longitude": 10.2643,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (12, 1), "end": (4, 25)},
+    },
+    "kitzbuehel": {
+        "name": "Kitzbuhel, AT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "47.4467,12.3925",
+        "latitude": 47.4467,
+        "longitude": 12.3925,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (11, 20), "end": (4, 10)},
+    },
+    "soelden": {
+        "name": "Solden, AT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.9655,11.0079",
+        "latitude": 46.9655,
+        "longitude": 11.0079,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 10), "end": (5, 5)},
+    },
+    "ischgl": {
+        "name": "Ischgl, AT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "47.0126,10.2913",
+        "latitude": 47.0126,
+        "longitude": 10.2913,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 25), "end": (5, 1)},
+    },
+    # Alps -- Italy (western; the Dolomites resorts below override their region)
+    "cervinia": {
+        "name": "Cervinia, IT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "45.9365,7.63",
+        "latitude": 45.9365,
+        "longitude": 7.63,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 10), "end": (5, 1)},
+    },
+    "sestriere": {
+        "name": "Sestriere, IT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "44.9565,6.879",
+        "latitude": 44.9565,
+        "longitude": 6.879,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (12, 1), "end": (4, 15)},
+    },
+    # Alps -- Germany / Slovenia
+    "zugspitze": {
+        "name": "Zugspitze (Garmisch), DE",
+        "data_source": "openmeteo",
+        "openmeteo_id": "47.4212,10.9863",
+        "latitude": 47.4212,
+        "longitude": 10.9863,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (11, 20), "end": (5, 1)},
+    },
+    "kranjska_gora": {
+        "name": "Kranjska Gora, SI",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.4846,13.7837",
+        "latitude": 46.4846,
+        "longitude": 13.7837,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (12, 10), "end": (3, 31)},
+    },
+    # Dolomites (region override: the IT country code defaults to "Alps")
+    "cortina": {
+        "name": "Cortina d'Ampezzo, IT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.5405,12.1357",
+        "region": "Dolomites",
+        "latitude": 46.5405,
+        "longitude": 12.1357,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (11, 25), "end": (4, 15)},
+    },
+    "val_gardena": {
+        "name": "Val Gardena, IT",
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.556,11.762",
+        "region": "Dolomites",
+        "latitude": 46.556,
+        "longitude": 11.762,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (12, 1), "end": (4, 10)},
+    },
+    # Pyrenees (Saint-Lary overrides: the FR country code defaults to "Alps")
+    "baqueira_beret": {
+        "name": "Baqueira-Beret, ES",
+        "data_source": "openmeteo",
+        "openmeteo_id": "42.6986,0.9311",
+        "latitude": 42.6986,
+        "longitude": 0.9311,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (12, 1), "end": (4, 15)},
+    },
+    "formigal": {
+        "name": "Formigal, ES",
+        "data_source": "openmeteo",
+        "openmeteo_id": "42.7772,-0.3814",
+        "latitude": 42.7772,
+        "longitude": -0.3814,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (12, 1), "end": (4, 10)},
+    },
+    "grandvalira": {
+        "name": "Grandvalira, AD",
+        "data_source": "openmeteo",
+        "openmeteo_id": "42.543,1.7333",
+        "latitude": 42.543,
+        "longitude": 1.7333,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (12, 1), "end": (4, 15)},
+    },
+    "saint_lary": {
+        "name": "Saint-Lary-Soulan, FR",
+        "data_source": "openmeteo",
+        "openmeteo_id": "42.8129,0.3218",
+        "region": "Pyrenees",
+        "latitude": 42.8129,
+        "longitude": 0.3218,
+        "verified": True,
+        "storm_floor_inches": {24: 4, 72: 8},
+        "season_window": {"start": (12, 5), "end": (4, 5)},
+    },
+    # Scandinavia
+    "are": {
+        "name": "Are, SE",
+        "data_source": "openmeteo",
+        "openmeteo_id": "63.399,13.0815",
+        "latitude": 63.399,
+        "longitude": 13.0815,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (11, 20), "end": (5, 1)},
+    },
+    "trysil": {
+        "name": "Trysil, NO",
+        "data_source": "openmeteo",
+        "openmeteo_id": "61.2926,12.2827",
+        "latitude": 61.2926,
+        "longitude": 12.2827,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (11, 15), "end": (4, 20)},
+    },
+    "hemsedal": {
+        "name": "Hemsedal, NO",
+        "data_source": "openmeteo",
+        "openmeteo_id": "60.8631,8.551",
+        "latitude": 60.8631,
+        "longitude": 8.551,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (11, 15), "end": (5, 1)},
+    },
+    "levi": {
+        "name": "Levi, FI",
+        "data_source": "openmeteo",
+        "openmeteo_id": "67.805,24.809",
+        "latitude": 67.805,
+        "longitude": 24.809,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (11, 1), "end": (5, 5)},
+    },
+    "ruka": {
+        "name": "Ruka, FI",
+        "data_source": "openmeteo",
+        "openmeteo_id": "66.165,29.1417",
+        "latitude": 66.165,
+        "longitude": 29.1417,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (11, 1), "end": (5, 10)},
+    },
+    # Carpathians
+    "poiana_brasov": {
+        "name": "Poiana Brasov, RO",
+        "data_source": "openmeteo",
+        "openmeteo_id": "45.5959,25.5559",
+        "latitude": 45.5959,
+        "longitude": 25.5559,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (12, 10), "end": (3, 31)},
+    },
+    "jasna": {
+        "name": "Jasna, SK",
+        "data_source": "openmeteo",
+        "openmeteo_id": "48.9634,19.5836",
+        "latitude": 48.9634,
+        "longitude": 19.5836,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (12, 5), "end": (4, 10)},
+    },
+    "kasprowy_wierch": {
+        "name": "Kasprowy Wierch, PL",
+        "data_source": "openmeteo",
+        "openmeteo_id": "49.2317,19.9817",
+        "latitude": 49.2317,
+        "longitude": 19.9817,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (12, 1), "end": (4, 25)},
+    },
+    # Balkans
+    "bansko": {
+        "name": "Bansko, BG",
+        "data_source": "openmeteo",
+        "openmeteo_id": "41.79,23.45",
+        "latitude": 41.79,
+        "longitude": 23.45,
+        "verified": True,
+        "storm_floor_inches": {24: 3, 72: 6},
+        "season_window": {"start": (12, 15), "end": (4, 10)},
+    },
+    # Scotland
+    "cairngorm": {
+        "name": "Cairngorm Mountain, GB",
+        "data_source": "openmeteo",
+        "openmeteo_id": "57.133,-3.644",
+        "latitude": 57.133,
+        "longitude": -3.644,
+        "verified": True,
+        "storm_floor_inches": {24: 2, 72: 4},
+        "season_window": {"start": (12, 15), "end": (4, 15)},
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -1290,6 +1651,43 @@ IN_SEASON_GATE = {
 OFF_SEASON = {
     "overall_cap": 12.0,
 }
+
+# ---------------------------------------------------------------------------
+# Staleness -- a live grade needs a station that is still reporting
+# ---------------------------------------------------------------------------
+# The cover gate and the in-season gate already handle a station reporting a
+# stale-but-known BARE reading (see IN_SEASON_GATE.carry_forward_days). This is
+# the OTHER tail: a station that has gone entirely silent. `settled_cover_depth`
+# then returns None, the cover gate disengages (factor 1.0) and `is_in_season`
+# returns None (unknown) -- so nothing caps an overall that is still riding the
+# season-to-date percentile with no current evidence behind it.
+#
+# In the current DB no mountain actually trips this (verified: 0 stale stations
+# grade C+ or better on 2026-01-15 or 2026-07-14), because a frozen current-season
+# total falls behind the fully-reported historical years as the winter goes on.
+# `apply_stale_cap` is the guard that keeps it that way if an upstream dies mid-
+# storm, and `data_age_days` / `stale` on the card surface a quiet station instead
+# of letting it be silently trusted.
+DATA_STALE_DAYS = 21             # no obs of ANY kind in this many days -> stale
+STALE_UNKNOWN_COVER_CAP = 20.0   # cap the overall (~C) when stale AND cover unknown
+
+# ---------------------------------------------------------------------------
+# Per-mountain base offset -- the valley-station under-read correction (opt-in)
+# ---------------------------------------------------------------------------
+# A MOUNTAINS entry may set `base_offset_in`: inches to ADD to a station's
+# measured settled cover so the ABSOLUTE gates (cover_factor, is_in_season) see
+# the mountain's base rather than a valley COOP station's. This is the hook the
+# audit's #2 fix hangs on; it does NOT touch the RELATIVE base percentile (a
+# constant offset cancels out of a same-station percentile), only the two absolute
+# skiability gates that valley siting distorts (Killington/Stowe/Sugarbush/Sunday
+# River/Fernie/Sun Peaks read 2-5" valley base in midwinter and get called closed).
+#
+# It applies ONLY to a POSITIVE reading (see settled_cover_depth): a station that
+# reads 0" in July is genuinely bare and must stay bare, so the offset never
+# manufactures summer cover. Default 0.0 -> inert for every mountain that doesn't
+# set it. Populating real values needs station-vs-summit elevation data we don't
+# store yet; left opt-in rather than guessed (this codebase does not fake signal).
+DEFAULT_BASE_OFFSET_IN = 0.0
 
 # On-disk SQLite location. Defaults to this project directory so the CLI and API
 # work regardless of the current working directory (e.g. uvicorn --app-dir).

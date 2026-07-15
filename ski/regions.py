@@ -28,6 +28,17 @@ _STATE_REGION = {
     "QC": "Eastern Canada", "ON": "Eastern Canada",
     "AU": "Australia", "NZ": "New Zealand",
     "CL": "Chile", "AR": "Argentina",
+    # Europe: leaves are mountain RANGES, not countries. A country code maps to
+    # the range holding most of its resorts; the resorts on the other side of a
+    # split country (French Pyrenees, Italian Dolomites) set an explicit
+    # `region` override in their MOUNTAINS entry (see `region_for`).
+    "FR": "Alps", "CH": "Alps", "AT": "Alps", "IT": "Alps",
+    "DE": "Alps", "SI": "Alps",
+    "ES": "Pyrenees", "AD": "Pyrenees",
+    "NO": "Scandinavia", "SE": "Scandinavia", "FI": "Scandinavia",
+    "RO": "Carpathians", "SK": "Carpathians", "PL": "Carpathians",
+    "BG": "Balkans",
+    "GB": "Scotland",
 }
 
 
@@ -40,6 +51,10 @@ _STATE_COUNTRY = {
     "VT": "USA", "NH": "USA", "ME": "USA", "NY": "USA", "MA": "USA",
     "BC": "Canada", "AB": "Canada", "QC": "Canada", "ON": "Canada",
     "AU": "Australia", "NZ": "New Zealand", "CL": "Chile", "AR": "Argentina",
+    "FR": "France", "CH": "Switzerland", "AT": "Austria", "IT": "Italy",
+    "DE": "Germany", "SI": "Slovenia", "ES": "Spain", "AD": "Andorra",
+    "NO": "Norway", "SE": "Sweden", "FI": "Finland", "RO": "Romania",
+    "SK": "Slovakia", "PL": "Poland", "BG": "Bulgaria", "GB": "United Kingdom",
 }
 
 # ISO-ish short codes for the sidebar chip -- "USA" is already short, the rest
@@ -47,7 +62,84 @@ _STATE_COUNTRY = {
 _COUNTRY_CODE = {
     "USA": "USA", "Canada": "CAN", "Australia": "AUS",
     "New Zealand": "NZL", "Chile": "CHL", "Argentina": "ARG",
+    "France": "FRA", "Switzerland": "CHE", "Austria": "AUT", "Italy": "ITA",
+    "Germany": "DEU", "Slovenia": "SVN", "Spain": "ESP", "Andorra": "AND",
+    "Norway": "NOR", "Sweden": "SWE", "Finland": "FIN", "Romania": "ROU",
+    "Slovakia": "SVK", "Poland": "POL", "Bulgaria": "BGR",
+    "United Kingdom": "GBR",
 }
+
+
+# The region hierarchy. Leaves are the values of _STATE_REGION (what `region_of`
+# returns); parents group them into progressively wider scopes. A mountain's full
+# membership is its leaf plus every ancestor -- Park City is in Utah AND Western
+# North America AND Northern Hemisphere -- derived here rather than stored per
+# mountain, for the same keep-one-thing-in-sync reason as the leaf parse above.
+# Europe slots in later as a new subtree under Northern Hemisphere.
+_PARENT: dict[str, str | None] = {
+    "Northern Hemisphere": None,
+    "Southern Hemisphere": None,
+    "Western North America": "Northern Hemisphere",
+    "East Coast (incl. Canada)": "Northern Hemisphere",
+    "Europe": "Northern Hemisphere",
+    "South America": "Southern Hemisphere",
+    "Oceania": "Southern Hemisphere",
+    "Alps": "Europe",
+    "Dolomites": "Europe",
+    "Pyrenees": "Europe",
+    "Scandinavia": "Europe",
+    "Carpathians": "Europe",
+    "Balkans": "Europe",
+    "Scotland": "Europe",
+    "Utah": "Western North America",
+    "Colorado": "Western North America",
+    "Tahoe & Sierra": "Western North America",
+    "Pacific Northwest": "Western North America",
+    "Northern Rockies": "Western North America",
+    "Southwest": "Western North America",
+    "Alaska": "Western North America",
+    "British Columbia": "Western North America",
+    "Alberta": "Western North America",
+    "Northeast": "East Coast (incl. Canada)",
+    "Eastern Canada": "East Coast (incl. Canada)",
+    "Chile": "South America",
+    "Argentina": "South America",
+    "Australia": "Oceania",
+    "New Zealand": "Oceania",
+}
+
+
+def region_tree() -> list[dict]:
+    """The hierarchy as serializable nodes ({id, name, parent}), for /meta.
+
+    Node ids ARE the display names -- they're unique, and the roster rows already
+    carry the leaf name in `region`, so the frontend can join without a second
+    id-to-name map. A leaf `region_of` produces that isn't in the tree (a new,
+    unmapped state code) simply won't appear here; the frontend treats such
+    orphans as root-level leaves, so nothing breaks while it waits for a parent.
+    """
+    return [{"id": n, "name": n, "parent": p} for n, p in _PARENT.items()]
+
+
+def ancestors(leaf: str) -> list[str]:
+    """Every region containing `leaf`, nearest first, excluding the leaf itself."""
+    out = []
+    node = _PARENT.get(leaf)
+    while node is not None:
+        out.append(node)
+        node = _PARENT.get(node)
+    return out
+
+
+def descendant_leaves(region: str) -> set[str]:
+    """The leaf regions under `region` (itself included if it is a leaf)."""
+    children = [n for n, p in _PARENT.items() if p == region]
+    if not children:
+        return {region}
+    leaves: set[str] = set()
+    for c in children:
+        leaves |= descendant_leaves(c)
+    return leaves
 
 
 def _code(name: str) -> str:
@@ -63,6 +155,18 @@ def region_of(name: str) -> str:
     """
     code = _code(name)
     return _STATE_REGION.get(code, code or "Other")
+
+
+def region_for(mountain: dict) -> str:
+    """The leaf region for one MOUNTAINS entry.
+
+    Normally the country-code parse (`region_of`), but an entry may set an
+    explicit `region` when its country straddles two ranges -- the French
+    Pyrenees resorts and the Italian Dolomites can't be told apart from the
+    code alone. The override must itself be a known leaf so it slots into the
+    hierarchy like any other.
+    """
+    return mountain.get("region") or region_of(mountain["name"])
 
 
 def country_of(name: str) -> str:

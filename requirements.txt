@@ -9,3 +9,6 @@ pytest>=7.0
 # optional (only for the HTTP API in api.py; the CLI + engine don't need these)
 fastapi>=0.110
 uvicorn[standard]>=0.29
+
+# optional (AI grade commentary, ski/commentary.py; skipped gracefully without it)
+anthropic>=0.60

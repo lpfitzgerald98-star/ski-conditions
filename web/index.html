@@ -74,6 +74,9 @@
   <main id="main" aria-label="Map">
     <div id="map"></div>
     <div id="map-tooltip" class="map-tooltip" role="status" hidden></div>
+    <!-- Transient notices (e.g. "Region filter cleared" when zooming out past
+         the active region). Screen readers hear these via #live-region. -->
+    <div id="toast" class="toast" aria-hidden="true" hidden></div>
   </main>
 </div>
 

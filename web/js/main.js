@@ -9,6 +9,7 @@ import {
   state, on, setScores, upsertRow, setRegion, setSelected, setInView, visibleScores,
 } from "./state.js";
 import { announce } from "./a11y.js";
+import { setRegionTree, optionsList } from "./regions.js";
 import * as sse from "./sse.js";
 import {
   initMap, renderMarkers, updateMarker, markSelected as mapMarkSelected, flyToMountain, fitAll, fitRegion,
@@ -124,17 +125,31 @@ async function loadProfile(profile) {
 }
 
 // -- regions ---------------------------------------------------------------
+// The picker walks the hierarchy depth-first, indenting children under their
+// parents; any level is selectable, and picking a parent includes everything
+// under it. With no tree in meta (old snapshot), optionsList degrades to the
+// flat leaf list this control always showed.
 function populateRegions() {
   const sel = $("region");
-  const regions = [...new Set(state.scores.map(m => m.region))].sort();
+  const opts = optionsList(state.scores);
   const cur = state.region;
   sel.innerHTML = '<option value="All">All regions (global)</option>' +
-    regions.map(r => {
-      const n = state.scores.filter(m => m.region === r).length;
-      return `<option value="${r}">${r} (${n})</option>`;
-    }).join("");
-  sel.value = regions.includes(cur) || cur === "All" ? cur : "All";
+    opts.map(o =>
+      `<option value="${o.id}">${"  ".repeat(o.depth)}${o.id} (${o.count})</option>`
+    ).join("");
+  sel.value = opts.some(o => o.id === cur) || cur === "All" ? cur : "All";
   state.region = sel.value;
+}
+
+// -- toast -------------------------------------------------------------------
+// One transient notice at a time (currently only the filter auto-clear).
+let toastTimer = null;
+function showToast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 
 // -- tagline ---------------------------------------------------------------
@@ -236,6 +251,19 @@ function wireControls() {
   $("fitall").addEventListener("click", viewAll);
   $("asof").addEventListener("change", onAsOfChange);
 
+  // The map detected a zoom/pan out past the active region (map.js
+  // maybeAutoClearRegion): drop the filter so the newly visible pins are
+  // selectable, and say so -- a filter that vanishes silently reads as a bug.
+  on("region-autoclear", region => {
+    setRegion("All");
+    $("region").value = "All";
+    renderMarkers();
+    renderList();
+    updateTagline();
+    showToast(`Region filter cleared — zoomed out past ${region}`);
+    announce(`Region filter cleared: zoomed out past ${region}. Showing all mountains.`);
+  });
+
   // Re-render markers when the map finishes moving isn't needed (MapLibre keeps
   // HTML markers pinned), but do keep the selected card in sync on selection.
   on("selected", key => { if (key) { mapMarkSelected(key); listMarkSelected(key); } });
@@ -274,8 +302,9 @@ async function boot() {
   if (LIVE) wireStream();
 
   const [grades, meta] = await Promise.all([loadGrades(), loadMeta()]);
-  setScale(grades.colors, grades.na_color);
+  setScale(grades.colors, grades.na_color, grades.thresholds);
   state.meta = meta;
+  setRegionTree(meta.region_tree);
   buildLegend();
 
   const defaultProfile = initProfiles(meta);

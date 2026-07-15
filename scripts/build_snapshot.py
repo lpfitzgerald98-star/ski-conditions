@@ -34,9 +34,10 @@ from pathlib import Path
 # Allow `python scripts/build_snapshot.py` from the project root.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import DEFAULT_PROFILE, MOUNTAINS  # noqa: E402
-from ski import pipeline  # noqa: E402
+from config import DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS  # noqa: E402
+from ski import commentary, pipeline  # noqa: E402
 from ski.card import scorecard  # noqa: E402
+from ski.regions import region_tree  # noqa: E402
 from ski.service import (  # noqa: E402
     GRADE_COLORS,
     NA_COLOR,
@@ -125,6 +126,10 @@ def build(keys: list[str], as_of: date, use_network: bool) -> dict:
             card = scorecard(key, as_of=as_of, use_network=use_network,
                              default_profile=DEFAULT_PROFILE)
             card["roster_size"] = len(MOUNTAINS)
+            # One AI sentence explaining the grade -- cached per (mountain, day)
+            # in SQLite, so rebuilding the snapshot never re-pays the API; skipped
+            # (null) off-season and when no Anthropic credentials are configured.
+            card["commentary"] = commentary.get_or_generate(key, as_of, card)
             cards[key] = card
             (cards_dir / f"{key}.json").write_text(
                 json.dumps(card, separators=(",", ":")), encoding="utf-8")
@@ -150,7 +155,8 @@ def build(keys: list[str], as_of: date, use_network: bool) -> dict:
             json.dumps(rows, separators=(",", ":")), encoding="utf-8")
 
     (WEB_DATA / "grades.json").write_text(
-        json.dumps({"colors": GRADE_COLORS, "na_color": NA_COLOR}), encoding="utf-8")
+        json.dumps({"colors": GRADE_COLORS, "na_color": NA_COLOR,
+                    "thresholds": GRADE_THRESHOLDS}), encoding="utf-8")
 
     regions = sorted({mountain_summary(k)["region"] for k in keys})
     meta = {
@@ -159,7 +165,8 @@ def build(keys: list[str], as_of: date, use_network: bool) -> dict:
         "default_profile": DEFAULT_PROFILE if DEFAULT_PROFILE in profiles
         else (profiles[0] if profiles else DEFAULT_PROFILE),
         "profiles": profiles,
-        "regions": regions,
+        "regions": regions,               # flat leaf list, kept for compat
+        "region_tree": region_tree(),     # the hierarchy the picker renders
         "roster_size": len(MOUNTAINS),
         "ok": len(ok),
         "failed": failed,

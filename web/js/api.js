@@ -13,12 +13,16 @@ export async function loadGrades() {
   return getJSON(LIVE ? `${API_BASE}/grades` : `${DATA_BASE}/grades.json`);
 }
 
-// Static-only: the snapshot manifest (as_of, profiles, regions). In live mode the
-// stream carries as_of/profile itself, so this returns a minimal shim.
+// The snapshot manifest (as_of, profiles, region_tree). Static reads the built
+// meta.json; live asks the backend's /meta (which carries the region hierarchy),
+// falling back to a minimal shim against an older backend without the route.
 export async function loadMeta() {
   if (!LIVE) return getJSON(`${DATA_BASE}/meta.json`);
-  return { profiles: ["dynamic", "weekend", "month", "season"],
-           default_profile: "dynamic", regions: [], as_of: null };
+  try { return await getJSON(`${API_BASE}/meta`); }
+  catch {
+    return { profiles: ["dynamic", "weekend", "month", "season"],
+             default_profile: "dynamic", regions: [], as_of: null };
+  }
 }
 
 // The ranked roster for a profile. Static reads the prebuilt file; live falls

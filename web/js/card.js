@@ -123,6 +123,12 @@ function render(card, key) {
       <div class="cell"><div class="k">Fresh (7d)</div><div class="v">${cond.fresh_7d != null ? cond.fresh_7d + '"' : "—"}</div></div>
     </div>`;
 
+  // The AI one-liner explaining the grade (built server-side with the scoring
+  // job, cached per day -- see ski/commentary.py). Absent off-season or when
+  // the build ran without credentials; the card simply shows nothing then.
+  if (card.commentary)
+    html += `<div class="note commentary">${escapeHTML(card.commentary)}</div>`;
+
   if (card.cover_factor != null && card.cover_factor < 1)
     html += `<div class="note">Cover gate ×${card.cover_factor} — a thin base caps the overall score.</div>`;
 

@@ -14,6 +14,7 @@ Run it:
 Endpoints:
     GET /mountains          roster: key, name, lat/lon, verified, region
     GET /grades             the letter -> color scale (frontend paints from this)
+    GET /meta               profiles + the region hierarchy (live meta.json twin)
     GET /scores             one summary row per mountain, ranked within region
     GET /score/{mountain}   full scorecard JSON (?as_of=YYYY-MM-DD&network=false)
     GET /live/stream        SSE: cached snapshot now, live per-mountain updates as
@@ -34,8 +35,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import DB_PATH, DEFAULT_PROFILE, MOUNTAINS
+from config import DB_PATH, DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS
 from ski import cache
+from ski.regions import region_tree
 from ski.service import (
     GRADE_COLORS,
     NA_COLOR,
@@ -121,8 +123,28 @@ def health() -> dict:
 def grades() -> dict:
     """The letter -> color scale. The frontend paints from this rather than
     keeping its own copy of the grading thresholds (which is how the map and the
-    score card drifted onto different curves)."""
-    return {"colors": GRADE_COLORS, "na_color": NA_COLOR}
+    score card drifted onto different curves).
+
+    `thresholds` (the percentile -> letter curve) is here for the ONE lettering
+    the frontend does itself: ranking rows within a non-leaf region selection,
+    a cohort the backend can't precompute without shipping a rank per tree node
+    on every row. Same curve, served not copied, so it can't drift."""
+    return {"colors": GRADE_COLORS, "na_color": NA_COLOR,
+            "thresholds": GRADE_THRESHOLDS}
+
+
+@app.get("/meta")
+def meta() -> dict:
+    """Roster-level metadata: profiles + the region hierarchy. The live-mode
+    counterpart of the static build's meta.json (build_snapshot.py), so the
+    frontend region picker works identically in both modes."""
+    return {
+        "as_of": None,
+        "profiles": ["dynamic", "weekend", "month", "season"],
+        "default_profile": DEFAULT_PROFILE,
+        "region_tree": region_tree(),
+        "roster_size": len(MOUNTAINS),
+    }
 
 
 @app.get("/mountains")

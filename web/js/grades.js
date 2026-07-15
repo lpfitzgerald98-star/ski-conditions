@@ -12,10 +12,24 @@ import { MARKER_SIZE } from "./config.js";
 
 let COLORS = {};
 let NA = "#5a636e";
+let THRESHOLDS = [];   // [[min_percentile, letter], ...] high -> low, from the backend
 
-export function setScale(colors, naColor) {
+export function setScale(colors, naColor, thresholds) {
   COLORS = colors || {};
   NA = naColor || NA;
+  THRESHOLDS = thresholds || [];
+}
+
+// Percentile -> letter on the backend's curve (config.GRADE_THRESHOLDS, served
+// via /grades). Used ONLY for ranks the backend can't precompute: the within-
+// selection percentile when a non-leaf region is picked. Same rule as Python's
+// letter_grade: first tier whose floor the value meets.
+export function letterFor(percentile) {
+  if (percentile == null) return null;
+  for (const [minP, grade] of THRESHOLDS) {
+    if (percentile >= minP) return grade;
+  }
+  return THRESHOLDS.length ? THRESHOLDS[THRESHOLDS.length - 1][1] : null;
 }
 export function naColor() { return NA; }
 

@@ -3,7 +3,7 @@
 //
 // Why HTML markers and not a GeoJSON symbol layer: symbol layers render to the
 // WebGL canvas, so they can't take keyboard focus or expose ARIA, and they can't
-// do the per-pin recolor fade. DOM markers keep all three -- and at 79 pins the
+// do the per-pin recolor fade. DOM markers keep all three -- and at ~110 pins the
 // perf cost is nil. Each marker is a <button> wrapping the shared SVG badge, so
 // grade reads as color + shape + letter and Tab walks the pins in order.
 
@@ -13,7 +13,14 @@ import {
 } from "./config.js";
 import { badgeSVG, shapeFor, colorFor, naColor } from "./grades.js";
 import { state, visibleScores, displayValue, setSelected, emit } from "./state.js";
+import { leafSetOf } from "./regions.js";
 import { prefersReducedMotion } from "./a11y.js";
+
+// Every camera move THIS code drives carries this tag in its event data, so the
+// zoom-out auto-clear can tell our framing (fitRegion's padding routinely shows
+// out-of-region pins -- that must not self-clear the filter) from the user's own
+// gestures (which are exactly what should clear it).
+const PROGRAMMATIC = { programmatic: true };
 
 let map = null;
 let markers = {};      // key -> { marker, el }
@@ -47,7 +54,7 @@ export function initMap(onSelect, onViewAll) {
   // (clears region/selection/card, then frames everything); fall back to a bare fit.
   map.addControl(new FitAllControl(onViewAll || (() => fitAll())), "top-right");
 
-  // Declutter the world view: badges shrink when zoomed out (so 79 pins don't
+  // Declutter the world view: badges shrink when zoomed out (so ~110 pins don’t
   // pile up) and grow back as you zoom in. Driven by a CSS var on #map.
   const applyMarkerScale = () => {
     const z = map.getZoom();
@@ -60,6 +67,10 @@ export function initMap(onSelect, onViewAll) {
   // Re-cluster after every pan/zoom settles. moveend (not move) fires once per
   // gesture, so markers pan smoothly during a drag and only regroup when it stops.
   map.on("moveend", scheduleRecluster);
+
+  // Zooming/panning OUT past the active region's extent auto-clears the filter,
+  // so the pins that just came into view are actually selectable.
+  map.on("moveend", maybeAutoClearRegion);
 
   tooltipEl = document.getElementById("map-tooltip");
   map._onSelect = onSelect;
@@ -155,7 +166,7 @@ let reclusterQueued = false;
 
 // Group the visible pins by screen proximity at the current zoom: nearby pins
 // become one count bubble (click/Enter to zoom in and expand), lone pins render
-// as their normal grade badge. This is what makes a 79-pin global map navigable
+// as their normal grade badge. This is what makes a ~110-pin global map navigable
 // instead of a pile of overlapping badges over the US West and NZ.
 //
 // Past CLUSTER_MAX_ZOOM, clustering is OFF -- every pin stands alone so you can
@@ -223,6 +234,47 @@ function scheduleRecluster() {
   });
 }
 
+// Clear the region filter when the user zooms/pans OUT past the active region.
+//
+// Evaluated only on user-initiated moves; our own camera calls carry
+// PROGRAMMATIC, and each one also re-baselines `regionFrameZoom` -- the zoom at
+// which the app last framed the view. That baseline is the key: fitRegion shows
+// the WHOLE region (often with out-of-region pins in the padding), so any test
+// phrased purely against the region's bbox fires on the very first user gesture,
+// even a zoom IN. "Out" therefore means out relative to where we framed you.
+//
+// A user move clears the filter when out-of-selection mountains are in view --
+// tested against the active region's own member set, never region vs region, so
+// overlapping/hierarchical regions can't confuse it -- AND either:
+//
+//   a. the camera has zoomed OUT below the framing baseline (past a small
+//      dead-band, so a wheel twitch doesn't count), or
+//   b. no member mountain is left in view at all (panned clean away).
+//
+// Zooming further IN can never fire (a); a pan that keeps members on screen
+// never fires (b). The clear itself (state change, re-render, toast) lives in
+// main.js, wired to the "region-autoclear" event -- this module only detects.
+let regionFrameZoom = null;
+
+function maybeAutoClearRegion(e) {
+  if (!map) return;
+  if (e.programmatic) { regionFrameZoom = map.getZoom(); return; }
+  if (state.region === "All") return;
+
+  const b = map.getBounds();
+  const leaves = leafSetOf(state.region);
+  let memberVisible = false, outsideVisible = false;
+  state.scores.forEach(m => {
+    if (m.latitude == null || m.longitude == null) return;
+    if (!b.contains([m.longitude, m.latitude])) return;
+    if (leaves.has(m.region)) memberVisible = true; else outsideVisible = true;
+  });
+  if (!outsideVisible) return;
+
+  const zoomedOut = regionFrameZoom != null && map.getZoom() < regionFrameZoom - 0.25;
+  if (zoomedOut || !memberVisible) emit("region-autoclear", state.region);
+}
+
 // The keys of the mountains currently inside the map viewport -- what the sidebar
 // narrows to, so the leaderboard shows only what you're looking at.
 function viewportKeys() {
@@ -287,7 +339,8 @@ export function flyToMountain(key) {
   if (!row || row.latitude == null) return;
   const zoom = Math.max(map.getZoom(), 4.5);
   const opts = { center: [row.longitude, row.latitude], zoom, offset: [-150, 0] };
-  if (prefersReducedMotion()) map.jumpTo(opts); else map.easeTo({ ...opts, duration: 600 });
+  if (prefersReducedMotion()) map.jumpTo(opts, PROGRAMMATIC);
+  else map.easeTo({ ...opts, duration: 600 }, PROGRAMMATIC);
 }
 
 export function fitAll() {
@@ -307,7 +360,7 @@ function fitBounds(pts, maxZoom = 8) {
     map.fitBounds(b, {
       padding: { top: 50, bottom: 50, left: 50, right: wide ? 90 : 50 },
       maxZoom, duration: prefersReducedMotion() ? 0 : 700,
-    });
+    }, PROGRAMMATIC);
   };
   // Fitting before the style loads throws; defer to first load in that case.
   if (map.isStyleLoaded()) run(); else map.once("load", run);

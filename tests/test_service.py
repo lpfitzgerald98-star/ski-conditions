@@ -72,15 +72,15 @@ def test_country_and_region_agree_on_the_same_code():
     assert country_of("Whistler, BC") == "Canada"
     assert country_of("Mt Hutt, NZ") == "New Zealand"
     assert country_code("New Zealand") == "NZL"
-    # every region maps to exactly one country -- if this ever fails, the two
-    # tables have drifted apart and the sidebar chip will lie.
+    # Regions may span countries (the Alps cover six), but every MOUNTAIN must
+    # resolve to a real country with a real chip code -- the sidebar chip reads
+    # the mountain, not the region, and "Other"/"—" there means the country
+    # tables lag the roster.
     from config import MOUNTAINS
-    seen = {}
     for k in MOUNTAINS:
         s = mountain_summary(k)
-        seen.setdefault(s["region"], set()).add(s["country"])
-    split = {r: c for r, c in seen.items() if len(c) > 1}
-    assert not split, f"regions spanning countries: {split}"
+        assert s["country"] != "Other", f"{k}: unmapped country"
+        assert len(s["country_code"]) == 3, f"{k}: bad chip code {s['country_code']}"
 
 
 # --- within-region ranking --------------------------------------------------

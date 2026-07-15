@@ -221,6 +221,18 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .map-tooltip b { font-weight: 600; }
 .map-tooltip small { color: var(--text-muted); }
 
+/* Transient notice over the map (e.g. region filter auto-cleared on zoom out). */
+.toast {
+  position: absolute; z-index: 7; pointer-events: none;
+  left: 50%; bottom: 26px; transform: translateX(-50%);
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 8px 14px; font-size: 13px; box-shadow: var(--shadow-pop);
+  animation: toast-in .18s ease-out;
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 6px); } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
 /* Recolor MapLibre's controls/attribution to fit the theme. */
 .maplibregl-ctrl-group { background: var(--panel) !important; border: 1px solid var(--line) !important; }
 .maplibregl-ctrl-group button + button { border-top: 1px solid var(--line) !important; }
@@ -283,6 +295,7 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
   border-left: 2px solid var(--line);
 }
 .note.warn { border-left-color: var(--alert); }
+.note.commentary { border-left-color: var(--accent); color: var(--text); }
 
 /* ---- Responsive --------------------------------------------------------- */
 @media (max-width: 780px) {

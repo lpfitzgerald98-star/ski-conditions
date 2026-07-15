@@ -43,9 +43,11 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install pandas numpy requests
+        run: pip install pandas numpy requests anthropic
 
       - name: Build snapshot + retrospective history (ingest + score)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python scripts/build_snapshot.py --history
 
       - name: Persist new history dates
