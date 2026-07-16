@@ -226,7 +226,7 @@ def cmd_card(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Ski-conditions tracker (Phase 1).")
+    parser = argparse.ArgumentParser(description="GladeGrade (Phase 1).")
     parser.add_argument("--db", default=DB_PATH, help=f"SQLite path (default: {DB_PATH})")
     sub = parser.add_subparsers(dest="command", required=True)
 
