@@ -166,10 +166,16 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .item .alert-chip { color: var(--alert); margin-left: 4px; }
 
 /* ---- Map markers (HTML markers, so they stay focusable + animatable) ----- */
+/* MapLibre positions .marker/.cluster-marker itself via an inline `transform`
+   (translate to screen px) on every render frame during pan/zoom. A CSS
+   transition on that same property fights it -- each frame restarts the
+   transition, so the badge perpetually lags/floats behind its true lat/lng
+   instead of staying glued to the map. Position transform on these two
+   elements must stay untransitioned; any hover/zoom scale effect lives on an
+   inner child instead, where it can't interfere with positioning. */
 .marker {
   cursor: pointer; border: 0; background: none; padding: 0;
   line-height: 0; display: block;
-  transition: transform var(--dur) var(--ease);
 }
 /* Badges shrink at world zoom and grow when zoomed in (--marker-scale is set by
    map.js on zoom), so the global view isn't a pile of overlapping pins. The
@@ -184,16 +190,20 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 /* The badge fill fades from neutral to its grade color as the live update lands
  * (or, in static mode, just eases in on first paint). */
 .marker .badge-fill { transition: fill var(--dur-slow) var(--ease); }
-.marker:hover, .marker:focus-visible { transform: scale(1.18); z-index: 5; }
+.marker:hover, .marker:focus-visible { z-index: 5; }
+.marker:hover svg, .marker:focus-visible svg { transform: scale(calc(var(--marker-scale, 1) * 1.18)); }
 .marker:focus-visible { outline: none; }
 .marker:focus-visible svg .ring { opacity: 1; }
 .marker.is-stale { opacity: .45; }
 .marker.is-alert svg .alert-ring { opacity: 1; }
 
 /* Cluster bubble: a focusable count badge that zooms to its members. The ring is
-   a conic slice showing the in-season share (--skiable) without color-coding. */
-.cluster-marker {
-  cursor: pointer; border: 0; padding: 0; display: grid; place-items: center;
+   a conic slice showing the in-season share (--skiable) without color-coding.
+   The button itself only carries position; the face (background/ring/count)
+   is a separate child so hover scale can't fight MapLibre's position transform. */
+.cluster-marker { cursor: pointer; border: 0; padding: 0; display: grid; place-items: center; }
+.cluster-face {
+  display: grid; place-items: center; width: 100%; height: 100%;
   border-radius: 50%; color: var(--text); font-weight: 700;
   font-variant-numeric: tabular-nums;
   background:
@@ -208,7 +218,8 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
   display: grid; place-items: center; width: 76%; height: 76%;
   border-radius: 50%; background: var(--panel); font-size: 12.5px;
 }
-.cluster-marker:hover, .cluster-marker:focus-visible { transform: scale(1.12); z-index: 5; }
+.cluster-marker:hover, .cluster-marker:focus-visible { z-index: 5; }
+.cluster-marker:hover .cluster-face, .cluster-marker:focus-visible .cluster-face { transform: scale(1.12); }
 .cluster-marker:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .map-tooltip {

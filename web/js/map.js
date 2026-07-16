@@ -300,7 +300,7 @@ function makeClusterEl(g) {
   // A slice ring hints how many are in-season (skiable) vs not, without color-coding.
   const skiable = g.members.filter(m => m.in_season === true).length;
   el.style.setProperty("--skiable", (n ? skiable / n : 0).toFixed(3));
-  el.innerHTML = `<span class="cnt">${n}</span>`;
+  el.innerHTML = `<span class="cluster-face"><span class="cnt">${n}</span></span>`;
   const regions = [...new Set(g.members.map(m => m.region))];
   el.setAttribute("aria-label",
     `Cluster of ${n} mountains${regions.length === 1 ? ` in ${regions[0]}` : ""}, ${skiable} in season. Activate to zoom in.`);
