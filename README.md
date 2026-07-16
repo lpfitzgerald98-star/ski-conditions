@@ -1,4 +1,4 @@
-# Ski-Conditions Tracker
+# GladeGrade
 
 Tracks snow/weather at specific ski resorts, grades the season against each
 station's own historical record, and (Phase 2) alerts on incoming/just-happened

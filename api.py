@@ -81,7 +81,7 @@ _LIVE_POOL = ThreadPoolExecutor(max_workers=STREAM_CONCURRENCY,
                                 thread_name_prefix="ski-live")
 
 app = FastAPI(
-    title="Ski Conditions API",
+    title="GladeGrade API",
     version="0.2.0",
     summary="Snow/weather scorecards for tracked mountains.",
 )
