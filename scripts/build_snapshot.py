@@ -65,6 +65,7 @@ def _row_from_card(key: str, card: dict, profile: str) -> dict:
     season = card["grades"]["season"] or {}
     base = card["grades"]["base"] or {}
     fc = card["forecast"] or {}
+    ci = card.get("comparable_inputs") or {}
     row.update(
         score=overall.get("score"),
         grade=overall.get("grade", "N/A"),
@@ -78,6 +79,14 @@ def _row_from_card(key: str, card: dict, profile: str) -> dict:
         incoming_inches=fc.get("inches"),
         alert=bool(fc.get("alert")),
         status="live",   # a snapshot row is settled, never "stale"
+        # Flattened for ski.comparable.score_population (global/regional score),
+        # same fields service.score_mountain sets for the live API path -- this
+        # was the one row-builder that never got them (bug: global_score/
+        # regional_score were always null on the deployed static site).
+        abs_base_in=ci.get("base_in"),
+        abs_fresh_in=ci.get("fresh_in"),
+        abs_season_in=ci.get("season_in"),
+        abs_forecast_in=ci.get("forecast_in"),
     )
     return row
 
