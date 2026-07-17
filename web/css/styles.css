@@ -101,6 +101,12 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
   font-size: 12px; color: var(--text-muted); text-transform: none; letter-spacing: 0;
   font-weight: 400; cursor: pointer;
 }
+/* Author-origin `.check{display:flex}` otherwise beats the UA stylesheet's
+   `[hidden]{display:none}` regardless of specificity (author always wins over
+   user-agent in the cascade) -- so main.js's `network-field.hidden = !LIVE`
+   was silently not hiding the "Fetch live forecast" toggle on the static
+   build, where it's a no-op (loadCard ignores `network` entirely off-LIVE). */
+.check[hidden] { display: none; }
 .check input { width: auto; accent-color: var(--accent); }
 .btn {
   margin-top: var(--sp-3); width: 100%;
@@ -299,9 +305,8 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .duo .score-row { display: flex; align-items: center; gap: var(--sp-2); margin-top: 7px; }
 /* Score digits get the display face; the "/100" suffix stays --font (it's
    muted supporting text, not the headline number). */
-.duo .num { font-size: 20px; font-weight: 700; line-height: 1;
-  font-family: var(--font-display); letter-spacing: -.01em; }
-.duo .num span { font-size: 10px; font-weight: 400; color: var(--text-muted); font-family: var(--font); }
+.duo .num { font-size: 20px; font-weight: 700; line-height: 1; }
+.duo .num span { font-size: 10px; font-weight: 400; color: var(--text-muted); }
 .duo .of { font-size: 10px; color: var(--text-muted); margin-top: 5px; }
 /* Skiability hero: the headline grade sits a notch louder than its neighbour. */
 .duo .side.hero { background: var(--panel-2); border-color: var(--accent); }

@@ -47,10 +47,6 @@
   /* Type */
   --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-  /* Display face for the card's headline score digits ONLY (see .duo .num in
-     styles.css) -- everything else, including the "/100" suffix and the rank
-     banner's number, stays --font. Loaded in index.html. */
-  --font-display: "Big Shoulders Display", var(--font);
 
   /* Motion. Wrapped so prefers-reduced-motion can zero them everywhere at once. */
   --dur-fast: 140ms;
