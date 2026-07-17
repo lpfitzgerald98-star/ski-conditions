@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import pandas as pd
 
-from ski.sources.outlook import CurrentWeather, Outlook
+from config import MEDIUM_RANGE
+from ski.sources.outlook import CurrentWeather, Outlook, medium_range_band
 from ski.sources import http
 
 BASE = "https://api.weather.gov"
@@ -176,7 +178,7 @@ def _series_max(series: dict, now: pd.Timestamp, end: pd.Timestamp) -> float | N
 
 
 def outlook_from_properties(
-    p: dict, now: pd.Timestamp | None = None, windows_hours=(24, 72)
+    p: dict, now: pd.Timestamp | None = None, windows_hours=(24, 48, 72)
 ) -> Outlook:
     """Build the provider-neutral Outlook from one gridpoints payload.
 
@@ -193,18 +195,44 @@ def outlook_from_properties(
     qpf_72 = forecast_snow_total(qpf_blocks, 72, now)
     rain_72 = max(0.0, qpf_72 - snow_72 / SNOW_TO_LIQUID_RATIO)
 
-    tmax_c = _series_max(p.get("temperature", {}), now, now + pd.Timedelta(hours=72))
+    # Per-horizon max temp (score.phase_adjusted_snow_in reclassifies forecast
+    # snow using each horizon's own warmest reading, not just the 72h one).
+    tmax_by_window = {}
+    for wh in windows_hours:
+        tc = _series_max(p.get("temperature", {}), now, now + pd.Timedelta(hours=wh))
+        tmax_by_window[wh] = None if tc is None else tc * 9 / 5 + 32
+
+    # Medium-range (4-10 day) band. NWS gridpoints snowfallAmount typically only
+    # reaches ~7 days out (not the full 10) -- window_end is the REAL outer edge
+    # of the blocks we have, so a short NWS horizon reports a narrower, more-
+    # confident band rather than padding out to a 10-day reach it doesn't have.
+    min_h, full_h = MEDIUM_RANGE["min_hours"], MEDIUM_RANGE["horizon_hours"]
+    last_end = max((b.end for b in snow_blocks), default=now)
+    coverage_hours = max(0, int((last_end - now).total_seconds() // 3600))
+    window_end = min(coverage_hours, full_h)
+    mr = None
+    if window_end >= min_h:
+        mr_total = forecast_snow_total(snow_blocks, window_end, now) - \
+            forecast_snow_total(snow_blocks, min_h, now)
+        mr = medium_range_band(
+            max(0.0, mr_total), window_end, min_h, full_h,
+            MEDIUM_RANGE["band_width_at_min"], MEDIUM_RANGE["band_width_at_full"],
+        )
+
     return Outlook(
         provider="nws",
         snow_in=snow_in,
         rain_72h_in=rain_72,
-        tmax_72h_f=None if tmax_c is None else tmax_c * 9 / 5 + 32,
+        tmax_72h_f=tmax_by_window.get(72),
+        tmax_by_window=tmax_by_window,
         current=_current_from_properties(p, now),
+        medium_range=mr,
+        fetched_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
 def fetch_outlook(office: str, grid_x: int, grid_y: int, timeout: int = 30,
-                  windows_hours=(24, 72)) -> Outlook:
+                  windows_hours=(24, 48, 72)) -> Outlook:
     """One gridpoints call -> incoming snow, rain/warmth (thaw), current weather."""
     p = _fetch_gridpoint_properties(office, grid_x, grid_y, timeout)
     return outlook_from_properties(p, windows_hours=windows_hours)

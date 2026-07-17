@@ -58,10 +58,20 @@ def test_off_season_and_unscored_are_gated():
     assert commentary.facts_from_card(_card(score=None)) is None
 
 
+def _force_ai_mode():
+    """The cache tests below exercise the AI path specifically; select it
+    regardless of the configured default (which is "rules"). Returns the previous
+    value so the caller can restore it."""
+    prev = commentary.COMMENTARY_MODE
+    commentary.COMMENTARY_MODE = "ai"
+    return prev
+
+
 def test_cache_round_trip_one_generation_per_day():
     db = _tmp_db()
     calls = []
     real = commentary.generate
+    mode = _force_ai_mode()
     commentary.generate = lambda facts: calls.append(1) or "Fresh and deep."
     try:
         d = date(2026, 2, 15)
@@ -71,6 +81,7 @@ def test_cache_round_trip_one_generation_per_day():
         assert len(calls) == 1, "second call must come from the cache"
     finally:
         commentary.generate = real
+        commentary.COMMENTARY_MODE = mode
         os.unlink(db)
 
 
@@ -79,6 +90,7 @@ def test_grade_change_invalidates_cached_prose():
     the old grade must not survive it."""
     db = _tmp_db()
     real = commentary.generate
+    mode = _force_ai_mode()
     outputs = iter(["Was a B+.", "Now an A-."])
     commentary.generate = lambda facts: next(outputs)
     try:
@@ -87,12 +99,14 @@ def test_grade_change_invalidates_cached_prose():
         assert commentary.get_or_generate("alta", d, _card(grade="A-"), db_path=db) == "Now an A-."
     finally:
         commentary.generate = real
+        commentary.COMMENTARY_MODE = mode
         os.unlink(db)
 
 
 def test_generation_failure_yields_none_and_caches_nothing():
     db = _tmp_db()
     real = commentary.generate
+    mode = _force_ai_mode()
     commentary.generate = lambda facts: None
     try:
         d = date(2026, 2, 15)
@@ -102,6 +116,7 @@ def test_generation_failure_yields_none_and_caches_nothing():
         assert commentary.get_or_generate("alta", d, _card(), db_path=db) == "Filled in later."
     finally:
         commentary.generate = real
+        commentary.COMMENTARY_MODE = mode
         os.unlink(db)
 
 

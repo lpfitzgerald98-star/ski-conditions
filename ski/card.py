@@ -16,9 +16,9 @@ from datetime import date
 
 from config import (DEFAULT_PROFILE, MOUNTAINS, OVERALL_GRADE_THRESHOLDS,
                     SCORE_PROFILES)
-from ski import pipeline
+from ski import pipeline, stability
 from ski.grading import letter_grade
-from ski.score import apply_off_season_cap, overall_score
+from ski.score import apply_off_season_cap, apply_stale_cap, overall_score
 
 
 def _round(v, ndigits: int = 1):
@@ -66,7 +66,10 @@ def _weather_json(w) -> dict | None:
 
 
 def _overall_by_profile(subscores: dict, season_progress: float | None,
-                        cover: float = 1.0, in_season: bool | None = None) -> dict:
+                        cover: float = 1.0, in_season: bool | None = None,
+                        stale: bool = False, cover_known: bool = True,
+                        mountain_key: str | None = None, as_of: date | None = None,
+                        stable: bool = True, db_path: str | None = None) -> dict:
     """Overall score under every applicable profile, keyed by profile name.
 
     `dynamic` is only included when we know the season progress (i.e. the
@@ -74,14 +77,27 @@ def _overall_by_profile(subscores: dict, season_progress: float | None,
 
     An off-season mountain is capped (config.OFF_SEASON) and its letter recomputed
     from the capped value, so the number and the grade can't tell different
-    stories. The cover gate alone leaves room for an off-season "B".
+    stories. The cover gate alone leaves room for an off-season "B". A stale
+    station with no cover reading gets the same treatment (config.apply_stale_cap).
+
+    `stable` (default True) routes the final value through ski.stability, a
+    hysteresis band that keeps the letter from flapping between adjacent grades
+    on day-to-day noise near a boundary -- see that module's docstring. Callers
+    on the retro/historical path pass `stable=False`: a settled date shows the
+    letter its own numbers earned, not one anchored to a "yesterday" that in a
+    backfill run may not even be adjacent in real time.
     """
     profiles = (["dynamic"] if season_progress is not None else []) + list(SCORE_PROFILES)
     out = {}
     for prof in profiles:
         o = overall_score(subscores, prof, season_progress=season_progress, cover=cover)
         value = apply_off_season_cap(o.value, in_season)
-        grade = o.grade if value == o.value else letter_grade(value, OVERALL_GRADE_THRESHOLDS)
+        value = apply_stale_cap(value, stale, cover_known)
+        if stable and mountain_key is not None and as_of is not None:
+            grade = stability.stabilize(mountain_key, as_of, prof, value,
+                                        OVERALL_GRADE_THRESHOLDS, db_path=db_path)
+        else:
+            grade = o.grade if value == o.value else letter_grade(value, OVERALL_GRADE_THRESHOLDS)
         entry = {"score": _round(value), "grade": grade}
         if prof == "dynamic" and o.weights_used:
             entry["leaning"] = max(o.weights_used, key=o.weights_used.get)
@@ -108,7 +124,7 @@ def scorecard(
         subscores:  {season, in_season, forecast, conditions}  (0-100 or null)
         grades:     {season, in_season, base}   compact grade dicts
         forecast:   incoming-storm dict or null
-        outlook:    {provider, rain_72h_in, tmax_72h_f, thaw_index} or null
+        outlook:    {provider, rain_72h_in, tmax_72h_f, thaw_index, medium_range} or null
         conditions: {base_depth, base_grade, weather:{...}, weather_quality}
         sources:    {history, forecast, weather} -- who supplied what (null =
                     unavailable), so cross-mountain composition differences are
@@ -138,10 +154,26 @@ def scorecard(
         "cover_factor": _round(card["cover_factor"], 2),
         # True skiable / False off-season / None unknown (see score.is_in_season)
         "in_season": card["in_season"],
+        # Days since this station last reported anything usable, and whether that
+        # exceeds config.DATA_STALE_DAYS -- so a quiet station is visible on the
+        # card instead of being silently trusted (see pipeline.observation_age_days).
+        "data_age_days": card.get("data_age_days"),
+        "stale": card.get("stale", False),
         "cover_depth": _round(card["effective_depth"], 1),
+        # Absolute inputs to ski.comparable's global/regional score -- distinct
+        # from the self-relative percentiles in `grades` (see
+        # config.GLOBAL_SCORE_WEIGHTS). Null components are excluded from that
+        # mountain's blend, not zeroed.
+        "comparable_inputs": {
+            k: _round(v) for k, v in card.get("comparable_inputs", {}).items()
+        },
         "overall": _overall_by_profile(sub, card["season_progress"],
                                        cover=card["cover_factor"],
-                                       in_season=card["in_season"]),
+                                       in_season=card["in_season"],
+                                       stale=card.get("stale", False),
+                                       cover_known=card["effective_depth"] is not None,
+                                       mountain_key=key, as_of=as_of, stable=not retro,
+                                       db_path=db_path),
         "subscores": {k: _round(v) for k, v in sub.items()},
         "grades": {
             "season": _grade_json(card["season"]),
@@ -155,6 +187,21 @@ def scorecard(
             "tmax_72h_f": _round(outlook.tmax_72h_f, 0),
             "thaw_index": _round(card.get("thaw_index"), 2),
             "refreeze_index": _round(card.get("refreeze_index"), 2),
+            # ISO-8601 UTC -- when this forecast was fetched, so the UI can show
+            # "forecast as of Xh ago" instead of silently trusting a stale pull.
+            "forecast_as_of": outlook.fetched_at,
+            # 4-10 day tier: a RANGE, not a point estimate, plus how far out the
+            # source's data actually reached and how confident that makes it
+            # (see ski.sources.outlook.medium_range_band). Null when the source
+            # doesn't cover at least config.MEDIUM_RANGE['min_hours'] out -- an
+            # explicit gap rather than a fabricated narrow band.
+            "medium_range": None if outlook.medium_range is None else {
+                "low_in": outlook.medium_range.low_in,
+                "mid_in": outlook.medium_range.mid_in,
+                "high_in": outlook.medium_range.high_in,
+                "horizon_hours": outlook.medium_range.horizon_hours,
+                "confidence": outlook.medium_range.confidence,
+            },
         },
         "conditions": {
             "base_depth": _round(base.current_value, 0) if base else None,

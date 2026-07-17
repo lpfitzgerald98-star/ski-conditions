@@ -32,7 +32,7 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from config import DB_PATH
+from config import COMMENTARY_MODE, DB_PATH
 
 MODEL = "claude-opus-4-8"
 
@@ -132,6 +132,13 @@ def get_or_generate(key: str, as_of: date, card: dict,
     facts = facts_from_card(card)
     if facts is None:
         return None
+
+    # Default path: deterministic, free, no key required. Same off-season gate
+    # (facts is None above), same output field. A flip of config.COMMENTARY_MODE
+    # (or the COMMENTARY_MODE env var) swaps to the AI path below -- see config.
+    if COMMENTARY_MODE != "ai":
+        from ski import commentary_rules
+        return commentary_rules.render(facts, card)
 
     conn = connect(db_path)
     try:

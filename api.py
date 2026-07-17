@@ -17,6 +17,9 @@ Endpoints:
     GET /meta               profiles + the region hierarchy (live meta.json twin)
     GET /scores             one summary row per mountain, ranked within region
     GET /score/{mountain}   full scorecard JSON (?as_of=YYYY-MM-DD&network=false)
+    GET /forecast-accuracy/{mountain}
+                            logged forecast predictions vs what later verified
+                            (see ski.forecast_log / pipeline.forecast_accuracy)
     GET /live/stream        SSE: cached snapshot now, live per-mountain updates as
                             they land, then stream_complete
     GET /health             liveness
@@ -36,7 +39,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import DB_PATH, DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS
-from ski import cache
+from ski import cache, pipeline
 from ski.regions import region_tree
 from ski.service import (
     GRADE_COLORS,
@@ -153,17 +156,32 @@ def list_mountains() -> dict:
     return {"mountains": [mountain_summary(k) for k in sorted(MOUNTAINS)]}
 
 
+_SORT_KEYS = ("global_score", "regional_score", "score")
+
+
 @app.get("/scores")
 def all_scores(
     profile: str = Query(DEFAULT_PROFILE, description="scoring profile to rank by"),
     as_of: str | None = Query(None, description="score as of this date, YYYY-MM-DD"),
     network: bool = Query(False, description="fetch live forecasts (slow; off by default)"),
+    sort: str = Query("global_score", description=f"sort key, one of {_SORT_KEYS}"),
 ) -> dict:
     """Overall score + within-region rank + key grades for EVERY mountain.
 
     Kept for the CLI, the no-JS case, and `?network=true` batch refreshes. The map
     itself now boots off /live/stream instead, which paints instantly and fills in.
+
+    `sort` defaults to `global_score` (ski.comparable's cross-mountain absolute
+    score -- "where should I go ski right now") rather than `score` (the
+    absolute `overall`, partly self-relative -- "how good is this mountain('s
+    year)"). Pass `sort=regional_score` for a region-scoped leaderboard (each
+    mountain's rank against only its own region's peers) or `sort=score` for
+    the legacy absolute-overall order. Rows with a null sort value sort last,
+    not first -- an unranked mountain shouldn't top the board by looking like
+    a very negative score.
     """
+    if sort not in _SORT_KEYS:
+        raise HTTPException(status_code=400, detail=f"sort must be one of {_SORT_KEYS}")
     parsed = _parse_as_of(as_of)
     keys = sorted(MOUNTAINS)
     if network:
@@ -175,8 +193,9 @@ def all_scores(
         rows = rank_within_regions(rows)
     else:
         rows = score_roster(keys, parsed, profile, network)
+    rows = sorted(rows, key=lambda r: (r.get(sort) is None, -(r.get(sort) or 0)))
     return {"profile": profile, "as_of": parsed.isoformat(), "network": network,
-            "mountains": rows}
+            "sort": sort, "mountains": rows}
 
 
 @app.get("/score/{mountain}")
@@ -196,6 +215,25 @@ def score_one(
     parsed = _parse_as_of(as_of)
     return score_card(mountain, parsed, use_network=network,
                       cached_peers=cache.get_all(DB_PATH, parsed))
+
+
+@app.get("/forecast-accuracy/{mountain}")
+def forecast_accuracy(mountain: str) -> dict:
+    """Logged forecast predictions vs what the station later recorded, for every
+    horizon whose forecast window has fully elapsed (see ski.forecast_log,
+    pipeline.forecast_accuracy). Read-only -- this never triggers a fetch or a
+    log write, only reads what mountain_scorecard has already logged live.
+
+    Empty `rows` until forecasts have been logged AND their horizons have
+    elapsed: a freshly-deployed mountain needs a few days, and a Northern
+    Hemisphere mountain needs an in-season winter (Nov onward) before this has
+    anything to say. A currently in-season Southern Hemisphere mountain can
+    show results now.
+    """
+    if mountain not in MOUNTAINS:
+        raise HTTPException(status_code=404, detail=f"unknown mountain '{mountain}'")
+    df = pipeline.forecast_accuracy(mountain, db_path=DB_PATH)
+    return {"mountain": mountain, "rows": df.to_dict(orient="records")}
 
 
 # ---------------------------------------------------------------------------

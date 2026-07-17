@@ -216,6 +216,29 @@ def cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_forecast_report(args: argparse.Namespace) -> int:
+    """Print the forecast-accuracy backtest: predicted vs actual per horizon."""
+    df = pipeline.forecast_accuracy(args.mountain, db_path=args.db)
+    m = pipeline.get_mountain(args.mountain)
+    print(f"FORECAST ACCURACY -- {m['name']}\n")
+    if df.empty:
+        print("  no elapsed, logged predictions yet -- forecast_log fills in as the\n"
+              "  live scorer runs and horizons age past their window (see\n"
+              "  ski/forecast_log.py, pipeline.forecast_accuracy)")
+        return 0
+    print(f"  {'as of':<12} {'hrs':>4} {'predicted':>10} {'actual':>8} {'error':>8}  pct")
+    for r in df.sort_values(["as_of", "horizon_hours"]).itertuples(index=False):
+        pct = "n/a" if r.predicted_percentile is None else f"{r.predicted_percentile:.0f}th"
+        err = "n/a" if r.error_inches is None else f"{r.error_inches:+.1f}\""
+        print(f"  {r.as_of:<12} {r.horizon_hours:>4} {r.predicted_inches:>9.1f}\" "
+              f"{r.actual_inches:>7.1f}\" {err:>8}  {pct}")
+    errs = df["error_inches"].dropna()
+    if not errs.empty:
+        print(f"\n  mean error: {errs.mean():+.2f}\"   mean |error|: {errs.abs().mean():.2f}\"  "
+              f"(n={len(errs)})")
+    return 0
+
+
 def cmd_card(args: argparse.Namespace) -> int:
     """Emit the mountain scorecard as JSON (the frontend data contract)."""
     as_of = _parse_date(args.as_of) if args.as_of else date.today()
@@ -254,6 +277,10 @@ def build_parser() -> argparse.ArgumentParser:
                       help=f"highlight this profile (default: {DEFAULT_PROFILE})")
     p_sc.add_argument("--no-nws", action="store_true", help="skip NWS (forecast/weather) calls")
     p_sc.set_defaults(func=cmd_score)
+
+    p_fc = sub.add_parser("forecast-report", parents=[common],
+                          help="backtest logged forecasts vs what actually fell")
+    p_fc.set_defaults(func=cmd_forecast_report)
 
     p_card = sub.add_parser("card", parents=[common],
                             help="emit the JSON scorecard (frontend data contract)")

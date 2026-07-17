@@ -18,10 +18,13 @@ No SWE, so `swe_inches` is NaN.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 
-from ski.sources.outlook import CurrentWeather, Outlook, Recent
+from config import MEDIUM_RANGE
+from ski.sources.outlook import CurrentWeather, Outlook, Recent, medium_range_band
 from ski.sources import http
 
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
@@ -81,11 +84,19 @@ _FORECAST_PARAMS = {
 
 
 def fetch_forecast_outlook(lat: float, lon: float, timeout: int = 30,
-                           windows_hours=(24, 72), past_days: int = 3) -> Outlook:
-    """Provider-neutral Outlook (incoming snow, thaw signals, current weather, and
-    trailing actuals for the recent-refreeze crust signal) anywhere on Earth.
-    `past_days` pulls recent actuals in the same call. Imperial units."""
-    params = {"latitude": lat, "longitude": lon, "forecast_days": 4,
+                           windows_hours=(24, 48, 72), past_days: int = 3,
+                           forecast_days: int = 11) -> Outlook:
+    """Provider-neutral Outlook (incoming snow, thaw signals, current weather,
+    trailing actuals for the recent-refreeze crust signal, and the 4-10 day
+    medium-range band) anywhere on Earth. `past_days` pulls recent actuals in
+    the same call. Imperial units.
+
+    `forecast_days` defaults to 11 (Open-Meteo's max is 16) so the medium-range
+    band has a full MEDIUM_RANGE['horizon_hours'] (10 days) of hourly data to
+    sum -- the near-term 24/48/72h windows only need 3, but fetching once at
+    the wider horizon avoids a second call.
+    """
+    params = {"latitude": lat, "longitude": lon, "forecast_days": forecast_days,
               "past_days": past_days, **_FORECAST_PARAMS}
     resp = http.get(FORECAST, params=params,
                         headers={"User-Agent": USER_AGENT}, timeout=timeout)
@@ -135,7 +146,7 @@ def parse_recent(payload: dict, now: pd.Timestamp | None = None) -> Recent:
 
 
 def parse_forecast_outlook(payload: dict, now: pd.Timestamp | None = None,
-                           windows_hours=(24, 72)) -> Outlook:
+                           windows_hours=(24, 48, 72)) -> Outlook:
     """Parse an Open-Meteo forecast response (imperial units, timezone=UTC).
 
     Forward windows feed the thaw/incoming-snow signals; if the payload carried
@@ -147,8 +158,14 @@ def parse_forecast_outlook(payload: dict, now: pd.Timestamp | None = None,
 
     snow_in = {wh: float(fwd("snowfall", wh).sum(skipna=True)) for wh in windows_hours}
     rain_72 = float(fwd("rain", 72).sum(skipna=True))
-    tmax_series = fwd("temperature_2m", 72)
-    tmax_72 = float(tmax_series.max()) if tmax_series.notna().any() else None
+
+    # Per-horizon max temp (score.phase_adjusted_snow_in reclassifies forecast
+    # snow using each horizon's own warmest reading, not just the 72h one).
+    tmax_by_window = {}
+    for wh in windows_hours:
+        s = fwd("temperature_2m", wh)
+        tmax_by_window[wh] = float(s.max()) if s.notna().any() else None
+    tmax_72 = tmax_by_window.get(72)
 
     cur = payload.get("current", {}) or {}
     current = CurrentWeather(
@@ -157,6 +174,25 @@ def parse_forecast_outlook(payload: dict, now: pd.Timestamp | None = None,
         sky_cover_pct=cur.get("cloud_cover"),
     )
     recent = parse_recent(payload, now=now) if (times < now).any() else None
+
+    # Medium-range (4-10 day) band: whatever forward coverage this payload
+    # actually has, capped at MEDIUM_RANGE['horizon_hours']. None (not a
+    # fabricated 0"-wide band) if the payload doesn't even reach min_hours out.
+    forward = times[times >= now]
+    coverage_hours = int((forward.max() - now).total_seconds() // 3600) if len(forward) else 0
+    min_h, full_h = MEDIUM_RANGE["min_hours"], MEDIUM_RANGE["horizon_hours"]
+    window_end = min(coverage_hours, full_h)
+    mr = None
+    if window_end >= min_h:
+        mr_total = float(fwd("snowfall", window_end).sum(skipna=True)) - \
+            float(fwd("snowfall", min_h).sum(skipna=True))
+        mr = medium_range_band(
+            max(0.0, mr_total), window_end, min_h, full_h,
+            MEDIUM_RANGE["band_width_at_min"], MEDIUM_RANGE["band_width_at_full"],
+        )
+
     return Outlook(provider="openmeteo", snow_in=snow_in,
-                   rain_72h_in=rain_72, tmax_72h_f=tmax_72, current=current,
-                   recent=recent)
+                   rain_72h_in=rain_72, tmax_72h_f=tmax_72,
+                   tmax_by_window=tmax_by_window, current=current,
+                   recent=recent, medium_range=mr,
+                   fetched_at=datetime.now(timezone.utc).isoformat())

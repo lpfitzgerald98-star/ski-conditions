@@ -1689,6 +1689,102 @@ STALE_UNKNOWN_COVER_CAP = 20.0   # cap the overall (~C) when stale AND cover unk
 # store yet; left opt-in rather than guessed (this codebase does not fake signal).
 DEFAULT_BASE_OFFSET_IN = 0.0
 
+# ---------------------------------------------------------------------------
+# Forecast horizon blend -- Part 2: sharper on INCOMING conditions
+# ---------------------------------------------------------------------------
+# The forecast sub-score used to rank a single window (whichever of 24h/72h had
+# the bigger storm) against storm history. Forecast skill degrades fast past
+# ~3 days, so the incoming-snow percentile that feeds score.forecast_score is now
+# a WEIGHTED BLEND across three horizons, near-term weighted heaviest (see
+# pipeline.weighted_incoming_percentile). Weights needn't sum to 1 -- they're
+# renormalized over whichever horizons actually rank against something.
+#
+# This stays a single number feeding the existing overall + region-rank design
+# (no separate forecast grade on the card) -- sharpening what forecast already
+# contributes, not restructuring how it's shown.
+FORECAST_HORIZONS_HOURS = (24, 48, 72)
+FORECAST_HORIZON_WEIGHTS = {24: 0.50, 48: 0.30, 72: 0.20}
+
+# ---------------------------------------------------------------------------
+# Medium-range tier -- 4-10 days out, a RANGE not a point estimate
+# ---------------------------------------------------------------------------
+# The near-term blend above (24/48/72h) is skillful and reported as a single
+# number. Medium-range skill is real but coarse, so it's reported as a
+# low/mid/high band (see ski.sources.outlook.medium_range_band) and folded into
+# the forecast sub-score at a small, confidence-tapered weight rather than
+# treated as a fourth equal horizon.
+#
+#   horizon_hours       -- target outer edge, 10 days. A source that can't
+#                          reach it (NWS gridpoints run ~7 days) just reports a
+#                          narrower, more-confident band instead of padding out.
+#   min_hours           -- below this much forward coverage there's no medium-
+#                          range tier at all (None), not a fabricated one.
+#   band_width_at_min/full -- how wide the +/- band is at the two ends of the
+#                          min_hours..horizon_hours span, interpolated by how
+#                          far the actual window reaches. Widens with distance:
+#                          a barely-4-day window is this tier's best case, a
+#                          full 10-day window its worst.
+#   weight              -- this tier's BASE share of the blended forecast
+#                          percentile (near-term implicitly weights 1.0), before
+#                          the same distance fraction tapers it down (see
+#                          pipeline.combine_forecast_percentile). A full 10-day
+#                          reach carries only 40% of even this small weight.
+MEDIUM_RANGE = {
+    "horizon_hours": 240,
+    "min_hours": 96,
+    "band_width_at_min": 0.20,
+    "band_width_at_full": 0.65,
+    "weight": 0.12,
+}
+
+# ---------------------------------------------------------------------------
+# Global / Regional Comparable Score -- cross-mountain, not self-relative
+# ---------------------------------------------------------------------------
+# `overall` (score.overall_score) answers "is this a good year/day FOR THIS
+# MOUNTAIN": two of its four sub-scores (season, base) are percentiles against
+# the mountain's OWN history, so a resort having its best season ever can
+# outrank a resort having an ordinary one -- exactly backwards for "where
+# should I go ski right now". ski.comparable answers that question instead,
+# from FOUR ABSOLUTE (inches) inputs percentile-ranked across a POPULATION OF
+# MOUNTAINS -- the whole roster for `global_score`, one region for
+# `regional_score` -- recomputed fresh on every run, never against history:
+#   base     -- current settled cover depth (pipeline.settled_cover_depth):
+#               already the one place every data source's depth/SWE/snowfall
+#               reading gets unified into a single "inches on the ground" figure.
+#   fresh    -- trailing COMPARABLE_FRESH_WINDOW_DAYS of new snow -- a SHORTER,
+#               more "right now" window than the 7-day figure the `conditions`
+#               sub-score uses, deliberately: this score asks "did it just
+#               snow", not "how was the week".
+#   season   -- season-to-date total, unit-converted to snow-equivalent inches
+#               when the metric is swe_gain (see pipeline.season_snow_equivalent_in)
+#               so a water-inches station and a snow-inches station pool together.
+#   forecast -- next-72h phase-adjusted expected snowfall (absolute inches, not
+#               the self-relative forecast_sub percentile) -- "is more coming".
+#
+# Known limitation, NOT solved here: absolute inches aren't perfectly
+# comparable across climates -- a dense maritime inch and a dry continental
+# inch differ in water content (future snow-QUALITY work), and a valley-sited
+# station's inches can undercount a resort's real base (config.
+# DEFAULT_BASE_OFFSET_IN, the elevation-offset work). Percentile ranking
+# cannot fix either; both stay open TODOs for a future pass.
+GLOBAL_SCORE_WEIGHTS = {"base": 0.35, "fresh": 0.30, "season": 0.20, "forecast": 0.15}
+
+# Trailing window (days) for the comparable score's "fresh" input -- shorter
+# than FRESH_WINDOW_DAYS (7d) on purpose (see GLOBAL_SCORE_WEIGHTS docstring).
+COMPARABLE_FRESH_WINDOW_DAYS = 3
+
+# Temperature-based precip-phase correction. A provider's forecast snowfall is
+# already phase-classified at ITS OWN grid point, which can sit below a resort's
+# actual elevation -- so this is a second, conservative check using the forecast
+# temperature itself: forecast precip at 38F is rain, not powder, full stop,
+# regardless of what the provider's own snow/rain split said.
+# Full credit as snow at/below `snow_full_f`; zero credit (all rain) at/above
+# `rain_full_f`; linear between. Missing temp -> full credit (unknown != warm).
+PRECIP_PHASE = {
+    "snow_full_f": 32,
+    "rain_full_f": 38,
+}
+
 # On-disk SQLite location. Defaults to this project directory so the CLI and API
 # work regardless of the current working directory (e.g. uvicorn --app-dir).
 #
@@ -1698,3 +1794,36 @@ DEFAULT_BASE_OFFSET_IN = 0.0
 import os as _os
 DB_PATH = _os.environ.get("SKI_DB_PATH") or _os.path.join(
     _os.path.dirname(_os.path.abspath(__file__)), "data", "ski.db")
+
+# ---------------------------------------------------------------------------
+# Commentary engine -- which generator writes the one-line grade explanation
+# ---------------------------------------------------------------------------
+# "rules" (default): ski/commentary_rules.py -- pure deterministic templates over
+#   the scorecard's own numbers. No API call, no ANTHROPIC_API_KEY, no external
+#   dependency. This is what runs in production today.
+# "ai": ski/commentary.py -- one claude-opus-4-8 call per (mountain, day), cached
+#   in SQLite. Fully built and ready, but silently yields null without an
+#   ANTHROPIC_API_KEY configured in the deploy environment.
+#
+# Both paths go through commentary.get_or_generate and write the SAME card field
+# (card["commentary"]), so flipping this is the only change needed to switch. The
+# COMMENTARY_MODE env var overrides this default (e.g. set it in the GitHub Action
+# once the key exists) without a code edit.
+COMMENTARY_MODE = _os.environ.get("COMMENTARY_MODE", "rules")
+
+# ---------------------------------------------------------------------------
+# Grade stability -- hysteresis so the OVERALL letter doesn't flap on noise
+# ---------------------------------------------------------------------------
+# `letter_grade` is a stateless threshold lookup with no memory of yesterday's
+# grade, so a mountain sitting on a boundary (39.4 -> B, 38.6 -> B-) can cross it
+# back and forth day to day on measurement noise alone. ski/stability.py adds a
+# hysteresis band: once a grade is set, the raw value must clear the boundary by
+# this many points -- in the direction of the move -- before the letter actually
+# flips to an ADJACENT grade. A jump big enough to skip a grade entirely (a real
+# storm) is real signal and is never held back.
+#
+# Scope: only the OVERALL letter, only for live (non-retro) scoring -- see
+# ski/stability.py's docstring for what's deliberately out of scope and why.
+GRADE_HYSTERESIS_MARGIN = 2.5          # score points past the boundary to flip
+GRADE_HYSTERESIS_LOOKBACK_DAYS = 5     # how stale "yesterday's" grade may be and
+                                        # still anchor today's (else raw stands)

@@ -235,6 +235,125 @@ def test_nws_outlook_rain_split_and_tmax():
     assert o.current.sky_cover_pct == 40
 
 
+# --- Medium-range (4-10 day) band -------------------------------------------
+def test_medium_range_band_none_below_min_hours():
+    from ski.sources.outlook import medium_range_band
+    assert medium_range_band(5.0, 80, 96, 240, 0.20, 0.65) is None
+
+
+def test_medium_range_band_widens_and_tapers_weight_with_distance():
+    from ski.sources.outlook import medium_range_band
+
+    near = medium_range_band(10.0, 96, 96, 240, 0.20, 0.65)     # barely clears the floor
+    far = medium_range_band(10.0, 240, 96, 240, 0.20, 0.65)      # reaches the full 10 days
+
+    assert near.confidence == "low"
+    assert far.confidence == "very_low"
+    # farther out -> wider band ...
+    assert (far.high_in - far.low_in) > (near.high_in - near.low_in)
+    # ... and a smaller share of the blended forecast score
+    assert far.weight_factor < near.weight_factor
+    assert 0.0 <= far.weight_factor < near.weight_factor <= 1.0
+
+
+def test_medium_range_band_caps_at_full_hours():
+    from ski.sources.outlook import medium_range_band
+    band = medium_range_band(10.0, 999, 96, 240, 0.20, 0.65)
+    assert band.horizon_hours == 240   # never reports farther than the target reach
+
+
+def test_openmeteo_medium_range_band_present_with_full_coverage():
+    import pandas as pd
+    from ski.sources.openmeteo import parse_forecast_outlook
+
+    now = pd.Timestamp("2026-01-10T00:00")
+    hours = pd.date_range(now, periods=300, freq="h")   # ~12.5 days forward
+    payload = {
+        "hourly": {
+            "time": [h.isoformat() for h in hours],
+            "snowfall": [0.05] * len(hours),
+            "rain": [0.0] * len(hours),
+            "temperature_2m": [20.0] * len(hours),
+        },
+        "current": {"temperature_2m": 20.0, "wind_speed_10m": 5.0, "cloud_cover": 50},
+    }
+    o = parse_forecast_outlook(payload, now=now)
+    assert o.medium_range is not None
+    assert o.medium_range.horizon_hours == 240              # capped at the 10-day target
+    assert round(o.medium_range.mid_in, 1) == round(0.05 * (240 - 96), 1)
+    assert o.medium_range.confidence == "very_low"
+    assert o.medium_range.low_in < o.medium_range.mid_in < o.medium_range.high_in
+
+
+def test_openmeteo_medium_range_none_with_short_coverage():
+    import pandas as pd
+    from ski.sources.openmeteo import parse_forecast_outlook
+
+    now = pd.Timestamp("2026-01-10T00:00")
+    hours = pd.date_range(now, periods=80, freq="h")   # well under the 96h floor
+    payload = {
+        "hourly": {
+            "time": [h.isoformat() for h in hours],
+            "snowfall": [0.05] * len(hours),
+            "rain": [0.0] * len(hours),
+            "temperature_2m": [20.0] * len(hours),
+        },
+        "current": {"temperature_2m": 20.0, "wind_speed_10m": 5.0, "cloud_cover": 50},
+    }
+    o = parse_forecast_outlook(payload, now=now)
+    assert o.medium_range is None
+
+
+def test_nws_medium_range_band_from_partial_week_of_blocks():
+    import pandas as pd
+    from ski.sources.nws import outlook_from_properties
+
+    now = pd.Timestamp("2026-01-10T00:00", tz="UTC")
+    # 7 daily blocks of 0.5" each (12.7mm) -- NWS's real-world ~week-long reach,
+    # short of the 10-day target.
+    snow_values = [
+        {"validTime": f"{(now + pd.Timedelta(days=d)).isoformat()}/P1D", "value": 12.7}
+        for d in range(7)
+    ]
+    props = {
+        "snowfallAmount": {"uom": "wmoUnit:mm", "values": snow_values},
+        "quantitativePrecipitation": {"uom": "wmoUnit:mm", "values": snow_values},
+        "temperature": {"values": [
+            {"validTime": "2026-01-10T00:00:00+00:00/P7D", "value": 0.0},
+        ]},
+        "windSpeed": {"values": [
+            {"validTime": "2026-01-10T00:00:00+00:00/P7D", "value": 10.0},
+        ]},
+        "skyCover": {"values": [
+            {"validTime": "2026-01-10T00:00:00+00:00/P7D", "value": 20},
+        ]},
+    }
+    o = outlook_from_properties(props, now=now)
+    assert o.medium_range is not None
+    assert o.medium_range.horizon_hours == 168      # the REAL reach, not padded to 240
+    assert o.medium_range.confidence == "very_low"  # 168h is the midpoint of the 96-240 span
+    assert round(o.medium_range.mid_in, 2) == 1.5    # (7-4) days x 0.5"
+    assert o.medium_range.low_in < o.medium_range.mid_in < o.medium_range.high_in
+
+
+def test_nws_medium_range_none_when_forecast_too_short():
+    import pandas as pd
+    from ski.sources.nws import outlook_from_properties
+
+    now = pd.Timestamp("2026-01-10T00:00", tz="UTC")
+    props = {
+        "snowfallAmount": {"uom": "wmoUnit:mm", "values": [
+            {"validTime": "2026-01-10T00:00:00+00:00/PT48H", "value": 25.4},
+        ]},
+        "quantitativePrecipitation": {"uom": "wmoUnit:mm", "values": []},
+        "temperature": {"values": []},
+        "windSpeed": {"values": []},
+        "skyCover": {"values": []},
+    }
+    o = outlook_from_properties(props, now=now)
+    assert o.medium_range is None
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

@@ -8,10 +8,14 @@ from __future__ import annotations
 
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
-from config import (COVER_GATE, DB_PATH, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
-                    MOUNTAINS, SEASON_METRIC, STORM_THRESHOLDS)
+from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, DATA_STALE_DAYS,
+                    DB_PATH, DEFAULT_BASE_OFFSET_IN, FORECAST_HORIZON_WEIGHTS,
+                    FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
+                    MEDIUM_RANGE, MOUNTAINS, SEASON_METRIC, STORM_THRESHOLDS)
+from ski import forecast_log
 from ski import score as score_mod
 from ski.db import read_observations, upsert_observations
 from ski.watercalendar import month_day_to_dowy, season_progress, water_year
@@ -26,6 +30,8 @@ from ski.grading import (
     grade_rolling_window,
     grade_season_to_date,
     grade_storm,
+    historical_window_distribution,
+    percentile_rank,
     season_adjusted_floor,
 )
 from ski.sources import acis, bcsws, cdec, eccc, nws, openmeteo, snotel
@@ -244,6 +250,9 @@ def mountain_scorecard(
         sp = season_progress(as_of or date.today(), window["start"], window["end"])
 
     fresh = fresh_snow_total(obs, as_of=as_of)
+    # The comparable score's "fresh" input: a shorter, more "right now" window
+    # than the 7-day figure above (see config.GLOBAL_SCORE_WEIGHTS docstring).
+    fresh_72h = fresh_snow_total(obs, as_of=as_of, window_days=COMPARABLE_FRESH_WINDOW_DAYS)
 
     outlook = None
     if use_network:
@@ -253,6 +262,7 @@ def mountain_scorecard(
             outlook = None
 
     forecast_sub = None
+    forecast_72h_in = None
     incoming = None
     weather = None
     weather_q = None
@@ -266,18 +276,50 @@ def mountain_scorecard(
             refreeze = score_mod.refreeze_index(
                 rec.rain_72h_in, rec.tmax_72h_f, rec.tmin_24h_f, fresh)
         try:
+            # The "incoming" badge stays exactly as before -- the single biggest
+            # of the 24/72h storm windows, unrelated to the horizon blend below.
             inc = forecast_incoming_storms(key, db_path, outlook=outlook)
             incoming = max(inc, key=lambda s: s.total_inches) if inc else None
         except Exception:  # noqa: BLE001
             pass
-        has = incoming is not None and \
-            incoming.total_inches >= STORM_THRESHOLDS["grade_baseline_min_inches"]
-        forecast_sub = score_mod.forecast_score(
-            incoming.percentile if incoming else None, has, thaw=thaw)
+        # The forecast SUB-SCORE, in contrast, blends 24/48/72h (near-term
+        # weighted heaviest) with a temperature-based precip-phase correction --
+        # see weighted_incoming_percentile / config.FORECAST_HORIZON_WEIGHTS.
+        weighted_pct, has, per_horizon = weighted_incoming_percentile(
+            key, outlook, db_path)
+        # The comparable score's "forecast" input: the absolute (not
+        # percentile) 72h phase-adjusted total -- "how much more is coming",
+        # in the same inches unit as the other three comparable inputs.
+        forecast_72h_in = next(
+            (ph["predicted_inches"] for ph in per_horizon if ph["horizon_hours"] == 72), None)
+        # The 4-10 day medium-range band folds in on top, at a small
+        # confidence-tapered weight (see combine_forecast_percentile /
+        # config.MEDIUM_RANGE) -- it can nudge the blend but never dominate it.
+        mr_pct = medium_range_percentile(key, outlook.medium_range, db_path)
+        combined_pct = combine_forecast_percentile(
+            weighted_pct, mr_pct,
+            outlook.medium_range.weight_factor if outlook.medium_range else 0.0)
+        mr_has_snow = outlook.medium_range is not None and \
+            outlook.medium_range.mid_in >= STORM_THRESHOLDS["grade_baseline_min_inches"]
+        forecast_sub = score_mod.forecast_score(combined_pct, has or mr_has_snow, thaw=thaw)
         weather = outlook.current
         if weather is not None:
             weather_q = score_mod.weather_quality(
                 weather.temperature_f, weather.wind_mph, weather.sky_cover_pct)
+        # Best-effort log of what was predicted, for the forecast-accuracy
+        # backtest (forecast_accuracy). A logging failure must never sink a
+        # scorecard render.
+        try:
+            for ph in per_horizon:
+                forecast_log.record(db_path, key, as_of or date.today(),
+                                    ph["horizon_hours"], ph["predicted_inches"],
+                                    ph["predicted_percentile"], ph["tmax_f"])
+            if outlook.medium_range is not None:
+                forecast_log.record(db_path, key, as_of or date.today(),
+                                    outlook.medium_range.horizon_hours,
+                                    outlook.medium_range.mid_in, mr_pct, None)
+        except Exception:  # noqa: BLE001
+            pass
     elif retro:
         # Historical date: the "incoming" storm is what actually fell next, read
         # from the DB. Snow only -- no thaw/weather without stored temperature.
@@ -291,8 +333,11 @@ def mountain_scorecard(
     conditions_sub = score_mod.conditions_score(
         base.percentile, fresh_7d_inches=fresh, weather_q=weather_q)
     conditions_sub = score_mod.apply_refreeze(conditions_sub, refreeze)
-    eff_depth = settled_cover_depth(obs, as_of or date.today())
+    offset = m.get("base_offset_in", DEFAULT_BASE_OFFSET_IN)
+    eff_depth = settled_cover_depth(obs, as_of or date.today(), base_offset_in=offset)
     cover = score_mod.cover_factor(eff_depth)
+    age = observation_age_days(obs, as_of or date.today())
+    stale = age is not None and age >= DATA_STALE_DAYS
     # True / False / None(unknown). Gates BOTH the overall score and the
     # within-region rank, so the two can never disagree about whether the mountain
     # is skiable. Note "in_season" in `subscores` is an unrelated legacy key -- it
@@ -308,9 +353,18 @@ def mountain_scorecard(
         "season": season, "month": month, "base": base,
         "incoming": incoming, "weather": weather, "weather_quality": weather_q,
         "fresh_7d": fresh, "cover_factor": cover, "effective_depth": eff_depth,
-        "in_season": in_season,
+        "in_season": in_season, "data_age_days": age, "stale": stale,
         "outlook": outlook, "thaw_index": thaw if outlook is not None else None,
         "refreeze_index": refreeze if outlook is not None else None,
+        # Absolute, cross-mountain-comparable inputs for ski.comparable's
+        # global/regional score -- distinct from the self-relative percentiles
+        # above (see config.GLOBAL_SCORE_WEIGHTS).
+        "comparable_inputs": {
+            "base_in": eff_depth,
+            "fresh_in": fresh_72h,
+            "season_in": season_snow_equivalent_in(season),
+            "forecast_in": forecast_72h_in,
+        },
         "subscores": subscores, "season_progress": sp,
     }
 
@@ -377,7 +431,26 @@ def _carried_forward_cover(obs: pd.DataFrame, as_of: date) -> float | None:
     return depth
 
 
-def settled_cover_depth(obs: pd.DataFrame, as_of: date) -> float | None:
+def observation_age_days(obs: pd.DataFrame, as_of: date) -> int | None:
+    """Days between `as_of` and the most recent observation carrying ANY usable
+    field (depth / SWE / new snow). None when the station has never reported.
+
+    This is the staleness signal `mountain_scorecard` surfaces (`data_age_days`)
+    and `apply_stale_cap` gates on -- a station that has gone entirely silent, as
+    opposed to one reporting a known bare reading (which the cover/in-season gates
+    already handle via carry-forward)."""
+    if obs is None or obs.empty:
+        return None
+    end = pd.Timestamp(as_of)
+    got = obs[obs["date"] <= end].dropna(
+        subset=["snow_depth_inches", "swe_inches", "new_snow_24hr"], how="all")
+    if got.empty:
+        return None
+    return int((end - got["date"].max()).days)
+
+
+def settled_cover_depth(obs: pd.DataFrame, as_of: date,
+                        base_offset_in: float = 0.0) -> float | None:
     """Best available estimate of the settled base depth ON THE GROUND NOW.
 
     Every branch is a STOCK. The previous version fell back to the season-to-date
@@ -397,22 +470,30 @@ def settled_cover_depth(obs: pd.DataFrame, as_of: date) -> float | None:
     which is strictly more permissive than the bug we're fixing.
 
     None when the station reports nothing usable -- an unknown cover, not a zero.
+
+    `base_offset_in` (a mountain's valley-station under-read correction, see
+    config.DEFAULT_BASE_OFFSET_IN) lifts a POSITIVE reading only. A station reading
+    0" is genuinely bare and stays bare, so the offset can never manufacture summer
+    cover; the carried-forward BARE branch is likewise never lifted.
     """
     if obs is None or obs.empty:
         return None
     recency = IN_SEASON_GATE["recency_days"]
 
+    def lift(v: float | None) -> float | None:
+        return v + base_offset_in if (v is not None and v > 0) else v
+
     depth = _latest_within(obs, as_of, "snow_depth_inches", recency)
     if depth is not None:
-        return depth
+        return lift(depth)
 
     swe = _latest_within(obs, as_of, "swe_inches", recency)
     if swe is not None:
-        return swe * COVER_GATE["swe_to_depth_ratio"]
+        return lift(swe * COVER_GATE["swe_to_depth_ratio"])
 
     recent_snowfall = fresh_snow_total(obs, as_of, window_days=30)
     if recent_snowfall is not None:
-        return recent_snowfall * COVER_GATE["snowfall_settle_ratio"]
+        return lift(recent_snowfall * COVER_GATE["snowfall_settle_ratio"])
 
     return _carried_forward_cover(obs, as_of)
 
@@ -433,6 +514,113 @@ def fresh_snow_total(obs: pd.DataFrame, as_of: date | None = None,
     if win.notna().sum() == 0:
         return None
     return float(win.sum(skipna=True))
+
+
+def season_snow_equivalent_in(season: SeasonGrade) -> float | None:
+    """Season-to-date total in a common SNOW-inches unit, for ski.comparable.
+
+    `grade_season_to_date` cumulates whichever metric a mountain's source
+    provides: `swe_gain` (water-inches, the SWE networks) or `new_snow`
+    (already snow-inches, the ACIS/ECCC/Open-Meteo depth-change networks). A
+    global comparable pool can't mix the two, so water-inches are converted
+    via the same nominal density ratio COVER_GATE already uses to turn a SWE
+    reading into a settled-depth one. Coarse (real snow density varies by
+    climate -- see config.GLOBAL_SCORE_WEIGHTS's known-limitation note) but
+    internally consistent, and better than silently comparing water to snow.
+    """
+    if season is None or season.current_value is None:
+        return None
+    if season.metric == "swe_gain":
+        return season.current_value * COVER_GATE["swe_to_depth_ratio"]
+    return season.current_value
+
+
+def weighted_incoming_percentile(
+    key: str, outlook, db_path: str = DB_PATH,
+    horizons=FORECAST_HORIZONS_HOURS, weights: dict = FORECAST_HORIZON_WEIGHTS,
+) -> tuple[float | None, bool, list[dict]]:
+    """Blend the incoming-snow percentile across forecast horizons, near-term
+    weighted heaviest (config.FORECAST_HORIZON_WEIGHTS -- forecast skill degrades
+    fast past ~3 days). Each horizon's forecast total is first derated for
+    temperature (score.phase_adjusted_snow_in): forecast precip at 38F is rain,
+    not powder, and must not count toward an incoming storm.
+
+    Percentile is ranked against the same STORM baseline (>= grade_baseline_
+    min_inches historical windows) the measured storm letter grade uses -- ranking
+    against every window including dry days saturates near 100 for any real storm
+    (see STORM_THRESHOLDS's docstring), which would make the boost meaningless.
+
+    Returns (weighted_percentile | None, has_incoming_snow, per_horizon) where
+    per_horizon is one dict per horizon (for forecast_log / testing): percentile
+    is None only when no horizon has both a phase-adjusted total and a historical
+    baseline to rank it against (e.g. a brand-new station).
+    """
+    m = get_mountain(key)
+    obs = read_observations(db_path, mountain_station(m))
+    baseline = STORM_THRESHOLDS["grade_baseline_min_inches"]
+    acc = total_w = 0.0
+    has_snow = False
+    per_horizon = []
+    for wh in horizons:
+        raw = outlook.snow_in.get(wh, 0.0)
+        tmax = (outlook.tmax_by_window or {}).get(wh)
+        adj = score_mod.phase_adjusted_snow_in(raw, tmax)
+        if adj >= baseline:
+            has_snow = True
+        window_days = max(1, wh // 24)
+        dist = historical_window_distribution(obs, window_days, baseline) \
+            if not obs.empty else np.array([])
+        pct = percentile_rank(adj, dist) if dist.size else None
+        w = weights.get(wh, 0.0)
+        if pct is not None and w > 0:
+            acc += w * pct
+            total_w += w
+        per_horizon.append({"horizon_hours": wh, "predicted_inches": adj,
+                            "predicted_percentile": pct, "tmax_f": tmax})
+    blended = acc / total_w if total_w > 0 else None
+    return blended, has_snow, per_horizon
+
+
+def medium_range_percentile(key: str, mr, db_path: str = DB_PATH) -> float | None:
+    """Percentile-rank a medium-range band's midpoint against this mountain's
+    own history of that same window length -- the same STORM baseline the
+    near-term horizons and the measured storm letter grade all use, so a
+    medium-range read sits on the identical scale.
+
+    `mr` is an outlook.MediumRangeBand or None. Returns None when there's no
+    band, or no history to rank it against (a brand-new station)."""
+    if mr is None:
+        return None
+    m = get_mountain(key)
+    obs = read_observations(db_path, mountain_station(m))
+    if obs.empty:
+        return None
+    window_days = max(1, mr.horizon_hours // 24)
+    baseline = STORM_THRESHOLDS["grade_baseline_min_inches"]
+    dist = historical_window_distribution(obs, window_days, baseline)
+    return percentile_rank(mr.mid_in, dist) if dist.size else None
+
+
+def combine_forecast_percentile(
+    near_term_pct: float | None, mr_pct: float | None, mr_weight_factor: float,
+    base_weight: float = MEDIUM_RANGE["weight"],
+) -> float | None:
+    """Fold the medium-range (4-10d) percentile into the near-term 24/48/72h
+    blend at a small, confidence-tapered weight (config.MEDIUM_RANGE['weight']
+    scaled by `mr_weight_factor`, which shrinks as the medium-range window
+    reaches farther out -- see sources.outlook.medium_range_band). The
+    near-term blend implicitly carries a weight of 1.0, so this tier can never
+    outweigh it.
+
+    None medium-range percentile leaves the near-term blend untouched (not
+    dragged toward a fake neutral). A medium-range-only read (no near-term
+    signal at all) falls back to it alone rather than returning None."""
+    if mr_pct is None:
+        return near_term_pct
+    w = base_weight * max(0.0, min(1.0, mr_weight_factor))
+    if near_term_pct is None:
+        return mr_pct
+    return (near_term_pct + mr_pct * w) / (1.0 + w)
 
 
 def forecast_incoming_storms(
@@ -495,3 +683,45 @@ def retro_incoming_storms(
         floor = mountain_alert_floor(key, wh, season_pct)
         out.append(grade_storm(total, obs, wh, end.date(), alert_floor=floor))
     return out
+
+
+def forecast_accuracy(key: str, db_path: str = DB_PATH,
+                      as_of: date | None = None) -> pd.DataFrame:
+    """Backtest report: for every LOGGED forecast (forecast_log.record, written
+    once per mountain/day/horizon by mountain_scorecard) whose horizon has fully
+    elapsed, the predicted snow vs what the station actually recorded in that
+    window. This is the validation loop config.FORECAST_HORIZON_WEIGHTS needs to
+    be checked against over time.
+
+    Empty until forecasts have been logged AND their horizons have elapsed -- a
+    freshly-deployed station needs days to accumulate rows. Northern Hemisphere
+    mountains need an in-season winter (Nov onward) before this has anything to
+    say; a currently in-season Southern Hemisphere mountain can validate now.
+    """
+    cols = ["as_of", "horizon_hours", "predicted_inches", "actual_inches",
+           "error_inches", "predicted_percentile"]
+    m = get_mountain(key)
+    obs = read_observations(db_path, mountain_station(m))
+    log = forecast_log.read_log(db_path, mountain_key=key)
+    if log.empty or obs.empty:
+        return pd.DataFrame(columns=cols)
+
+    today = as_of or date.today()
+    rows = []
+    for r in log.itertuples(index=False):
+        made_for = pd.Timestamp(r.as_of)
+        end = made_for + pd.Timedelta(hours=r.horizon_hours)
+        if end.date() > today:
+            continue  # horizon hasn't elapsed yet -- nothing to compare against
+        fwd = obs[(obs["date"] > made_for) & (obs["date"] <= end)]["new_snow_24hr"]
+        actual = float(fwd.sum(skipna=True)) if fwd.notna().any() else 0.0
+        rows.append({
+            "as_of": made_for.date().isoformat(),
+            "horizon_hours": r.horizon_hours,
+            "predicted_inches": r.predicted_inches,
+            "actual_inches": actual,
+            "error_inches": None if r.predicted_inches is None
+                           else round(actual - r.predicted_inches, 2),
+            "predicted_percentile": r.predicted_percentile,
+        })
+    return pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)

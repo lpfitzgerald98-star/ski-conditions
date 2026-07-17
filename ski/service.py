@@ -13,7 +13,10 @@ knowing. So instead of picking a winner, this module computes both, here, once:
 
     overall  -- the absolute 0-100 value from score.overall_score(), lettered on
                 OVERALL_GRADE_THRESHOLDS (calibrated on the real distribution of
-                power-mean-times-cover-gate values).
+                power-mean-times-cover-gate values). Two of its four sub-scores
+                (season, base) are percentiles against the mountain's OWN
+                history, so this answers "how good is this mountain('s year)",
+                not "where should I go ski right now".
     region   -- that same overall value's percentile rank against the other
                 mountains in its region, lettered on GRADE_THRESHOLDS (the
                 percentile curve every other percentile in this codebase uses).
@@ -21,6 +24,17 @@ knowing. So instead of picking a winner, this module computes both, here, once:
 Two curves on purpose: each number is graded on the curve it was calibrated for.
 An absolute 50 is a B+; a 50th-percentile rank is a B-. Grading a rank on the
 absolute curve would quietly inflate every mid-pack mountain.
+
+`rank_within_regions` also attaches `global_score` / `regional_score` (see
+ski.comparable), the CROSS-MOUNTAIN-COMPARABLE answer to "where should I go ski
+right now": built from four ABSOLUTE inputs (current base, trailing fresh,
+season-to-date, incoming forecast -- all in inches) percentile-ranked against
+this same rows population, not against history. `global_score` is the
+leaderboard's default sort key; `regional_score` is the same math run once per
+region, so a mountain can have a great regional week without needing to top
+the global board (climates differ). Both live alongside `overall`/`region`,
+not in place of them -- the self-relative percentiles stay visible on the card
+as context (`grades.season.percentile`, `grades.base.percentile`).
 
 The region rank is a property of the COHORT, not of the mountain -- you cannot
 compute it from one mountain's data. `rank_within_regions` therefore takes the
@@ -39,7 +53,7 @@ from __future__ import annotations
 from datetime import date
 
 from config import DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS
-from ski import commentary
+from ski import commentary, comparable
 from ski.card import scorecard
 from ski.grading import letter_grade, percentile_rank
 from ski.regions import country_code, country_of, region_for
@@ -113,6 +127,7 @@ def score_mountain(
     season = card["grades"]["season"] or {}
     base = card["grades"]["base"] or {}
     fc = card["forecast"] or {}
+    ci = card.get("comparable_inputs") or {}
     row.update(
         score=overall.get("score"),
         grade=overall.get("grade", "N/A"),
@@ -125,6 +140,11 @@ def score_mountain(
         season_progress=card["season_progress"],
         incoming_inches=fc.get("inches"),
         alert=bool(fc.get("alert")),
+        # Flattened for ski.comparable.score_population (global/regional score).
+        abs_base_in=ci.get("base_in"),
+        abs_fresh_in=ci.get("fresh_in"),
+        abs_season_in=ci.get("season_in"),
+        abs_forecast_in=ci.get("forecast_in"),
     )
     return row
 
@@ -188,6 +208,11 @@ def rank_within_regions(rows: list[dict]) -> list[dict]:
         others = list(peers)
         others.remove(r["score"])
         r["region_score"], r["region_grade"] = rank_against(r["score"], others)
+
+    # The comparable score (see ski.comparable): absolute snow, ranked against
+    # this SAME rows population -- global against everyone, regional per region.
+    comparable.attach_global_score(rows)
+    comparable.attach_regional_score(rows)
     return rows
 
 

@@ -26,6 +26,8 @@ from config import (
     IN_SEASON_GATE,
     OFF_SEASON,
     OVERALL_GRADE_THRESHOLDS,
+    PRECIP_PHASE,
+    STALE_UNKNOWN_COVER_CAP,
     REFREEZE,
     SCORE_BLEND_EXPONENT,
     SCORE_PROFILES,
@@ -141,6 +143,25 @@ def apply_off_season_cap(value: float | None, in_season: bool | None) -> float |
     return min(value, OFF_SEASON["overall_cap"])
 
 
+def apply_stale_cap(value: float | None, stale: bool,
+                    cover_known: bool) -> float | None:
+    """Cap an overall from a station that has gone silent and shows no cover.
+
+    Belt-and-suspenders alongside `apply_off_season_cap`: when the station is
+    stale (no observation of any kind in DATA_STALE_DAYS) AND we have no current
+    cover reading, a high overall would be riding a frozen season-to-date
+    percentile with nothing current behind it. `min`, not assignment: an already
+    lower score keeps its value and still sorts sensibly.
+
+    A station with a fresh cover reading is never stale-capped -- if we know the
+    base, the season percentile is not the only evidence. Verified to change no
+    live grade in the current DB; it exists to keep it that way if a source dies
+    mid-season (see config.DATA_STALE_DAYS)."""
+    if value is None or not stale or cover_known:
+        return value
+    return min(value, STALE_UNKNOWN_COVER_CAP)
+
+
 def cover_factor(effective_depth_inches: float | None) -> float:
     """Multiplier on the overall score from absolute cover (see config.COVER_GATE).
 
@@ -232,6 +253,24 @@ def apply_refreeze(conditions: float | None, refreeze: float) -> float | None:
     if conditions is None or refreeze <= 0.0:
         return conditions
     return conditions * (1.0 - REFREEZE["max_penalty"] * max(0.0, min(1.0, refreeze)))
+
+
+def phase_adjusted_snow_in(snow_in: float, tmax_f: float | None,
+                           phase: dict = PRECIP_PHASE) -> float:
+    """Derate forecast snowfall for temperature: precip at 38F is rain, not
+    powder, regardless of what the provider's own snow/rain split said (its
+    grid point can sit below the resort's real elevation).
+
+    Full credit at/below `snow_full_f`, zero at/above `rain_full_f`, linear
+    between. Missing temp -> full credit (no reading != a warm one)."""
+    if snow_in <= 0 or tmax_f is None:
+        return max(0.0, snow_in)
+    lo, hi = phase["snow_full_f"], phase["rain_full_f"]
+    if tmax_f <= lo:
+        return snow_in
+    if tmax_f >= hi:
+        return 0.0
+    return snow_in * (1.0 - (tmax_f - lo) / (hi - lo))
 
 
 def forecast_score(incoming_percentile: float | None, has_incoming_snow: bool,
