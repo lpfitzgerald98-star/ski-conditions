@@ -278,7 +278,7 @@ def mountain_scorecard(
         try:
             # The "incoming" badge stays exactly as before -- the single biggest
             # of the 24/72h storm windows, unrelated to the horizon blend below.
-            inc = forecast_incoming_storms(key, db_path, outlook=outlook)
+            inc = forecast_incoming_storms(key, db_path, outlook=outlook, obs=obs)
             incoming = max(inc, key=lambda s: s.total_inches) if inc else None
         except Exception:  # noqa: BLE001
             pass
@@ -323,7 +323,7 @@ def mountain_scorecard(
     elif retro:
         # Historical date: the "incoming" storm is what actually fell next, read
         # from the DB. Snow only -- no thaw/weather without stored temperature.
-        inc = retro_incoming_storms(key, as_of, db_path)
+        inc = retro_incoming_storms(key, as_of, db_path, obs=obs)
         incoming = max(inc, key=lambda s: s.total_inches) if inc else None
         has = incoming is not None and \
             incoming.total_inches >= STORM_THRESHOLDS["grade_baseline_min_inches"]
@@ -624,7 +624,8 @@ def combine_forecast_percentile(
 
 
 def forecast_incoming_storms(
-    key: str, db_path: str = DB_PATH, windows_hours=(24, 72), outlook=None
+    key: str, db_path: str = DB_PATH, windows_hours=(24, 72), outlook=None,
+    obs: pd.DataFrame | None = None,
 ) -> list[StormGrade]:
     """Grade the snow FORECAST to fall over the next 24/72h against storm history.
 
@@ -635,9 +636,13 @@ def forecast_incoming_storms(
 
     `outlook` (a pre-fetched sources.outlook.Outlook) avoids a second provider
     call; when None it is fetched via the mountain's provider (NWS or Open-Meteo).
+    `obs` (a pre-loaded observations frame, e.g. from `mountain_scorecard`) skips
+    a second full-history DB read + season-percentile recompute; when None it's
+    read fresh, same as before.
     """
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     if outlook is None:
         outlook = fetch_outlook_for_mountain(key)
     if outlook is None:
@@ -658,15 +663,21 @@ def forecast_incoming_storms(
 
 
 def retro_incoming_storms(
-    key: str, as_of: date, db_path: str = DB_PATH, windows_hours=(24, 72)
+    key: str, as_of: date, db_path: str = DB_PATH, windows_hours=(24, 72),
+    obs: pd.DataFrame | None = None,
 ) -> list[StormGrade]:
     """The RETROSPECTIVE incoming storm for a past `as_of`: instead of a live
     forecast, grade the snow the station actually recorded in the forward window
     (as_of, as_of + wh]. Same storm-grading scale as the live path, so a
     historical "good weekend" reads on the same curve as a forecast one.
+
+    `obs` (a pre-loaded observations frame, e.g. from `mountain_scorecard`) skips
+    a second full-history DB read + season-percentile recompute; when None it's
+    read fresh, same as before.
     """
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     if obs.empty:
         return []
     season_pct = grade_season_to_date(
