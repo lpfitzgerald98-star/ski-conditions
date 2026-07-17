@@ -9,6 +9,7 @@ migration.
 from __future__ import annotations
 
 import sqlite3
+from datetime import date as _date
 from pathlib import Path
 
 import pandas as pd
@@ -84,6 +85,24 @@ def upsert_observations(db_path: str | Path, station_id: str, df: pd.DataFrame) 
     finally:
         conn.close()
     return len(rows)
+
+
+def max_observation_date(db_path: str | Path, station_id: str) -> "date | None":
+    """The most recent stored date for a station (as a `date`), or None if the
+    station has no rows yet. Drives incremental ingest: fetch only the tail
+    after this instead of the whole period of record every run.
+    """
+    conn = connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT MAX(date) FROM raw_observations WHERE station_id = ?",
+            (station_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or row[0] is None:
+        return None
+    return _date.fromisoformat(row[0])
 
 
 def read_observations(db_path: str | Path, station_id: str) -> pd.DataFrame:

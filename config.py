@@ -1744,6 +1744,14 @@ OFF_SEASON = {
 DATA_STALE_DAYS = 21             # no obs of ANY kind in this many days -> stale
 STALE_UNKNOWN_COVER_CAP = 20.0   # cap the overall (~C) when stale AND cover unknown
 
+# Incremental ingest: when a station already has stored history, re-fetch only
+# from (its latest stored date - this many days) forward, not the whole period
+# of record. The overlap re-pulls the recent tail so upstream revisions (SNOTEL
+# and ERA5 both revise the last week or two) land via upsert; deep history is
+# immutable and never re-fetched. An empty station still does a full-history
+# pull, so first run and any cache loss self-heal.
+INGEST_OVERLAP_DAYS = 14
+
 # ---------------------------------------------------------------------------
 # Per-mountain base offset -- the valley-station under-read correction (opt-in)
 # ---------------------------------------------------------------------------

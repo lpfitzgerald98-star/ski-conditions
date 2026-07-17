@@ -31,9 +31,16 @@ def fetch_station_daily(
     start: str = "1900-01-01",
     end: str | None = None,
     timeout: int = 90,
+    since=None,
 ) -> pd.DataFrame:
     """Fetch daily CDEC SWE + snow depth and return the canonical obs frame
-    (date, swe_inches, snow_depth_inches, new_snow_24hr)."""
+    (date, swe_inches, snow_depth_inches, new_snow_24hr).
+
+    `since` (a `date`): incremental ingest -- fetch only from that day forward
+    instead of back to 1900. Overrides `start` when given.
+    """
+    if since is not None:
+        start = since.isoformat()
     end = end or pd.Timestamp.today().strftime("%Y-%m-%d")
     swe = _fetch_sensor(station, SENSOR_SWE, start, end, timeout)
     depth = _fetch_sensor(station, SENSOR_DEPTH, start, end, timeout)

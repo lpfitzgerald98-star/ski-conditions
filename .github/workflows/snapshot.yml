@@ -1,8 +1,15 @@
 # Daily static snapshot for the ski-conditions map, published to GitHub Pages.
 #
-# Once a day it ingests every station, scores the roster (forecasts included), and
-# writes web/data/*.json, then publishes web/ to Pages. No server runs between
-# builds -- this IS the site's "live" data, refreshed on the cron below.
+# The site has no running server -- these flat JSON files under web/data ARE its
+# "live" data, rebuilt here and published to Pages. Two things keep this cheap:
+#
+#   1. The raw-observation DB (data/ski.db, decades of daily history for every
+#      station) is CACHED between runs. A warm run fetches only each station's
+#      recent tail (see scripts/build_snapshot.py --> pipeline.ingest_mountain),
+#      not the whole period of record. A cache miss self-heals with a full pull.
+#   2. Ingest only runs when there's new data to get. The daily cron refreshes
+#      stations; a plain code/site push (a CSS tweak, say) scores off the cached
+#      DB with --no-ingest and deploys in a minute or two, hitting no upstreams.
 #
 # One-time setup by the repo owner: Settings -> Pages -> Source: "GitHub Actions".
 # Manual refresh anytime: Actions tab -> this workflow -> "Run workflow".
@@ -45,10 +52,58 @@ jobs:
       - name: Install dependencies
         run: pip install pandas numpy requests anthropic
 
-      - name: Build snapshot + retrospective history (ingest + score)
+      # Restore the raw-observation DB from the previous run. Keyed uniquely per
+      # run (caches are immutable) with a prefix restore-key, so each run reads
+      # the newest ski-db-* cache and writes a fresh one -- the standard pattern
+      # for a cache that mutates. A miss (first run, or 7-day eviction) just
+      # leaves data/ absent, which the mode step below turns into a full pull.
+      - name: Restore observation DB cache
+        id: dbcache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ski-db-${{ github.run_id }}
+          restore-keys: |
+            ski-db-
+
+      # Decide how much to ingest:
+      #   full        - no usable DB (cache miss / first run): pull full history
+      #   none        - code/site push with a warm DB: score off it, no fetches
+      #   incremental - cron/dispatch with a warm DB: fetch each station's tail
+      - name: Decide ingest mode
+        id: mode
+        run: |
+          rows=$(python -c "import sqlite3, os; print(sqlite3.connect('data/ski.db').execute('select count(*) from raw_observations').fetchone()[0]) if os.path.exists('data/ski.db') else print(0)" 2>/dev/null || echo 0)
+          echo "db rows: $rows"
+          if [ "$rows" -eq 0 ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "mode=none" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=incremental" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build snapshot + retrospective history
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python scripts/build_snapshot.py --history
+        run: |
+          case "${{ steps.mode.outputs.mode }}" in
+            full)  echo "== full ingest (rebuilding DB) =="
+                   python scripts/build_snapshot.py --history --full-ingest ;;
+            none)  echo "== no ingest (scoring off cached DB) =="
+                   python scripts/build_snapshot.py --history --no-ingest ;;
+            *)     echo "== incremental ingest (tail only) =="
+                   python scripts/build_snapshot.py --history ;;
+          esac
+
+      # Save the updated DB back to the cache -- but only when ingest actually
+      # ran (a code push scores off it unchanged, so there's nothing new to save).
+      - name: Save observation DB cache
+        if: steps.mode.outputs.mode != 'none'
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: ski-db-${{ github.run_id }}
 
       - name: Persist new history dates
         run: |

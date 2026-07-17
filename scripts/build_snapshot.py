@@ -107,8 +107,13 @@ def _null_row(key: str, error: str) -> dict:
     return row
 
 
-def ingest_all(keys: list[str], pause: float = 2.0) -> None:
+def ingest_all(keys: list[str], pause: float = 2.0, full: bool = False) -> None:
     """Refresh every station's raw history before scoring.
+
+    Incremental by default (see pipeline.ingest_mountain): once the DB is warm,
+    each station fetches only its recent tail, so the whole roster ingests in a
+    minute or two instead of re-pulling decades every run. `full=True` forces a
+    full period-of-record pull for every station (first build, or a rebuild).
 
     Resilient by design: the Action runs against flaky upstreams (NRCS DNS,
     Open-Meteo 429s), and one dead source must degrade to a gray pin, never fail
@@ -120,7 +125,7 @@ def ingest_all(keys: list[str], pause: float = 2.0) -> None:
     for i, key in enumerate(keys, 1):
         for attempt in (1, 2, 3):
             try:
-                n = pipeline.ingest_mountain(key)
+                n = pipeline.ingest_mountain(key, full=full)
                 print(f"[ingest {i:>2}/{len(keys)}] {key}: {n} rows")
                 break
             except Exception as exc:  # noqa: BLE001
@@ -248,6 +253,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Build the static Pages snapshot.")
     ap.add_argument("--no-ingest", action="store_true",
                     help="score off the current DB without refreshing stations")
+    ap.add_argument("--full-ingest", action="store_true",
+                    help="force a full period-of-record pull for every station "
+                         "(default is incremental: only each station's recent tail)")
     ap.add_argument("--no-network", action="store_true",
                     help="skip live forecasts/weather (fast; for local testing)")
     ap.add_argument("--as-of", default=None, help="score as of YYYY-MM-DD (default today)")
@@ -264,8 +272,9 @@ def main() -> int:
     keys = sorted(MOUNTAINS)
 
     if not args.no_ingest:
-        print(f"== Ingesting {len(keys)} stations ==")
-        ingest_all(keys)
+        mode = "full" if args.full_ingest else "incremental"
+        print(f"== Ingesting {len(keys)} stations ({mode}) ==")
+        ingest_all(keys, full=args.full_ingest)
 
     if not args.history_only:
         print(f"== Scoring {len(keys)} mountains (network={not args.no_network}) ==")

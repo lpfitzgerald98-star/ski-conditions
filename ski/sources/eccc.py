@@ -26,17 +26,26 @@ CM_TO_IN = 1.0 / 2.54
 _PAGE = 10000
 
 
-def fetch_station_daily(climate_id: str, timeout: int = 90) -> pd.DataFrame:
+def fetch_station_daily(climate_id: str, timeout: int = 90, since=None) -> pd.DataFrame:
     """Fetch the full daily record for an ECCC station (by CLIMATE_IDENTIFIER)
-    and return the canonical obs frame."""
+    and return the canonical obs frame.
+
+    `since` (a `date`): incremental ingest -- adds an OGC `datetime` filter so
+    the server returns only rows from that day forward. Best-effort: if the
+    collection ever ignores the filter, upsert still keeps the result correct,
+    just not faster (only 9 stations use ECCC, so it isn't the bottleneck).
+    """
     features = []
     offset = 0
+    datetime_filter = f"{since.isoformat()}/.." if since is not None else None
     while True:
         params = {
             "CLIMATE_IDENTIFIER": climate_id,
             "sortby": "LOCAL_DATE",
             "limit": _PAGE, "offset": offset, "f": "json",
         }
+        if datetime_filter:
+            params["datetime"] = datetime_filter
         resp = http.get(BASE, params=params,
                             headers={"User-Agent": USER_AGENT}, timeout=timeout)
         resp.raise_for_status()

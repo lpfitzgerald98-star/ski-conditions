@@ -43,13 +43,18 @@ def fetch_station_daily(
     sdate: str = "por",
     edate: str = "por",
     timeout: int = 90,
+    since=None,
 ) -> pd.DataFrame:
     """Fetch daily ACIS observations for a station id and return the canonical
     obs frame (date, swe_inches, snow_depth_inches, new_snow_24hr).
 
     `sid` is any ACIS station id -- a GHCN id like "USC00435416" works well.
     `sdate`/`edate` accept ISO dates or "por" (period of record).
+    `since` (a `date`): incremental ingest -- fetch only from that day forward.
+    Overrides `sdate` when given.
     """
+    if since is not None:
+        sdate = since.isoformat()
     payload = {"sid": sid, "sdate": sdate, "edate": edate, "elems": "snow,snwd"}
     resp = http.post(BASE, json=payload,
                          headers={"User-Agent": USER_AGENT}, timeout=timeout)

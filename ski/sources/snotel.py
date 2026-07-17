@@ -41,11 +41,22 @@ def fetch_station_daily(
     start: str = "POR_BEGIN",
     end: str = "POR_END",
     timeout: int = 90,
+    since=None,
 ) -> pd.DataFrame:
     """Fetch daily SNOTEL observations and return the canonical obs frame.
 
     Columns: date (Timestamp), swe_inches, snow_depth_inches, new_snow_24hr.
+
+    `since` (a `date`): incremental ingest -- fetch only from that day forward
+    instead of the full period of record. Overrides `start` when given.
     """
+    if since is not None:
+        start = since.isoformat()
+        # The report endpoint returns an error PAGE (not CSV) for an ISO start
+        # paired with POR_END -- it only accepts POR_END alongside POR_BEGIN.
+        # Pin a concrete end date so an incremental window is a valid range.
+        if end == "POR_END":
+            end = pd.Timestamp.today().strftime("%Y-%m-%d")
     url = build_url(triplet, start, end)
     resp = http.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
     resp.raise_for_status()

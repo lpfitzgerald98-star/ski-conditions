@@ -39,12 +39,17 @@ _CURRENT_CACHE = os.path.join(tempfile.gettempdir(), "ski_bc_sw_daily.csv")
 _CACHE_TTL = 6 * 3600  # seconds
 
 
-def fetch_station_daily(station_id: str, timeout: int = 120) -> pd.DataFrame:
+def fetch_station_daily(station_id: str, timeout: int = 120, since=None) -> pd.DataFrame:
     """Daily SWE history for one BC ASWS station id (e.g. '2A06P'), as the
     canonical obs frame (swe populated; depth / new_snow are NaN).
 
     Merges the closed-water-year archive with the in-progress current-year feed
-    so the series runs right up to today, not to the previous Sep 30."""
+    so the series runs right up to today, not to the previous Sep 30.
+
+    `since` is accepted for a uniform ingest interface but ignored: BC ASWS
+    serves whole wide-format CSV files (already disk-cached), not date ranges,
+    and it's only 3 stations. The current-year feed alone stays small; the
+    upsert dedups against what's already stored."""
     frames = [parse_archive(_archive_text(timeout), station_id)]
     current = _try_parse_current(_current_text(timeout), station_id)
     if current is not None:

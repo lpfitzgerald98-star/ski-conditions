@@ -35,13 +35,20 @@ CM_TO_IN = 1.0 / 2.54
 M_TO_IN = 39.3701
 
 
-def fetch_station_daily(loc: str, timeout: int = 90) -> pd.DataFrame:
+def fetch_station_daily(loc: str, timeout: int = 90, since=None) -> pd.DataFrame:
     """Daily snow history for a 'lat,lon' location string, as the canonical obs
-    frame (snowfall -> new_snow_24hr, depth -> snow_depth_inches, swe NaN)."""
+    frame (snowfall -> new_snow_24hr, depth -> snow_depth_inches, swe NaN).
+
+    `since` (a `date`): incremental ingest -- fetch only from that day forward
+    instead of back to 1980. This is the biggest single lever on Action time:
+    54 of the roster's stations are Open-Meteo, and a full 1980-> pull for each
+    is what draws the archive API's 429s. The tail is a handful of days.
+    """
     lat, lon = (float(x) for x in loc.split(","))
+    start_date = since.isoformat() if since is not None else START_DATE
     params = {
         "latitude": lat, "longitude": lon,
-        "start_date": START_DATE,
+        "start_date": start_date,
         "end_date": pd.Timestamp.today().strftime("%Y-%m-%d"),
         "daily": "snowfall_sum,snow_depth_max",
         "timezone": "auto",

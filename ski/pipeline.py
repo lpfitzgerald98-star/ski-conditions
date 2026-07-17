@@ -7,7 +7,7 @@ and the source clients (write-side). This just wires a mountain key to them.
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -15,10 +15,11 @@ import pandas as pd
 from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, DATA_STALE_DAYS,
                     DB_PATH, DEFAULT_BASE_OFFSET_IN, FORECAST_HORIZON_WEIGHTS,
                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
-                    MEDIUM_RANGE, MOUNTAINS, SEASON_METRIC, STORM_THRESHOLDS)
+                    INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, SEASON_METRIC,
+                    STORM_THRESHOLDS)
 from ski import forecast_log
 from ski import score as score_mod
-from ski.db import read_observations, upsert_observations
+from ski.db import max_observation_date, read_observations, upsert_observations
 from ski.watercalendar import month_day_to_dowy, season_progress, water_year
 from ski.grading import (
     BaseGrade,
@@ -106,14 +107,27 @@ def mountain_season_start(m: dict) -> int:
     return 1
 
 
-def ingest_mountain(key: str, db_path: str = DB_PATH) -> int:
-    """Fetch full history for the mountain's station and store raw rows.
+def ingest_mountain(key: str, db_path: str = DB_PATH, full: bool = False) -> int:
+    """Fetch history for the mountain's station and store raw rows.
 
     Dispatches on `data_source` via the SOURCES registry (SNOTEL / ACIS / CDEC /
-    ECCC)."""
+    ECCC / BCSWS / Open-Meteo).
+
+    Incremental by default: if the station already has stored observations, only
+    the tail from (latest stored date - INGEST_OVERLAP_DAYS) forward is fetched,
+    and upsert merges it. A station with no rows -- first run, or a lost DB
+    cache -- falls back to a full period-of-record pull, so the system always
+    self-heals. `full=True` forces the full pull regardless (the `--full-ingest`
+    escape hatch)."""
     m = get_mountain(key)
-    df = _source(m)["fetch"](mountain_station(m))
-    return upsert_observations(db_path, mountain_station(m), df)
+    station = mountain_station(m)
+    since = None
+    if not full:
+        last = max_observation_date(db_path, station)
+        if last is not None:
+            since = last - timedelta(days=INGEST_OVERLAP_DAYS)
+    df = _source(m)["fetch"](station, since=since)
+    return upsert_observations(db_path, station, df)
 
 
 def grade_mountain(key: str, db_path: str = DB_PATH, as_of: date | None = None) -> SeasonGrade:

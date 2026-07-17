@@ -112,13 +112,22 @@ function duo(card, key) {
     "vs this mountain's own normal", rel.grade,
     rel.score != null ? Math.round(rel.score) : null, " / 100");
 
+  // The regional rank is the headline claim ("#2 of 6 in Argentina to ski right
+  // now") -- it's the one number that answers "should I go HERE", so it gets its
+  // own emphasized banner rather than sitting in the small pill row. Worldwide
+  // rank stays as a secondary pill underneath; off-season falls back to a muted
+  // pill when there's no regional rank to show instead.
+  const regionRank = gRegion
+    ? `<div class="rank-hero"><b>#${gRegion.rank}</b> of ${gRegion.total} in ${escapeHTML(r.name)} to ski right now</div>`
+    : card.in_season === false
+      ? `<div class="rank-hero muted">off-season</div>`
+      : "";
+
   const bits = [];
-  if (gGlobal) bits.push(`<span class="rank"><b>#${gGlobal.rank}</b> of ${gGlobal.total} to ski now</span>`);
-  if (gRegion) bits.push(`<span class="rank"><b>#${gRegion.rank}</b> in ${escapeHTML(r.name)}</span>`);
-  else if (card.in_season === false) bits.push(`<span class="rank muted">off-season</span>`);
+  if (gGlobal) bits.push(`<span class="rank"><b>#${gGlobal.rank}</b> of ${gGlobal.total} worldwide</span>`);
   const ranks = bits.length ? `<div class="ranks">${bits.join("")}</div>` : "";
 
-  return `<div class="duo">${skiTile}${relTile}</div>${ranks}`;
+  return `<div class="duo">${skiTile}${relTile}</div>${regionRank}${ranks}`;
 }
 
 function gradeCell(k, g) {
@@ -143,8 +152,17 @@ function render(card, key) {
     <h2 id="detail-title">${escapeHTML(card.mountain.name)}</h2>
     <div class="sub">${card.mountain.verified ? "✓ verified station" : "⚠ unverified station"} · ${card.mountain.key}</div>
     ${duo(card, key)}
-    <div class="cap" style="margin:2px 0 4px">historical context · ${prof} profile${o.leaning ? ` · leaning ${o.leaning}` : ""}</div>
-    <div class="grid2">
+    <div class="cap" style="margin:2px 0 4px">historical context · ${prof} profile${o.leaning ? ` · leaning ${o.leaning}` : ""}</div>`;
+
+  // The AI one-liner explaining the grade (built server-side with the scoring
+  // job, cached per day -- see ski/commentary.py). Absent off-season or when
+  // the build ran without credentials; the card simply shows nothing then.
+  // Sits between the grades above and the raw metrics below -- the sentence
+  // that explains the numbers you're about to read.
+  if (card.commentary)
+    html += `<div class="note commentary">${escapeHTML(card.commentary)}</div>`;
+
+  html += `<div class="grid2">
       ${gradeCell("Season", g.season)}
       ${gradeCell("Last 30 days", g.in_season)}
       <div class="cell"><div class="k">Base</div><div class="v">${cond.base_depth != null ? cond.base_depth + '"' : "—"}
@@ -152,23 +170,13 @@ function render(card, key) {
       <div class="cell"><div class="k">Fresh (7d)</div><div class="v">${cond.fresh_7d != null ? cond.fresh_7d + '"' : "—"}</div></div>
     </div>`;
 
-  // The AI one-liner explaining the grade (built server-side with the scoring
-  // job, cached per day -- see ski/commentary.py). Absent off-season or when
-  // the build ran without credentials; the card simply shows nothing then.
-  if (card.commentary)
-    html += `<div class="note commentary">${escapeHTML(card.commentary)}</div>`;
-
   if (card.cover_factor != null && card.cover_factor < 1)
     html += `<div class="note">Cover gate ×${card.cover_factor} — a thin base caps the overall score.</div>`;
 
-  html += `<div class="sec">Sub-scores</div>
-    ${subBar("Season to date", card.subscores.season)}
-    ${subBar("Last 30 days", card.subscores.in_season)}
-    ${subBar("Conditions", card.subscores.conditions)}
-    ${subBar("Incoming snow", card.subscores.forecast)}`;
-
-  // Incoming snow: the single biggest window stays pinned as the summary; click
-  // to expand the full 24/48/72h breakout plus the 4-10 day medium-range band.
+  // Incoming snow gets its own emphasized section, ahead of the sub-score bars --
+  // it's the one forward-looking number on an otherwise backward-looking card.
+  // The single biggest window stays pinned as the summary; click to expand the
+  // full 24/48/72h breakout plus the 4-10 day medium-range band.
   const hs = card.forecast_horizons || [];
   const mr = ol && ol.medium_range;
   if (card.forecast || hs.length || mr) {
@@ -184,12 +192,14 @@ function render(card, key) {
     if (mr)
       rows += `<div class="frow mr"><span>4–${Math.round(mr.horizon_hours / 24)} day range</span>
         <span>${mr.low_in}–${mr.high_in}"${mr.mid_in != null ? ` · mid ${mr.mid_in}"` : ""}</span></div>`;
-    html += `<div class="sec">Incoming snow</div>`;
-    html += rows
-      ? `<details class="forecast"><summary class="storm ${f && f.alert ? "is-alert" : ""}">
-           ${summary}<span class="chev" aria-hidden="true">▾</span></summary>
-         <div class="fbreak">${rows}</div></details>`
-      : `<div class="storm ${f && f.alert ? "is-alert" : ""}">${summary}</div>`;
+    html += `<div class="forecast-box">
+      <div class="sec-title">Incoming snow</div>
+      ${rows
+        ? `<details class="forecast"><summary class="storm ${f && f.alert ? "is-alert" : ""}">
+             ${summary}<span class="chev" aria-hidden="true">▾</span></summary>
+           <div class="fbreak">${rows}</div></details>`
+        : `<div class="storm ${f && f.alert ? "is-alert" : ""}">${summary}</div>`}
+    </div>`;
   }
   if (ol && ol.thaw_index != null && ol.thaw_index >= 0.15) {
     const bits = [];
@@ -199,6 +209,12 @@ function render(card, key) {
   }
   if (ol && ol.refreeze_index != null && ol.refreeze_index >= 0.15)
     html += `<div class="note warn">🧊 Refrozen crust likely — a recent thaw refroze and hasn't been resurfaced by new snow.</div>`;
+
+  html += `<div class="sec">Sub-scores</div>
+    ${subBar("Season to date", card.subscores.season)}
+    ${subBar("Last 30 days", card.subscores.in_season)}
+    ${subBar("Conditions", card.subscores.conditions)}
+    ${subBar("Incoming snow", card.subscores.forecast)}`;
 
   if (wx) {
     html += `<div class="sec">Current weather</div>
