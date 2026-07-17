@@ -264,6 +264,10 @@ function wireControls() {
     announce(`Region filter cleared: zoomed out past ${region}. Showing all mountains.`);
   });
 
+  // The map detected a zoom-out past the open card's framing zoom (map.js
+  // maybeDismissCard): close the scorecard so the user is back to surveying pins.
+  on("card-dismiss", () => { if (state.selected) closeCard(); });
+
   // Re-render markers when the map finishes moving isn't needed (MapLibre keeps
   // HTML markers pinned), but do keep the selected card in sync on selection.
   on("selected", key => { if (key) { mapMarkSelected(key); listMarkSelected(key); } });

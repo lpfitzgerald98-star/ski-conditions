@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -97,6 +98,57 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Background daily ingest
+# ---------------------------------------------------------------------------
+# DEPLOY.md flags this as the gap: the live stream refreshes forecasts and the
+# score cache per-request, but `raw_observations` only grows when an ingest
+# actually runs, and nothing was scheduling one. fly.toml pins this app to a
+# single always-on machine (min_machines_running=1, max=1 -- SQLite can't be
+# shared across machines), so there's no separate host to hang a cron job off
+# of; this loop runs in-process instead, refetching every station's full
+# history once a day for as long as the machine stays up. `ingest_mountain`
+# always fetches the full period of record and upserts, so this also
+# self-heals any historical gap (a source outage, a missed day) without
+# needing separate backfill logic.
+INGEST_INTERVAL_S = 24 * 60 * 60
+_INGEST_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ski-ingest")
+
+
+def _ingest_all_sync() -> None:
+    keys = sorted(MOUNTAINS)
+    ok, failed = 0, []
+    for key in keys:
+        for attempt in (1, 2, 3):
+            try:
+                pipeline.ingest_mountain(key)
+                ok += 1
+                break
+            except Exception as exc:  # noqa: BLE001 -- one station, not the run
+                if attempt == 3:
+                    failed.append(key)
+                    print(f"[daily-ingest] {key}: FAILED ({exc})")
+                else:
+                    time.sleep(attempt * 1.5)
+        time.sleep(0.5)  # space out the rate-limited upstreams (Open-Meteo)
+    print(f"[daily-ingest] done: {ok}/{len(keys)} ok"
+          + (f", failed: {failed}" if failed else ""))
+
+
+async def _daily_ingest_loop() -> None:
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            await loop.run_in_executor(_INGEST_POOL, _ingest_all_sync)
+        except Exception as exc:  # noqa: BLE001 -- must never kill the loop
+            print(f"[daily-ingest] loop error: {exc}")
+        await asyncio.sleep(INGEST_INTERVAL_S)
+
+
+@app.on_event("startup")
+async def _start_daily_ingest() -> None:
+    asyncio.create_task(_daily_ingest_loop())
 
 
 def _parse_as_of(as_of: str | None) -> date:

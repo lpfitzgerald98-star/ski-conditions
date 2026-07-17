@@ -29,6 +29,7 @@ def _synthetic_card(comparable_inputs=None):
     actually reads, matching ski/card.py's real output shape."""
     return {
         "overall": {"dynamic": {"score": 62.0, "grade": "B"}},
+        "skiability": {"score": 71.0, "grade": "A-"},
         "in_season": True,
         "cover_depth": 40.0,
         "grades": {
@@ -65,10 +66,21 @@ def test_row_still_carries_the_original_fields():
     """The fix must be additive -- nothing about the existing row shape moved."""
     card = _synthetic_card()
     row = _row_from_card("alta", card, "dynamic")
-    assert row["score"] == 62.0
-    assert row["grade"] == "B"
     assert row["in_season"] is True
     assert row["status"] == "live"
+
+
+def test_row_headline_is_skiability_not_relative_overall():
+    """The pin/leaderboard headline (`score`/`grade`) is absolute skiability --
+    the honest "ski right now" grade -- with the self-relative `overall` kept
+    alongside as `overall_score`/`overall_grade` historical context, never
+    dropped (see ski/card.py's skiability field, config.SKIABILITY_GRADE_THRESHOLDS)."""
+    card = _synthetic_card()
+    row = _row_from_card("alta", card, "dynamic")
+    assert row["score"] == 71.0
+    assert row["grade"] == "A-"
+    assert row["overall_score"] == 62.0
+    assert row["overall_grade"] == "B"
 
 
 if __name__ == "__main__":

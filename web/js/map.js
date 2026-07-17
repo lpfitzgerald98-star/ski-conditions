@@ -25,6 +25,12 @@ const PROGRAMMATIC = { programmatic: true };
 let map = null;
 let markers = {};      // key -> { marker, el }
 let tooltipEl = null;
+let cardFrameZoom = null;   // the zoom at which the open card's mountain was framed
+
+// How far the user must zoom OUT from a card's framing zoom before the card is
+// dismissed -- enough that a small scroll doesn't close it, but "zoom out to
+// survey the map again" does.
+const CARD_DISMISS_DELTA = 1.2;
 
 export function initMap(onSelect, onViewAll) {
   map = new maplibregl.Map({
@@ -71,6 +77,11 @@ export function initMap(onSelect, onViewAll) {
   // Zooming/panning OUT past the active region's extent auto-clears the filter,
   // so the pins that just came into view are actually selectable.
   map.on("moveend", maybeAutoClearRegion);
+
+  // Zooming OUT far enough with a scorecard open dismisses it: you've left that
+  // one mountain's detail view to survey the map again (sibling of the region
+  // auto-clear above). main.js wires "card-dismiss" to closing the card.
+  map.on("zoomend", maybeDismissCard);
 
   tooltipEl = document.getElementById("map-tooltip");
   map._onSelect = onSelect;
@@ -338,9 +349,24 @@ export function flyToMountain(key) {
   const row = state.byKey[key];
   if (!row || row.latitude == null) return;
   const zoom = Math.max(map.getZoom(), 4.5);
+  // Baseline the card-dismiss zoom to where we're framing this mountain, so
+  // zooming back out from here (not the earlier world view) is what closes it.
+  cardFrameZoom = zoom;
   const opts = { center: [row.longitude, row.latitude], zoom, offset: [-150, 0] };
   if (prefersReducedMotion()) map.jumpTo(opts, PROGRAMMATIC);
   else map.easeTo({ ...opts, duration: 600 }, PROGRAMMATIC);
+}
+
+// Dismiss the open scorecard once the user has zoomed OUT past its framing zoom.
+// Programmatic zooms (our own flyTo/fitBounds) re-baseline instead of dismissing,
+// so framing a mountain never closes its own card.
+function maybeDismissCard(e) {
+  if (e && e.programmatic) { cardFrameZoom = map.getZoom(); return; }
+  if (!state.selected || cardFrameZoom == null) return;
+  if (map.getZoom() < cardFrameZoom - CARD_DISMISS_DELTA) {
+    cardFrameZoom = null;
+    emit("card-dismiss", state.selected);
+  }
 }
 
 export function fitAll() {

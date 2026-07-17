@@ -26,11 +26,17 @@ from config import (
     IN_SEASON_GATE,
     OFF_SEASON,
     OVERALL_GRADE_THRESHOLDS,
+    POWDER_SCORE_CURVE,
     PRECIP_PHASE,
     STALE_UNKNOWN_COVER_CAP,
     REFREEZE,
     SCORE_BLEND_EXPONENT,
     SCORE_PROFILES,
+    SKI_BASE_MAX,
+    SKI_POWDER_MAX,
+    SKI_POWDER_WEIGHTS,
+    SKI_QUALITY,
+    SKIABILITY_GRADE_THRESHOLDS,
 )
 from ski.grading import letter_grade
 
@@ -172,6 +178,82 @@ def cover_factor(effective_depth_inches: float | None) -> float:
     floor = COVER_GATE["floor"]
     ds = piecewise(max(0.0, effective_depth_inches), DEPTH_SCORE_CURVE)
     return floor + (1.0 - floor) * ds / 100.0
+
+
+# --- absolute skiability (the honest "how good is the skiing right now") -----
+@dataclass
+class Skiability:
+    value: float | None       # 0-100, absolute (not a percentile / rank)
+    grade: str                # letter from SKIABILITY_GRADE_THRESHOLDS
+    base_pts: float = 0.0     # contribution breakdown, for the card / debugging
+    powder_pts: float = 0.0
+    powder_in: float = 0.0    # effective (recency+horizon weighted) powder inches
+    quality_factor: float = 1.0
+
+
+def effective_powder_in(fresh_recent_in: float | None,
+                        fresh_7d_in: float | None,
+                        forecast_72h_in: float | None) -> float:
+    """Fold fresh + incoming snow into one recency/horizon-weighted inches figure.
+
+    Snow already down this instant counts most (`recent`, the ~72h window); the
+    rest of the trailing week is older and discounted (`week`); imminent forecast
+    powder is nearly as good as on the ground (`forecast`). Missing inputs count
+    as zero here (unlike a percentile pool) -- no forecast really is no incoming
+    snow, not "unknown", for the purpose of how good today skis."""
+    w = SKI_POWDER_WEIGHTS
+    recent = max(0.0, fresh_recent_in or 0.0)
+    week_only = max(0.0, (fresh_7d_in or 0.0) - recent)   # days ~3-7, older snow
+    fc = max(0.0, forecast_72h_in or 0.0)
+    return w["recent"] * recent + w["week"] * week_only + w["forecast"] * fc
+
+
+def skiability_quality_factor(weather_q: float | None, refreeze: float = 0.0,
+                              thaw: float = 0.0) -> float:
+    """Multiplier in [floor, 1.0] from surface/weather quality.
+
+    Punitive by design: rain-on-snow, a refrozen crust, or an incoming thaw make
+    even a deep base ski badly, so they scale the score down. A missing weather
+    read is neutral (not a penalty)."""
+    q = SKI_QUALITY
+    factor = 1.0
+    if weather_q is not None:
+        factor *= (1.0 - q["weather_span"]) + q["weather_span"] * (max(0.0, min(100.0, weather_q)) / 100.0)
+    factor *= 1.0 - q["refreeze_penalty"] * max(0.0, min(1.0, refreeze))
+    factor *= 1.0 - q["thaw_penalty"] * max(0.0, min(1.0, thaw))
+    return max(q["floor"], min(1.0, factor))
+
+
+def skiability_score(
+    base_depth_in: float | None,
+    fresh_recent_in: float | None,
+    fresh_7d_in: float | None,
+    forecast_72h_in: float | None,
+    weather_q: float | None = None,
+    refreeze: float = 0.0,
+    thaw: float = 0.0,
+) -> Skiability:
+    """Absolute "how good is the skiing here right now", 0-100 + letter.
+
+    base (enabler, saturating) + powder (fresh + incoming, diminishing returns),
+    then scaled by a punitive quality factor. All ABSOLUTE inches -- the same
+    number means the same thing at every mountain, so it can be the headline that
+    governs the grade in both directions (see config.SKIABILITY_GRADE_THRESHOLDS).
+
+    Returns value=None (grade "N/A") only when there's no base reading AND no
+    snow signal of any kind -- nothing to judge."""
+    have_base = base_depth_in is not None
+    powder_in = effective_powder_in(fresh_recent_in, fresh_7d_in, forecast_72h_in)
+    if not have_base and powder_in <= 0.0 \
+            and fresh_7d_in is None and forecast_72h_in is None:
+        return Skiability(None, "N/A")
+    base_pts = SKI_BASE_MAX * (depth_score(base_depth_in) or 0.0) / 100.0 if have_base else 0.0
+    powder_pts = SKI_POWDER_MAX * piecewise(powder_in, POWDER_SCORE_CURVE) / 100.0
+    quality = skiability_quality_factor(weather_q, refreeze, thaw)
+    value = max(0.0, min(100.0, (base_pts + powder_pts) * quality))
+    return Skiability(value, letter_grade(value, SKIABILITY_GRADE_THRESHOLDS),
+                      base_pts=base_pts, powder_pts=powder_pts,
+                      powder_in=powder_in, quality_factor=quality)
 
 
 # --- sub-score assembly ----------------------------------------------------

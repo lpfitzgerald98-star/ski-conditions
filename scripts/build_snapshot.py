@@ -62,13 +62,19 @@ def _row_from_card(key: str, card: dict, profile: str) -> dict:
     """
     row = mountain_summary(key)
     overall = card["overall"].get(profile) or {}
+    ski = card.get("skiability") or {}
     season = card["grades"]["season"] or {}
     base = card["grades"]["base"] or {}
     fc = card["forecast"] or {}
     ci = card.get("comparable_inputs") or {}
     row.update(
-        score=overall.get("score"),
-        grade=overall.get("grade", "N/A"),
+        # HEADLINE = absolute skiability (pins, leaderboard sort, region rank all
+        # reflect the honest "how good is the skiing right now"). The self-relative
+        # `overall` is kept alongside as historical context, not the pin grade.
+        score=ski.get("score"),
+        grade=ski.get("grade", "N/A"),
+        overall_score=overall.get("score"),
+        overall_grade=overall.get("grade", "N/A"),
         in_season=card.get("in_season"),
         cover_depth=card.get("cover_depth"),
         season_grade=season.get("grade"),

@@ -1571,6 +1571,79 @@ FRESH_SCORE_CURVE = [(0, 35), (3, 55), (6, 70), (12, 88), (18, 100)]
 FRESH_WINDOW_DAYS = 7
 
 # ---------------------------------------------------------------------------
+# Absolute Skiability -- the honest "how good is the skiing here, right now"
+# ---------------------------------------------------------------------------
+# `overall` (score.overall_score) is SELF-RELATIVE: percentiles vs. this
+# mountain's own history, so its best-season-ever can outrank an ordinary one.
+# `global_score`/`regional_score` (ski.comparable) are a cross-mountain RANK, so
+# in a league-wide bad year the "best" hill still ranks ~100th -> A+. Neither
+# answers, in absolute terms, "is the skiing actually good here today?".
+#
+# skiability_score does. It's built from ABSOLUTE inches only -- no percentiles,
+# no ranking -- so a number means the same thing at Alta and at a molehill, and
+# it governs the headline grade in BOTH directions: bad conditions can't read
+# high off a #1 ranking (cap), great conditions can't be buried by a crowded
+# leaderboard (floor). Three factors, each a different role:
+#
+#   base   -- the ENABLER: coverage decides what's open/safe/smooth, but a deep
+#             base with no new snow is solid, not epic. Reuses DEPTH_SCORE_CURVE
+#             (saturating), contributes up to SKI_BASE_MAX -- so base alone tops
+#             out around B-; powder is required to reach the A range.
+#   powder -- the DRIVER: recency-weighted fresh + horizon-discounted forecast,
+#             on POWDER_SCORE_CURVE (diminishing returns so ~24" is a near-full
+#             bump, not infinite). Contributes up to SKI_POWDER_MAX and can push
+#             a good-base day to A+.
+#   quality-- the PUNISHER: rain/refreeze/thaw and poor weather scale the whole
+#             thing down (multiplicative, floored at SKI_QUALITY_FLOOR). Mostly
+#             it can only hurt -- an icy or raining day isn't a good day.
+SKI_BASE_MAX = 50.0        # max points from settled base depth (the enabler)
+SKI_POWDER_MAX = 60.0      # max points from powder (fresh + incoming; the driver)
+
+# Recency/horizon weights folding fresh + forecast into "effective powder inches".
+# Snow on the ground this instant is worth most; older fresh has been skied off /
+# settled; imminent forecast powder is nearly as good as on the ground and a real
+# reason to go (per the "24 inches incoming is a huge driver" intent).
+SKI_POWDER_WEIGHTS = {
+    "recent": 1.00,    # trailing COMPARABLE_FRESH_WINDOW_DAYS (~72h) of new snow
+    "week": 0.40,      # the rest of the trailing-7d total (days ~3-7, older)
+    "forecast": 0.85,  # next-72h phase-adjusted expected snowfall (incoming)
+}
+
+# Effective-powder inches -> 0-100. Diminishing returns: a refresh matters, a
+# big storm matters a lot, but 36"+ is not linearly better than 24" (you can
+# only ski so much powder). ~24" lands near the top -> nearly a full letter.
+POWDER_SCORE_CURVE = [(0, 0), (3, 22), (6, 38), (12, 62), (18, 80), (24, 90), (36, 100)]
+
+# Quality multiplier on (base + powder). Weather shaves up to (1 - weather_span);
+# refreeze (icy crust) and thaw (incoming rain/warmth) each apply their own
+# penalty. Floored so even a raining day keeps a sortable, non-zero number.
+SKI_QUALITY = {
+    "weather_span": 0.25,     # weather_q=0 -> ×0.75, weather_q=100 -> ×1.0
+    "refreeze_penalty": 0.35, # full refrozen crust -> ×0.65
+    "thaw_penalty": 0.30,     # full incoming thaw  -> ×0.70
+    "floor": 0.35,            # never scale below this (keeps off-days sortable)
+}
+
+# Absolute skiability value (0-100) -> letter. Unlike GRADE_THRESHOLDS (uniform
+# percentiles) this scores a real inches-based quantity, so the cutoffs are
+# placed by what the number MEANS, then sanity-checked against the live roster's
+# distribution (see docs/tuning.md): A+ is a deep base + a real storm in good
+# weather; a deep-base-no-fresh day sits ~B-; a thin or raining day falls to D/F.
+SKIABILITY_GRADE_THRESHOLDS = [
+    (86, "A+"),
+    (76, "A"),
+    (67, "A-"),
+    (58, "B+"),
+    (49, "B"),
+    (41, "B-"),
+    (33, "C+"),
+    (25, "C"),
+    (18, "C-"),
+    (11, "D"),
+    (0,  "F"),
+]
+
+# ---------------------------------------------------------------------------
 # Cover gate -- skiability is multiplicative, not additive
 # ---------------------------------------------------------------------------
 # The overall score is scaled by a factor derived from ABSOLUTE snow cover:
@@ -1767,7 +1840,11 @@ MEDIUM_RANGE = {
 # station's inches can undercount a resort's real base (config.
 # DEFAULT_BASE_OFFSET_IN, the elevation-offset work). Percentile ranking
 # cannot fix either; both stay open TODOs for a future pass.
-GLOBAL_SCORE_WEIGHTS = {"base": 0.35, "fresh": 0.30, "season": 0.20, "forecast": 0.15}
+# Forecast carries more weight than a "what's on the ground" purist would give
+# it: a big incoming storm is a primary reason to pick a mountain right now, so
+# the RANK reflects it too (the skiability headline gets its own forecast bump
+# via POWDER_SCORE_CURVE). base still leads -- coverage is the precondition.
+GLOBAL_SCORE_WEIGHTS = {"base": 0.32, "fresh": 0.28, "season": 0.15, "forecast": 0.25}
 
 # Trailing window (days) for the comparable score's "fresh" input -- shorter
 # than FRESH_WINDOW_DAYS (7d) on purpose (see GLOBAL_SCORE_WEIGHTS docstring).

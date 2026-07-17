@@ -124,13 +124,18 @@ def score_mountain(
         return row
 
     overall = card["overall"].get(profile) or {}
+    ski = card.get("skiability") or {}
     season = card["grades"]["season"] or {}
     base = card["grades"]["base"] or {}
     fc = card["forecast"] or {}
     ci = card.get("comparable_inputs") or {}
     row.update(
-        score=overall.get("score"),
-        grade=overall.get("grade", "N/A"),
+        # HEADLINE = absolute skiability (see build_snapshot._row_from_card);
+        # the self-relative `overall` rides alongside as historical context.
+        score=ski.get("score"),
+        grade=ski.get("grade", "N/A"),
+        overall_score=overall.get("score"),
+        overall_grade=overall.get("grade", "N/A"),
         in_season=card.get("in_season"),
         cover_depth=card.get("cover_depth"),
         season_grade=season.get("grade"),

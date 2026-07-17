@@ -137,9 +137,10 @@ fly logs | grep "leaving it alone"           # entrypoint kept the live DB
 - **Never scale to 2+ machines.** They cannot share the volume. Fly will either
   refuse or give the second machine its own empty volume, and you'll serve two
   divergent datasets depending on which one the proxy picks.
-- **The seed DB goes stale.** It's a snapshot from whenever you last built. The
-  live stream refreshes forecasts and the score cache, but `raw_observations` only
-  grows when the ingest runs. Schedule `python cli.py ingest` (or equivalent) on
-  the machine, or redeploy periodically and accept a gap.
+- **The seed DB goes stale on a fresh volume.** It's a snapshot from whenever you
+  last built. `api.py` now runs a daily ingest loop in-process (once at startup,
+  then every 24h for as long as the machine stays up) so `raw_observations` keeps
+  growing without a separate cron -- but a brand-new volume still starts from
+  whatever was in the image until that first loop iteration completes.
 - **`fly volumes` snapshots are not backups you've tested.** If the DB matters,
   pull a copy: `fly ssh sftp get /data/ski.db`.

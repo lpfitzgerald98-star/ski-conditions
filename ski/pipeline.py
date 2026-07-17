@@ -6,6 +6,7 @@ and the source clients (write-side). This just wires a mountain key to them.
 
 from __future__ import annotations
 
+import math
 from datetime import date
 
 import numpy as np
@@ -263,6 +264,7 @@ def mountain_scorecard(
 
     forecast_sub = None
     forecast_72h_in = None
+    per_horizon_out = None       # 24/48/72h breakout for the expandable card section
     incoming = None
     weather = None
     weather_q = None
@@ -292,6 +294,7 @@ def mountain_scorecard(
         # in the same inches unit as the other three comparable inputs.
         forecast_72h_in = next(
             (ph["predicted_inches"] for ph in per_horizon if ph["horizon_hours"] == 72), None)
+        per_horizon_out = per_horizon
         # The 4-10 day medium-range band folds in on top, at a small
         # confidence-tapered weight (see combine_forecast_percentile /
         # config.MEDIUM_RANGE) -- it can nudge the blend but never dominate it.
@@ -343,6 +346,13 @@ def mountain_scorecard(
     # is skiable. Note "in_season" in `subscores` is an unrelated legacy key -- it
     # means the trailing-30d percentile, not this gate.
     in_season = score_mod.is_in_season(eff_depth, fresh)
+    # Absolute skiability: the honest "how good is the skiing right now", from
+    # inches only (settled base + recency/horizon-weighted fresh+forecast, scaled
+    # by surface/weather quality). This is the headline that governs the grade in
+    # both directions -- see score.skiability_score / SKIABILITY_GRADE_THRESHOLDS.
+    skiability = score_mod.skiability_score(
+        eff_depth, fresh_72h, fresh, forecast_72h_in,
+        weather_q=weather_q, refreeze=refreeze, thaw=thaw)
     subscores = {
         "season": season.percentile,
         "in_season": month.percentile,
@@ -354,6 +364,10 @@ def mountain_scorecard(
         "incoming": incoming, "weather": weather, "weather_quality": weather_q,
         "fresh_7d": fresh, "cover_factor": cover, "effective_depth": eff_depth,
         "in_season": in_season, "data_age_days": age, "stale": stale,
+        "skiability": skiability,
+        # Per-horizon 24/48/72h forecast breakout (predicted inches + percentile),
+        # for the card's expandable forecast section. None off the live path.
+        "forecast_horizons": per_horizon_out,
         "outlook": outlook, "thaw_index": thaw if outlook is not None else None,
         "refreeze_index": refreeze if outlook is not None else None,
         # Absolute, cross-mountain-comparable inputs for ski.comparable's
@@ -528,7 +542,7 @@ def season_snow_equivalent_in(season: SeasonGrade) -> float | None:
     climate -- see config.GLOBAL_SCORE_WEIGHTS's known-limitation note) but
     internally consistent, and better than silently comparing water to snow.
     """
-    if season is None or season.current_value is None:
+    if season is None or season.current_value is None or math.isnan(season.current_value):
         return None
     if season.metric == "swe_gain":
         return season.current_value * COVER_GATE["swe_to_depth_ratio"]

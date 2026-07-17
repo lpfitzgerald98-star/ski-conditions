@@ -12,6 +12,7 @@ profile, and flattens it into a shape a card can render directly.
 
 from __future__ import annotations
 
+import math
 from datetime import date
 
 from config import (DEFAULT_PROFILE, MOUNTAINS, OVERALL_GRADE_THRESHOLDS,
@@ -22,7 +23,13 @@ from ski.score import apply_off_season_cap, apply_stale_cap, overall_score
 
 
 def _round(v, ndigits: int = 1):
-    """Round a float for display; pass None / non-numbers through untouched."""
+    """Round a float for display; pass None / non-numbers through untouched.
+
+    A NaN (e.g. a pandas sum over a data gap upstream) is treated as missing,
+    not a number: `json.dumps` would otherwise emit the bare token `NaN`, which
+    is invalid JSON and breaks every consumer's parser, not just this field."""
+    if isinstance(v, float) and math.isnan(v):
+        return None
     return round(v, ndigits) if isinstance(v, (int, float)) else v
 
 
@@ -138,6 +145,7 @@ def scorecard(
 
     sub = card["subscores"]
     base = card["base"]
+    ski = card["skiability"]
     outlook = card.get("outlook")
     provider = outlook.provider if outlook is not None else None
     return {
@@ -160,6 +168,19 @@ def scorecard(
         "data_age_days": card.get("data_age_days"),
         "stale": card.get("stale", False),
         "cover_depth": _round(card["effective_depth"], 1),
+        # The HEADLINE: absolute "how good is the skiing right now" (see
+        # score.skiability_score). Governs the grade in both directions -- a
+        # #1-ranked hill on a thin base still reads honestly here, and a great
+        # day can't be buried by a crowded leaderboard. `overall` (below) is
+        # kept as the self-relative "vs this mountain's own history" context.
+        "skiability": {
+            "score": _round(ski.value),
+            "grade": ski.grade,
+            "base_pts": _round(ski.base_pts),
+            "powder_pts": _round(ski.powder_pts),
+            "powder_in": _round(ski.powder_in),
+            "quality_factor": _round(ski.quality_factor, 2),
+        },
         # Absolute inputs to ski.comparable's global/regional score -- distinct
         # from the self-relative percentiles in `grades` (see
         # config.GLOBAL_SCORE_WEIGHTS). Null components are excluded from that
@@ -181,6 +202,19 @@ def scorecard(
             "base": _grade_json(base),
         },
         "forecast": _storm_json(card["incoming"]),
+        # Per-horizon breakout (24/48/72h) for the card's expandable forecast
+        # section: the pinned `forecast` above is the single biggest window; this
+        # lists all near-term horizons so the UI can drop down to the fuller view.
+        # Null off the live path (retro/no-network have no multi-horizon forecast).
+        "forecast_horizons": None if card.get("forecast_horizons") is None else [
+            {
+                "horizon_hours": ph["horizon_hours"],
+                "inches": _round(ph.get("predicted_inches"), 1),
+                "percentile": _round(ph.get("predicted_percentile"), 0),
+                "tmax_f": _round(ph.get("tmax_f"), 0),
+            }
+            for ph in card["forecast_horizons"]
+        ],
         "outlook": None if outlook is None else {
             "provider": provider,
             "rain_72h_in": _round(outlook.rain_72h_in, 2),

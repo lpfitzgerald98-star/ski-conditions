@@ -61,35 +61,64 @@ function regionBlock(card, key) {
            cohort_size: cohort || 1 };
 }
 
-function scoreTile(label, sublabel, grade, value, valueSuffix) {
-  const c = grade ? colorFor(grade) : naColor();
+function scoreTile(label, sublabel, grade, value, valueSuffix, size = 34) {
   return `<div class="side">
     <div class="lbl">${label}</div>
     <div class="score-row">
-      <span class="badge">${badgeSVG(grade || "—", grade || "—", { size: 34 })}</span>
+      <span class="badge">${badgeSVG(grade || "—", grade || "—", { size })}</span>
       <span class="num">${value != null ? value : "—"}<span>${value != null ? valueSuffix : ""}</span></span>
     </div>
     <div class="of">${sublabel}</div>
   </div>`;
 }
 
+// Rank of `row` within `pool` by `field` (higher value = better, #1 = best).
+// Ranks only rows that have a value; returns null when this row has none.
+function rankBy(row, pool, field) {
+  if (!row || row[field] == null) return null;
+  const vals = pool.filter(m => m[field] != null);
+  if (!vals.length) return null;
+  const better = vals.filter(m => m[field] > row[field]).length;
+  return { rank: better + 1, total: vals.length };
+}
+
+// The headline block: absolute SKIABILITY ("how good is the skiing right now")
+// is the hero grade and governs the pin. Global/regional rank ride alongside as
+// the "best available" context -- so a mediocre-but-best mountain reads "C+ · #1
+// to ski now". The self-relative `overall` is demoted to historical context.
 function duo(card, key) {
   const prof = state.profile || card.default_profile;
-  const o = card.overall[prof] || card.overall[card.default_profile] || {};
+  const rel = card.overall[prof] || card.overall[card.default_profile] || {};
+  const ski = card.skiability || {};
+  const row = state.byKey[key];
   const r = regionBlock(card, key);
-  const why = card.in_season === false
-      ? `off-season${card.cover_depth != null ? ` — ${card.cover_depth}" base` : ""}`
-    : card.in_season == null ? "no recent station data"
-    : r.cohort_size <= 1 ? `only tracked resort in ${r.name}` : "not enough data";
-  const overallTile = scoreTile("Overall", `across all ${card.roster_size || "tracked"} mountains`,
-    o.grade, o.score != null ? Math.round(o.score) : null, " / 100");
-  const regionTile = r.score == null
-    ? `<div class="side"><div class="lbl">Within ${r.name}</div>
-         <div class="score-row"><span class="badge">${badgeSVG("—", "—", { size: 34 })}</span>
-         <span class="num">—</span></div><div class="of">${why}</div></div>`
-    : scoreTile(`Within ${r.name}`, `vs ${r.cohort_size - 1} others in ${r.name}`,
-        r.grade, Math.round(r.score), "th pct");
-  return `<div class="duo">${overallTile}${regionTile}</div>`;
+
+  const gGlobal = rankBy(row, state.scores, "global_score");
+  const gRegion = row
+    ? rankBy(row, state.scores.filter(m => m.region === row.region), "regional_score")
+    : null;
+
+  const q = ski.quality_factor;
+  const skiTile = `<div class="side hero">
+    <div class="lbl">Skiing right now</div>
+    <div class="score-row">
+      <span class="badge">${badgeSVG(ski.grade || "—", ski.grade || "—", { size: 46 })}</span>
+      <span class="num">${ski.score != null ? Math.round(ski.score) : "—"}<span>${ski.score != null ? " / 100" : ""}</span></span>
+    </div>
+    <div class="of">absolute conditions${q != null && q < 0.85 ? ` · quality ×${q}` : ""}</div>
+  </div>`;
+
+  const relTile = scoreTile("Historical context",
+    "vs this mountain's own normal", rel.grade,
+    rel.score != null ? Math.round(rel.score) : null, " / 100");
+
+  const bits = [];
+  if (gGlobal) bits.push(`<span class="rank"><b>#${gGlobal.rank}</b> of ${gGlobal.total} to ski now</span>`);
+  if (gRegion) bits.push(`<span class="rank"><b>#${gRegion.rank}</b> in ${escapeHTML(r.name)}</span>`);
+  else if (card.in_season === false) bits.push(`<span class="rank muted">off-season</span>`);
+  const ranks = bits.length ? `<div class="ranks">${bits.join("")}</div>` : "";
+
+  return `<div class="duo">${skiTile}${relTile}</div>${ranks}`;
 }
 
 function gradeCell(k, g) {
@@ -114,7 +143,7 @@ function render(card, key) {
     <h2 id="detail-title">${escapeHTML(card.mountain.name)}</h2>
     <div class="sub">${card.mountain.verified ? "✓ verified station" : "⚠ unverified station"} · ${card.mountain.key}</div>
     ${duo(card, key)}
-    <div class="cap" style="margin:2px 0 4px">${prof} profile${o.leaning ? ` · leaning ${o.leaning}` : ""}</div>
+    <div class="cap" style="margin:2px 0 4px">historical context · ${prof} profile${o.leaning ? ` · leaning ${o.leaning}` : ""}</div>
     <div class="grid2">
       ${gradeCell("Season", g.season)}
       ${gradeCell("Last 30 days", g.in_season)}
@@ -138,11 +167,29 @@ function render(card, key) {
     ${subBar("Conditions", card.subscores.conditions)}
     ${subBar("Incoming snow", card.subscores.forecast)}`;
 
-  if (card.forecast) {
+  // Incoming snow: the single biggest window stays pinned as the summary; click
+  // to expand the full 24/48/72h breakout plus the 4-10 day medium-range band.
+  const hs = card.forecast_horizons || [];
+  const mr = ol && ol.medium_range;
+  if (card.forecast || hs.length || mr) {
     const f = card.forecast;
-    html += `<div class="sec">Incoming snow</div>
-      <div class="storm ${f.alert ? "is-alert" : ""}"><span>next ${f.window_hours}h</span>
-        <span>${f.inches}" · ${f.grade}${f.alert ? " ⚠" : ""}</span></div>`;
+    const summary = f
+      ? `<span>next ${f.window_hours}h</span><span>${f.inches}" · ${f.grade}${f.alert ? " ⚠" : ""}</span>`
+      : `<span>incoming snow</span><span>see forecast</span>`;
+    let rows = "";
+    hs.forEach(h => {
+      rows += `<div class="frow"><span>next ${h.horizon_hours}h</span>
+        <span>${h.inches != null ? h.inches + '"' : "—"}${h.percentile != null ? ` · ${h.percentile}th pct` : ""}</span></div>`;
+    });
+    if (mr)
+      rows += `<div class="frow mr"><span>4–${Math.round(mr.horizon_hours / 24)} day range</span>
+        <span>${mr.low_in}–${mr.high_in}"${mr.mid_in != null ? ` · mid ${mr.mid_in}"` : ""}</span></div>`;
+    html += `<div class="sec">Incoming snow</div>`;
+    html += rows
+      ? `<details class="forecast"><summary class="storm ${f && f.alert ? "is-alert" : ""}">
+           ${summary}<span class="chev" aria-hidden="true">▾</span></summary>
+         <div class="fbreak">${rows}</div></details>`
+      : `<div class="storm ${f && f.alert ? "is-alert" : ""}">${summary}</div>`;
   }
   if (ol && ol.thaw_index != null && ol.thaw_index >= 0.15) {
     const bits = [];
@@ -169,7 +216,8 @@ function render(card, key) {
   el.innerHTML = html;
   el.querySelector(".close").addEventListener("click", close);
   focusSilently(el.querySelector(".close"));
-  announce(`${card.mountain.name}. Overall ${o.grade || "not scored"}.`);
+  const skg = (card.skiability || {}).grade;
+  announce(`${card.mountain.name}. Skiing right now ${skg || "not scored"}.`);
 }
 
 // A compact card for a historical date, built from the roster row (no per-date
@@ -192,11 +240,11 @@ function renderHistCard(row, key) {
     <h2 id="detail-title">${escapeHTML(row.name)}</h2>
     <div class="sub">as of ${state.histDate} · historical (snow-based)</div>
     <div class="duo">
-      <div class="side">
-        <div class="lbl">Overall</div>
+      <div class="side hero">
+        <div class="lbl">Skiing that day</div>
         <div class="score-row"><span class="badge">${badgeSVG(row.grade || "—", row.grade || "—", { size: 34 })}</span>
           <span class="num">${row.score != null ? Math.round(row.score) : "—"}<span> / 100</span></span></div>
-        <div class="of">across all tracked mountains</div>
+        <div class="of">absolute conditions</div>
       </div>
       ${rTile}
     </div>

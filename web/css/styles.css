@@ -283,6 +283,16 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .duo .num { font-size: 20px; font-weight: 700; line-height: 1; }
 .duo .num span { font-size: 10px; font-weight: 400; color: var(--text-muted); }
 .duo .of { font-size: 10px; color: var(--text-muted); margin-top: 5px; }
+/* Skiability hero: the headline grade sits a notch louder than its neighbour. */
+.duo .side.hero { background: var(--panel-2); border-color: var(--accent); }
+.duo .side.hero .num { font-size: 24px; }
+.duo .side.hero .lbl { color: var(--text); }
+/* Rank chips under the headline: the "best available" context. */
+.ranks { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 2px 0 var(--sp-2); }
+.ranks .rank { font-size: 11px; color: var(--text-muted); background: var(--panel-2);
+  border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px 10px; }
+.ranks .rank b { color: var(--accent); font-weight: 700; }
+.ranks .rank.muted { opacity: .7; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin: var(--sp-3) 0; }
 .cell { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 8px 10px; }
@@ -299,6 +309,16 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 
 .storm { font-size: 12px; display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--line); }
 .storm.is-alert span:last-child { color: var(--alert); font-weight: 600; }
+/* Expandable forecast: pinned biggest window in the summary, horizons on click. */
+details.forecast > summary { cursor: pointer; list-style: none; align-items: center; gap: var(--sp-2); }
+details.forecast > summary::-webkit-details-marker { display: none; }
+details.forecast .chev { color: var(--text-muted); transition: transform .15s ease; margin-left: auto; }
+details.forecast[open] .chev { transform: rotate(180deg); }
+.fbreak { padding: 2px 0 4px; }
+.fbreak .frow { display: flex; justify-content: space-between; font-size: 11.5px;
+  color: var(--text-muted); padding: 3px 0 3px 10px; }
+.fbreak .frow.mr { border-top: 1px dashed var(--line); margin-top: 2px; padding-top: 5px; }
+.fbreak .frow span:last-child { color: var(--text); }
 .note {
   font-size: 11.5px; color: var(--text-muted); line-height: 1.5;
   margin-top: var(--sp-3); padding: 8px 10px;
