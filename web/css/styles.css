@@ -196,6 +196,19 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .marker:focus-visible svg .ring { opacity: 1; }
 .marker.is-stale { opacity: .45; }
 .marker.is-alert svg .alert-ring { opacity: 1; }
+/* When an alert first appears (map.js toggles .alert-pulsing on the false->true
+   transition only, not on every repaint), the ring bursts outward 4 times over
+   ~8s, then this animation ends and the plain .alert-ring above carries the
+   static outline for as long as the alert stays active. Global reduced-motion
+   handling (tokens.css) already zeroes animation-duration site-wide. */
+.marker svg .alert-pulse-ring { transform-origin: center; transform-box: fill-box; }
+.marker.alert-pulsing svg .alert-pulse-ring { animation: alert-pulse 2000ms var(--ease) 4; }
+@keyframes alert-pulse {
+  0%   { opacity: .9;  transform: scale(.7); }
+  35%  { opacity: .25; transform: scale(1.35); }
+  45%  { opacity: 0;   transform: scale(1.35); }
+  100% { opacity: 0;   transform: scale(1.35); }
+}
 
 /* Cluster bubble: a focusable count badge that zooms to its members. The ring is
    a conic slice showing the in-season share (--skiable) without color-coding.
@@ -284,8 +297,11 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .duo .side { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: var(--sp-3); }
 .duo .lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
 .duo .score-row { display: flex; align-items: center; gap: var(--sp-2); margin-top: 7px; }
-.duo .num { font-size: 20px; font-weight: 700; line-height: 1; }
-.duo .num span { font-size: 10px; font-weight: 400; color: var(--text-muted); }
+/* Score digits get the display face; the "/100" suffix stays --font (it's
+   muted supporting text, not the headline number). */
+.duo .num { font-size: 20px; font-weight: 700; line-height: 1;
+  font-family: var(--font-display); letter-spacing: -.01em; }
+.duo .num span { font-size: 10px; font-weight: 400; color: var(--text-muted); font-family: var(--font); }
 .duo .of { font-size: 10px; color: var(--text-muted); margin-top: 5px; }
 /* Skiability hero: the headline grade sits a notch louder than its neighbour. */
 .duo .side.hero { background: var(--panel-2); border-color: var(--accent); }

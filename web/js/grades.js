@@ -96,16 +96,21 @@ function shapePath(shape, S) {
 // A complete badge SVG: shape + centered label, plus a focus ring and an alert
 // ring that CSS toggles. `S` is the viewBox size; the caller scales it in CSS.
 // The `.badge-fill` class is what map.js recolors in place for the live fade.
+// `.alert-pulse-ring` is always present (not conditionally rendered) so map.js's
+// shape-unchanged fast path -- which mutates fill/label instead of rebuilding
+// this markup -- can still find it and trigger the animation later.
 export function badgeSVG(label, grade, { size = MARKER_SIZE, alert = false } = {}) {
   const S = size;
   const fill = colorFor(grade === "—" || grade === "?" ? null : grade);
   const fg = textOn(fill);
   const fs = label.length > 1 ? S * 0.42 : S * 0.5;
+  const alertStroke = shapePath(shapeFor(grade), S)
+    .replace("/>", ` fill="none" stroke="var(--alert)" stroke-width="${S * 0.14}"/>`);
   return `<svg viewBox="0 0 ${S} ${S}" width="${S}" height="${S}" role="img" aria-hidden="true">
     <g class="ring" style="opacity:0"><circle cx="${S / 2}" cy="${S / 2}" r="${S / 2 - 1}"
        fill="none" stroke="var(--focus)" stroke-width="2"/></g>
-    <g class="alert-ring" style="opacity:${alert ? 1 : 0}">
-       ${shapePath(shapeFor(grade), S).replace("/>", ` fill="none" stroke="var(--alert)" stroke-width="${S * 0.14}"/>`)}</g>
+    <g class="alert-pulse-ring" style="opacity:0">${alertStroke}</g>
+    <g class="alert-ring" style="opacity:${alert ? 1 : 0}">${alertStroke}</g>
     <g class="badge-fill" fill="${fill}" stroke="rgba(0,0,0,.35)" stroke-width="1">
        ${shapePath(shapeFor(grade), S)}</g>
     <text x="${S / 2}" y="${S / 2}" fill="${fg}" font-family="var(--font)"

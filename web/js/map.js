@@ -168,7 +168,17 @@ function paint(el, row, d, st, face) {
     el.dataset.shape = shape;
   }
   el.classList.toggle("is-stale", st === "stale");
+  // The pulse should fire when an alert NEWLY appears -- first paint with
+  // alert=true counts (that's "the alert appearing" from the user's view on
+  // page load) -- but not on every later repaint while it's already showing,
+  // so a stale->live fade or grade tick doesn't re-trigger it.
+  const wasAlert = el.classList.contains("is-alert");
   el.classList.toggle("is-alert", !!row.alert);
+  if (row.alert && !wasAlert) {
+    el.classList.remove("alert-pulsing");
+    void el.offsetWidth;
+    el.classList.add("alert-pulsing");
+  }
   el.setAttribute("aria-label", ariaFor(row, d, st, face));
   el.dataset.state = st;
 }
