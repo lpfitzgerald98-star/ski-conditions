@@ -150,30 +150,31 @@ function render(card, key) {
 
   let html = `<button class="close" type="button" aria-label="Close details">✕</button>
     <h2 id="detail-title">${escapeHTML(card.mountain.name)}</h2>
-    <div class="sub">${card.mountain.verified ? "✓ verified station" : "⚠ unverified station"} · ${card.mountain.key}</div>
-    ${duo(card, key)}
+    <div class="sub">${card.mountain.verified ? "✓ verified station" : "⚠ unverified station"} · ${card.mountain.key}</div>`;
+
+  // Current weather: a compact one-liner right under the name, not its own
+  // section down the card -- it's context for everything below, not a result.
+  if (wx) {
+    const bits = [
+      wx.temperature_f != null ? `${wx.temperature_f}°F` : null,
+      wx.wind_mph != null ? `${wx.wind_mph} mph wind` : null,
+      wx.sky_cover_pct != null ? `${wx.sky_cover_pct}% cloud` : null,
+    ].filter(Boolean);
+    if (bits.length) html += `<div class="cap wx-line">${bits.join(" · ")}</div>`;
+  } else {
+    html += `<div class="cap wx-line">No live forecast for this snapshot — score built from snow history + base.</div>`;
+  }
+
+  html += `${duo(card, key)}
     <div class="cap" style="margin:2px 0 4px">historical context · ${prof} profile${o.leaning ? ` · leaning ${o.leaning}` : ""}</div>`;
 
   // The AI one-liner explaining the grade (built server-side with the scoring
   // job, cached per day -- see ski/commentary.py). Absent off-season or when
   // the build ran without credentials; the card simply shows nothing then.
-  // Sits between the grades above and the raw metrics below -- the sentence
-  // that explains the numbers you're about to read.
   if (card.commentary)
     html += `<div class="note commentary">${escapeHTML(card.commentary)}</div>`;
 
-  html += `<div class="grid2">
-      ${gradeCell("Season", g.season)}
-      ${gradeCell("Last 30 days", g.in_season)}
-      <div class="cell"><div class="k">Base</div><div class="v">${cond.base_depth != null ? cond.base_depth + '"' : "—"}
-        ${g.base && g.base.grade ? `<small>${g.base.grade}</small>` : ""}</div></div>
-      <div class="cell"><div class="k">Fresh (7d)</div><div class="v">${cond.fresh_7d != null ? cond.fresh_7d + '"' : "—"}</div></div>
-    </div>`;
-
-  if (card.cover_factor != null && card.cover_factor < 1)
-    html += `<div class="note">Cover gate ×${card.cover_factor} — a thin base caps the overall score.</div>`;
-
-  // Incoming snow gets its own emphasized section, ahead of the sub-score bars --
+  // Incoming snow: its own emphasized section right below the commentary --
   // it's the one forward-looking number on an otherwise backward-looking card.
   // The single biggest window stays pinned as the summary; click to expand the
   // full 24/48/72h breakout plus the 4-10 day medium-range band.
@@ -210,20 +211,20 @@ function render(card, key) {
   if (ol && ol.refreeze_index != null && ol.refreeze_index >= 0.15)
     html += `<div class="note warn">🧊 Refrozen crust likely — a recent thaw refroze and hasn't been resurfaced by new snow.</div>`;
 
+  html += `<div class="grid2">
+      ${gradeCell("Season", g.season)}
+      ${gradeCell("Last 30 days", g.in_season)}
+      <div class="cell"><div class="k">Base</div><div class="v">${cond.base_depth != null ? cond.base_depth + '"' : "—"}
+        ${g.base && g.base.grade ? `<small>${g.base.grade}</small>` : ""}</div></div>
+      <div class="cell"><div class="k">Fresh (7d)</div><div class="v">${cond.fresh_7d != null ? cond.fresh_7d + '"' : "—"}</div></div>
+    </div>`;
+
   html += `<div class="sec">Sub-scores</div>
     ${subBar("Season to date", card.subscores.season)}
     ${subBar("Last 30 days", card.subscores.in_season)}
     ${subBar("Conditions", card.subscores.conditions)}
     ${subBar("Incoming snow", card.subscores.forecast)}`;
 
-  if (wx) {
-    html += `<div class="sec">Current weather</div>
-      <div class="cap">${wx.temperature_f != null ? wx.temperature_f + "°F" : ""}
-        ${wx.wind_mph != null ? "· " + wx.wind_mph + " mph wind" : ""}
-        ${wx.sky_cover_pct != null ? "· " + wx.sky_cover_pct + "% cloud" : ""}</div>`;
-  } else {
-    html += `<div class="note">No live forecast for this snapshot — score built from snow history + base.</div>`;
-  }
   if (card.sources) {
     const s = card.sources;
     html += `<div class="cap" style="margin-top:10px;opacity:.72">data: history ${s.history}${s.forecast ? ` · forecast ${s.forecast}` : " · no forecast"}${s.weather ? ` · weather ${s.weather}` : ""}</div>`;

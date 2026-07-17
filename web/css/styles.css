@@ -278,6 +278,7 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .detail h2 { font-size: 17px; font-weight: 700; padding-right: 36px; letter-spacing: -.01em; }
 .detail .sub { color: var(--text-muted); font-size: 12px; margin-top: 3px; }
 .detail .cap { font-size: 11px; color: var(--text-muted); }
+.detail .cap.wx-line { margin-top: 4px; }
 
 .duo { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin: var(--sp-4) 0 var(--sp-2); }
 .duo .side { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: var(--sp-3); }
