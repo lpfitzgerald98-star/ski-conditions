@@ -23,7 +23,7 @@ from ski import commentary, commentary_rules  # noqa: E402
 def _facts(mountain="Alta, UT", d="2026-01-15", grade="A", fresh=18.0, base=60.0,
            season=90.0, month=None, incoming=8.0, hrs=48, alert=False, progress=0.5):
     return {
-        "mountain": mountain, "date": d, "overall_grade": grade,
+        "mountain": mountain, "date": d, "grade": grade,
         "fresh_snow_last_7_days_inches": fresh, "base_depth_inches": base,
         "season_to_date_percentile_vs_history": season,
         "last_30_days_percentile_vs_history": month,
@@ -105,7 +105,8 @@ def test_rules_path_is_default_and_needs_no_db():
     card = {
         "mountain": {"name": "Alta, UT"}, "as_of": "2026-01-15",
         "default_profile": "dynamic", "in_season": True, "season_progress": 0.5,
-        "overall": {"dynamic": {"score": 80, "grade": "A-"}},
+        "skiability": {"score": 80, "grade": "A-"},
+        "overall": {"dynamic": {"score": 40, "grade": "C-"}},
         "grades": {"season": {"percentile": 88}, "in_season": {"percentile": 80},
                    "base": {"grade": "A"}},
         "conditions": {"fresh_7d": 14.0, "base_depth": 55},

@@ -73,11 +73,17 @@ def connect(db_path: str | Path | None = None) -> sqlite3.Connection:
 
 def facts_from_card(card: dict) -> dict | None:
     """The structured inputs the model is allowed to phrase, or None when the
-    off-season gate applies (no positive evidence of cover, or no score)."""
+    off-season gate applies (no positive evidence of cover, or no score).
+
+    The grade explained here is `skiability` (absolute "how good is the
+    skiing right now") -- the same grade that drives the pin, the leaderboard,
+    and the card's headline tile. Explaining the self-relative `overall`
+    grade instead would let the prose's tone disagree with the number the
+    reader is looking at."""
     if card.get("in_season") is not True:
         return None
-    overall = (card.get("overall") or {}).get(card.get("default_profile")) or {}
-    if overall.get("score") is None:
+    skiability = card.get("skiability") or {}
+    if skiability.get("score") is None:
         return None
 
     g = card.get("grades") or {}
@@ -87,7 +93,7 @@ def facts_from_card(card: dict) -> dict | None:
     return {
         "mountain": (card.get("mountain") or {}).get("name"),
         "date": card.get("as_of"),
-        "overall_grade": overall.get("grade"),
+        "grade": skiability.get("grade"),
         "fresh_snow_last_7_days_inches": cond.get("fresh_7d"),
         "base_depth_inches": cond.get("base_depth"),
         "season_to_date_percentile_vs_history": season.get("percentile"),
@@ -145,7 +151,7 @@ def get_or_generate(key: str, as_of: date, card: dict,
         row = conn.execute(
             "SELECT text, grade FROM commentary WHERE mountain_key=? AND as_of=?",
             (key, as_of.isoformat())).fetchone()
-        grade = facts.get("overall_grade")
+        grade = facts.get("grade")
         # A same-day regrade (live rescoring moved the letter) invalidates the
         # cached prose -- it would explain a grade the card no longer shows.
         if row and row[1] == grade:

@@ -265,7 +265,7 @@ def _forecast_active(r: random.Random, f: dict, card: dict | None) -> str | None
 def _forecast_dry(r: random.Random, f: dict) -> str | None:
     """The dry-forecast filler, read up or down by how good things already are.
     Lowest priority for the second sentence, behind any real caveat."""
-    tier = _tier(f["overall_grade"])
+    tier = _tier(f["grade"])
     if tier in ("great", "good"):
         return r.choice([
             "Nothing new in the forecast, but there's plenty already down.",
@@ -297,7 +297,7 @@ def _caveat(r: random.Random, f: dict, card: dict | None) -> str | None:
             "Expect a firm, crusty surface early after a recent melt-freeze.",
             "A recent melt-freeze means an icy start until it softens.",
         ])
-    if base is not None and base < 18 and _tier(f["overall_grade"]) != "poor":
+    if base is not None and base < 18 and _tier(f["grade"]) != "poor":
         return r.choice([
             "Coverage is still thin, so mind the early-season hazards.",
             "The base is shallow, though -- watch for buried obstacles.",
@@ -321,7 +321,7 @@ def render(facts: dict, card: dict | None = None) -> str:
     grade and its driving numbers are present. `card` is the full scorecard, used
     only for the optional forecast/surface extras (thaw, refreeze, staleness).
     """
-    grade = facts["overall_grade"]
+    grade = facts["grade"]
     # Stable per (mountain, day, grade); varied across mountains. A regrade on the
     # same day reshuffles, which is fine -- the numbers changed too.
     seed = f"{facts.get('mountain')}|{facts.get('date')}|{grade}"

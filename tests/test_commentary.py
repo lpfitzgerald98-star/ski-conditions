@@ -27,7 +27,12 @@ def _card(in_season=True, score=55.0, grade="B+"):
         "default_profile": "dynamic",
         "in_season": in_season,
         "season_progress": 0.55,
-        "overall": {"dynamic": {"score": score, "grade": grade}},
+        # commentary explains the ABSOLUTE skiability grade, not the
+        # self-relative `overall` -- keep both present, like a real card, but
+        # they intentionally differ so a test asserting on one can't pass by
+        # accident against the other.
+        "skiability": {"score": score, "grade": grade},
+        "overall": {"dynamic": {"score": 40.0, "grade": "C-"}},
         "grades": {
             "season": {"percentile": 82},
             "in_season": {"percentile": 74},
@@ -46,7 +51,7 @@ def _tmp_db():
 
 def test_facts_use_only_card_numbers():
     facts = commentary.facts_from_card(_card())
-    assert facts["overall_grade"] == "B+"
+    assert facts["grade"] == "B+"
     assert facts["fresh_snow_last_7_days_inches"] == 18.0
     assert facts["season_to_date_percentile_vs_history"] == 82
     assert facts["incoming_snow_inches"] == 6.0
