@@ -278,7 +278,7 @@ def mountain_scorecard(
         try:
             # The "incoming" badge stays exactly as before -- the single biggest
             # of the 24/72h storm windows, unrelated to the horizon blend below.
-            inc = forecast_incoming_storms(key, db_path, outlook=outlook)
+            inc = forecast_incoming_storms(key, db_path, outlook=outlook, obs=obs)
             incoming = max(inc, key=lambda s: s.total_inches) if inc else None
         except Exception:  # noqa: BLE001
             pass
@@ -286,7 +286,7 @@ def mountain_scorecard(
         # weighted heaviest) with a temperature-based precip-phase correction --
         # see weighted_incoming_percentile / config.FORECAST_HORIZON_WEIGHTS.
         weighted_pct, has, per_horizon = weighted_incoming_percentile(
-            key, outlook, db_path)
+            key, outlook, db_path, obs=obs)
         # The comparable score's "forecast" input: the absolute (not
         # percentile) 72h phase-adjusted total -- "how much more is coming",
         # in the same inches unit as the other three comparable inputs.
@@ -295,7 +295,7 @@ def mountain_scorecard(
         # The 4-10 day medium-range band folds in on top, at a small
         # confidence-tapered weight (see combine_forecast_percentile /
         # config.MEDIUM_RANGE) -- it can nudge the blend but never dominate it.
-        mr_pct = medium_range_percentile(key, outlook.medium_range, db_path)
+        mr_pct = medium_range_percentile(key, outlook.medium_range, db_path, obs=obs)
         combined_pct = combine_forecast_percentile(
             weighted_pct, mr_pct,
             outlook.medium_range.weight_factor if outlook.medium_range else 0.0)
@@ -323,7 +323,7 @@ def mountain_scorecard(
     elif retro:
         # Historical date: the "incoming" storm is what actually fell next, read
         # from the DB. Snow only -- no thaw/weather without stored temperature.
-        inc = retro_incoming_storms(key, as_of, db_path)
+        inc = retro_incoming_storms(key, as_of, db_path, obs=obs)
         incoming = max(inc, key=lambda s: s.total_inches) if inc else None
         has = incoming is not None and \
             incoming.total_inches >= STORM_THRESHOLDS["grade_baseline_min_inches"]
@@ -538,6 +538,7 @@ def season_snow_equivalent_in(season: SeasonGrade) -> float | None:
 def weighted_incoming_percentile(
     key: str, outlook, db_path: str = DB_PATH,
     horizons=FORECAST_HORIZONS_HOURS, weights: dict = FORECAST_HORIZON_WEIGHTS,
+    obs: pd.DataFrame | None = None,
 ) -> tuple[float | None, bool, list[dict]]:
     """Blend the incoming-snow percentile across forecast horizons, near-term
     weighted heaviest (config.FORECAST_HORIZON_WEIGHTS -- forecast skill degrades
@@ -554,9 +555,13 @@ def weighted_incoming_percentile(
     per_horizon is one dict per horizon (for forecast_log / testing): percentile
     is None only when no horizon has both a phase-adjusted total and a historical
     baseline to rank it against (e.g. a brand-new station).
+
+    `obs` (a pre-loaded observations frame, e.g. from `mountain_scorecard`) skips
+    a second full-history DB read; when None it's read fresh, same as before.
     """
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     baseline = STORM_THRESHOLDS["grade_baseline_min_inches"]
     acc = total_w = 0.0
     has_snow = False
@@ -581,18 +586,22 @@ def weighted_incoming_percentile(
     return blended, has_snow, per_horizon
 
 
-def medium_range_percentile(key: str, mr, db_path: str = DB_PATH) -> float | None:
+def medium_range_percentile(key: str, mr, db_path: str = DB_PATH,
+                            obs: pd.DataFrame | None = None) -> float | None:
     """Percentile-rank a medium-range band's midpoint against this mountain's
     own history of that same window length -- the same STORM baseline the
     near-term horizons and the measured storm letter grade all use, so a
     medium-range read sits on the identical scale.
 
     `mr` is an outlook.MediumRangeBand or None. Returns None when there's no
-    band, or no history to rank it against (a brand-new station)."""
+    band, or no history to rank it against (a brand-new station). `obs` (a
+    pre-loaded observations frame, e.g. from `mountain_scorecard`) skips a
+    second full-history DB read; when None it's read fresh, same as before."""
     if mr is None:
         return None
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     if obs.empty:
         return None
     window_days = max(1, mr.horizon_hours // 24)
@@ -624,7 +633,8 @@ def combine_forecast_percentile(
 
 
 def forecast_incoming_storms(
-    key: str, db_path: str = DB_PATH, windows_hours=(24, 72), outlook=None
+    key: str, db_path: str = DB_PATH, windows_hours=(24, 72), outlook=None,
+    obs: pd.DataFrame | None = None,
 ) -> list[StormGrade]:
     """Grade the snow FORECAST to fall over the next 24/72h against storm history.
 
@@ -635,9 +645,13 @@ def forecast_incoming_storms(
 
     `outlook` (a pre-fetched sources.outlook.Outlook) avoids a second provider
     call; when None it is fetched via the mountain's provider (NWS or Open-Meteo).
+    `obs` (a pre-loaded observations frame, e.g. from `mountain_scorecard`) skips
+    a second full-history DB read + season-percentile recompute; when None it's
+    read fresh, same as before.
     """
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     if outlook is None:
         outlook = fetch_outlook_for_mountain(key)
     if outlook is None:
@@ -658,15 +672,21 @@ def forecast_incoming_storms(
 
 
 def retro_incoming_storms(
-    key: str, as_of: date, db_path: str = DB_PATH, windows_hours=(24, 72)
+    key: str, as_of: date, db_path: str = DB_PATH, windows_hours=(24, 72),
+    obs: pd.DataFrame | None = None,
 ) -> list[StormGrade]:
     """The RETROSPECTIVE incoming storm for a past `as_of`: instead of a live
     forecast, grade the snow the station actually recorded in the forward window
     (as_of, as_of + wh]. Same storm-grading scale as the live path, so a
     historical "good weekend" reads on the same curve as a forecast one.
+
+    `obs` (a pre-loaded observations frame, e.g. from `mountain_scorecard`) skips
+    a second full-history DB read + season-percentile recompute; when None it's
+    read fresh, same as before.
     """
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     if obs.empty:
         return []
     season_pct = grade_season_to_date(
