@@ -107,13 +107,15 @@ def _null_row(key: str, error: str) -> dict:
     return row
 
 
-def ingest_all(keys: list[str], pause: float = 0.5) -> None:
+def ingest_all(keys: list[str], pause: float = 2.0) -> None:
     """Refresh every station's raw history before scoring.
 
     Resilient by design: the Action runs against flaky upstreams (NRCS DNS,
     Open-Meteo 429s), and one dead source must degrade to a gray pin, never fail
     the whole build. Each mountain gets a couple of tries; the pause spaces out
-    the rate-limited networks (Open-Meteo).
+    the rate-limited networks (Open-Meteo). The Action's runner IP is shared
+    across many concurrent GitHub-hosted jobs, so it draws 429s harder than a
+    local run does -- pacing here must be more patient than 0.5s ever was.
     """
     for i, key in enumerate(keys, 1):
         for attempt in (1, 2, 3):
@@ -125,7 +127,7 @@ def ingest_all(keys: list[str], pause: float = 0.5) -> None:
                 if attempt == 3:
                     print(f"[ingest {i:>2}/{len(keys)}] {key}: FAILED ({exc})")
                 else:
-                    time.sleep(attempt * 1.5)
+                    time.sleep(attempt * 5)
         time.sleep(pause)
 
 

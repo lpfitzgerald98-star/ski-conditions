@@ -130,8 +130,8 @@ def _ingest_all_sync() -> None:
                     failed.append(key)
                     print(f"[daily-ingest] {key}: FAILED ({exc})")
                 else:
-                    time.sleep(attempt * 1.5)
-        time.sleep(0.5)  # space out the rate-limited upstreams (Open-Meteo)
+                    time.sleep(attempt * 5)
+        time.sleep(2)  # space out the rate-limited upstreams (Open-Meteo 429s)
     print(f"[daily-ingest] done: {ok}/{len(keys)} ok"
           + (f", failed: {failed}" if failed else ""))
 
