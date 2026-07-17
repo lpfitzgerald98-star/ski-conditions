@@ -286,7 +286,7 @@ def mountain_scorecard(
         # weighted heaviest) with a temperature-based precip-phase correction --
         # see weighted_incoming_percentile / config.FORECAST_HORIZON_WEIGHTS.
         weighted_pct, has, per_horizon = weighted_incoming_percentile(
-            key, outlook, db_path)
+            key, outlook, db_path, obs=obs)
         # The comparable score's "forecast" input: the absolute (not
         # percentile) 72h phase-adjusted total -- "how much more is coming",
         # in the same inches unit as the other three comparable inputs.
@@ -295,7 +295,7 @@ def mountain_scorecard(
         # The 4-10 day medium-range band folds in on top, at a small
         # confidence-tapered weight (see combine_forecast_percentile /
         # config.MEDIUM_RANGE) -- it can nudge the blend but never dominate it.
-        mr_pct = medium_range_percentile(key, outlook.medium_range, db_path)
+        mr_pct = medium_range_percentile(key, outlook.medium_range, db_path, obs=obs)
         combined_pct = combine_forecast_percentile(
             weighted_pct, mr_pct,
             outlook.medium_range.weight_factor if outlook.medium_range else 0.0)
@@ -538,6 +538,7 @@ def season_snow_equivalent_in(season: SeasonGrade) -> float | None:
 def weighted_incoming_percentile(
     key: str, outlook, db_path: str = DB_PATH,
     horizons=FORECAST_HORIZONS_HOURS, weights: dict = FORECAST_HORIZON_WEIGHTS,
+    obs: pd.DataFrame | None = None,
 ) -> tuple[float | None, bool, list[dict]]:
     """Blend the incoming-snow percentile across forecast horizons, near-term
     weighted heaviest (config.FORECAST_HORIZON_WEIGHTS -- forecast skill degrades
@@ -554,9 +555,13 @@ def weighted_incoming_percentile(
     per_horizon is one dict per horizon (for forecast_log / testing): percentile
     is None only when no horizon has both a phase-adjusted total and a historical
     baseline to rank it against (e.g. a brand-new station).
+
+    `obs` (a pre-loaded observations frame, e.g. from `mountain_scorecard`) skips
+    a second full-history DB read; when None it's read fresh, same as before.
     """
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     baseline = STORM_THRESHOLDS["grade_baseline_min_inches"]
     acc = total_w = 0.0
     has_snow = False
@@ -581,18 +586,22 @@ def weighted_incoming_percentile(
     return blended, has_snow, per_horizon
 
 
-def medium_range_percentile(key: str, mr, db_path: str = DB_PATH) -> float | None:
+def medium_range_percentile(key: str, mr, db_path: str = DB_PATH,
+                            obs: pd.DataFrame | None = None) -> float | None:
     """Percentile-rank a medium-range band's midpoint against this mountain's
     own history of that same window length -- the same STORM baseline the
     near-term horizons and the measured storm letter grade all use, so a
     medium-range read sits on the identical scale.
 
     `mr` is an outlook.MediumRangeBand or None. Returns None when there's no
-    band, or no history to rank it against (a brand-new station)."""
+    band, or no history to rank it against (a brand-new station). `obs` (a
+    pre-loaded observations frame, e.g. from `mountain_scorecard`) skips a
+    second full-history DB read; when None it's read fresh, same as before."""
     if mr is None:
         return None
     m = get_mountain(key)
-    obs = read_observations(db_path, mountain_station(m))
+    if obs is None:
+        obs = read_observations(db_path, mountain_station(m))
     if obs.empty:
         return None
     window_days = max(1, mr.horizon_hours // 24)

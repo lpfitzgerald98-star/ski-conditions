@@ -79,7 +79,11 @@ def _blend(component_pcts: dict[str, float | None],
             if p is not None and weights.get(c, 0.0) > 0]
     if not parts:
         return None
-    return sum(w * p for w, p in parts) / sum(w for w, _ in parts)
+    # Same float-noise clamp as score.overall_score: weights summing to
+    # "1.0" in config can land a hair off in binary float (e.g. 0.9999999999999999),
+    # nudging an exact 100 numerator to 100.00000000000001 on division.
+    val = sum(w * p for w, p in parts) / sum(w for w, _ in parts)
+    return max(0.0, min(100.0, val))
 
 
 def score_population(
