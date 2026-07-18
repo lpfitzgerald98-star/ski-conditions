@@ -1,0 +1,57 @@
+diff a/ski/commentary.py b/ski/commentary.py	(rejected hunks)
+@@ -59,6 +59,17 @@ Rules:
+ - Lead with the grade's main driver: recent snowfall, how the season compares
+   to this mountain's own history (the percentiles), base depth, or incoming
+   snow.
++- SURFACE QUALITY OVERRIDES QUANTITY. `surface_quality_factor` is 1.0 for a
++  pristine surface and lower when the snow skis badly. When snow totals are high
++  but this factor is low, LEAD with the surface problem, not the inches: a
++  high `refreeze_crust_index` means a refrozen, firm/crusty surface; a high
++  `incoming_thaw_index` means warm rain is about to turn it heavy and wet; a high
++  `new_snow_density` (water fraction, ~0.15+) means the fresh snow itself fell
++  heavy and wet rather than light and dry; a high `wind_scour_index` (~0.4+) means
++  sustained wind has scoured or wind-slabbed the fresh snow. The grade already
++  reflects the poor surface, so the sentence must too -- "big totals but
++  crusty/heavy/wind-hammered" reads very differently from the same totals cold,
++  light, calm, and clean.
+ - "percentile" fields compare this mountain to ITS OWN historical record for
+   this point in the season, not to other mountains.
+ - At most two sentences. No markdown, no lists.\
+@@ -90,6 +101,8 @@ def facts_from_card(card: dict) -> dict | None:
+     season, month = g.get("season") or {}, g.get("in_season") or {}
+     cond = card.get("conditions") or {}
+     fc = card.get("forecast") or {}
++    outlook = card.get("outlook") or {}
++    sq = card.get("snow_quality") or {}
+     return {
+         "mountain": (card.get("mountain") or {}).get("name"),
+         "date": card.get("as_of"),
+@@ -102,6 +115,28 @@ def facts_from_card(card: dict) -> dict | None:
+         "incoming_snow_window_hours": fc.get("window_hours"),
+         "storm_alert": fc.get("alert") or None,
+         "season_progress_fraction": card.get("season_progress"),
++        # Surface-quality signals (Phase 1): the SAME numbers that scale the
++        # skiability grade down, exposed here so BOTH the rules path and the AI
++        # path can explain the grade in skiability terms rather than dressing a
++        # quantity number in adjectives. quality_factor is 1.0 (pristine) down to
++        # SKI_QUALITY['floor']; the two indices are 0 (clean) .. 1 (severe).
++        "surface_quality_factor": skiability.get("quality_factor"),
++        "refreeze_crust_index": outlook.get("refreeze_index"),
++        "incoming_thaw_index": outlook.get("thaw_index"),
++        "weather_quality": cond.get("weather_quality"),
++        # New-snow water fraction (Phase 2): ~0.05 light/dry .. ~0.20+ heavy/wet.
++        # Lets the prose say WHY a big-totals day still skis heavy, and vouch for
++        # light snow when it's genuinely dry.
++        "new_snow_density": skiability.get("new_snow_density"),
++        # Wind scour (Phase 3), 0 (calm) .. 1 (fresh snow stripped/slabbed). Lets
++        # the prose flag a wind-hammered storm, and vouch for wind-sheltered snow.
++        "wind_scour_index": skiability.get("wind_scour"),
++        # Buried rain/melt crust (Phase 5b), 0..1 -- an OLD ice layer lurking under
++        # newer snow, distinct from a fresh melt-freeze. Lets the prose name it.
++        "buried_crust_index": skiability.get("buried_crust"),
++        # The explainable snow-quality number itself (Phase 0 scaffold; density/
++        # wind land in Phases 2/3). Carried for the AI path and future clauses.
++        "snow_quality_score": sq.get("score"),
+     }
+ 
+ 

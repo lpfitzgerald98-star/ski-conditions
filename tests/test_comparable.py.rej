@@ -1,0 +1,66 @@
+diff a/tests/test_comparable.py b/tests/test_comparable.py	(rejected hunks)
+@@ -10,11 +10,13 @@ from ski.comparable import (attach_global_score, attach_regional_score,
+                             score_population)
+ 
+ 
+-def _row(key, region, in_season=True, base=None, fresh=None, season=None, forecast=None):
++def _row(key, region, in_season=True, base=None, fresh=None, season=None,
++         forecast=None, quality=None):
+     return {
+         "key": key, "region": region, "in_season": in_season,
+         "abs_base_in": base, "abs_fresh_in": fresh,
+         "abs_season_in": season, "abs_forecast_in": forecast,
++        "abs_quality": quality,
+     }
+ 
+ 
+@@ -80,6 +82,49 @@ def test_lone_in_season_mountain_gets_none():
+     assert score_population(rows)["solo"] is None
+ 
+ 
++# --- Phase 4: SnowQuality as a leaderboard component -------------------------
++def test_quality_breaks_ties_on_equal_quantity():
++    """Two mountains identical on every inches input -> the one with better snow
++    quality now ranks higher. This is the whole point of Phase 4: the leaderboard
++    is no longer pure quantity."""
++    rows = [
++        _row("dry", "Utah", base=50, fresh=12, season=100, forecast=5, quality=90),
++        _row("hammered", "Utah", base=50, fresh=12, season=100, forecast=5, quality=30),
++    ]
++    scores = score_population(rows)
++    assert scores["dry"] > scores["hammered"]
++
++
++def test_quality_lifts_score_but_stays_moderate():
++    """At the current MODERATE weight, better quality measurably lifts a mountain's
++    rank, but does NOT yet override a clear quantity lead -- the deliberate staged
++    setting (user decision, 2026-07-17: start moderate, ramp to strong only after
++    validating the reorderings). Same roster + mountain, better quality -> higher."""
++    def pop(q):
++        return [
++            _row("subject", "Utah", base=50, fresh=11, season=100, forecast=4, quality=q),
++            _row("rival", "Utah", base=52, fresh=13, season=105, forecast=6, quality=20),
++        ]
++    hi = score_population(pop(95))["subject"]
++    lo = score_population(pop(20))["subject"]
++    assert hi > lo, (hi, lo)   # quality has a real, positive effect
++    # ...but at moderate weight it can't yet flip a mountain behind on all 4 inches
++    assert score_population(pop(95))["subject"] < score_population(pop(95))["rival"]
++
++
++def test_quality_missing_drops_out_not_zeroed():
++    """A mountain with no quality read (no recent storm / offline) still ranks on
++    its inches, rather than being dragged toward zero for the missing component."""
++    rows = [
++        _row("no_quality", "Utah", base=60, fresh=8, season=150, forecast=3, quality=None),
++        _row("has_quality", "Utah", base=10, fresh=1, season=20, forecast=1, quality=80),
++    ]
++    scores = score_population(rows)
++    assert scores["no_quality"] is not None and scores["has_quality"] is not None
++    # deep-but-unrated still beats thin-but-rated on the strength of its inches
++    assert scores["no_quality"] > scores["has_quality"]
++
++
+ # --- attach_global_score / attach_regional_score -----------------------------
+ def test_global_score_ranks_across_the_whole_roster():
+     rows = [

@@ -1,0 +1,25 @@
+diff a/ski/sources/outlook.py b/ski/sources/outlook.py	(rejected hunks)
+@@ -30,10 +30,22 @@ class CurrentWeather:
+ 
+ @dataclass
+ class Recent:
+-    """Trailing actuals for the recent-refreeze (crust) signal."""
++    """Trailing actuals for the recent-refreeze (crust) and new-snow-density signals."""
+     rain_72h_in: float | None = None    # rain that fell in the last 72h
+     tmax_72h_f: float | None = None     # warmest in the last 72h (was there a thaw?)
+     tmin_24h_f: float | None = None     # coldest in the last 24h (did it refreeze?)
++    # New-snow density (Phase 2): how much snow fell in the last 72h and the
++    # temperature it fell at (snowfall-weighted). Together they estimate whether
++    # the recent snow is light/dry or heavy/wet for mountains without a SWE pillow
++    # -- see score.density_from_temp. None when nothing fell.
++    snowfall_72h_in: float | None = None
++    snow_temp_72h_f: float | None = None
++    # Wind loading/scour (Phase 3): sustained recent wind (a high hourly quantile
++    # over 72h, not a gust) and its direction at the windiest hour. Direction is
++    # stored for future aspect work; only magnitude is scored today. None when no
++    # wind reading is available. See score.wind_scour_index.
++    wind_sustained_72h_mph: float | None = None
++    wind_dir_72h_deg: float | None = None
+ 
+ 
+ @dataclass

@@ -1,0 +1,241 @@
+diff a/ski/pipeline.py b/ski/pipeline.py	(rejected hunks)
+@@ -12,11 +12,13 @@ from datetime import date, timedelta
+ import numpy as np
+ import pandas as pd
+ 
+-from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, DATA_STALE_DAYS,
+-                    DB_PATH, DEFAULT_BASE_OFFSET_IN, FORECAST_HORIZON_WEIGHTS,
++from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, CRUST_MEMORY,
++                    DATA_STALE_DAYS,
++                    DB_PATH, DEFAULT_BASE_OFFSET_IN, DENSITY_MIN_SNOW_IN,
++                    FORECAST_HORIZON_WEIGHTS,
+                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
+-                    INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, SEASON_METRIC,
+-                    STORM_THRESHOLDS)
++                    INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, POWDER_DECAY,
++                    SEASON_METRIC, STORM_THRESHOLDS)
+ from ski import forecast_log
+ from ski import score as score_mod
+ from ski.db import max_observation_date, read_observations, upsert_observations
+@@ -364,9 +366,59 @@ def mountain_scorecard(
+     # inches only (settled base + recency/horizon-weighted fresh+forecast, scaled
+     # by surface/weather quality). This is the headline that governs the grade in
+     # both directions -- see score.skiability_score / SKIABILITY_GRADE_THRESHOLDS.
++    # New-snow density (Phase 2): light/dry vs. heavy/wet snow of the same depth.
++    # Tier 1 -- measured SWE-gain/depth-gain from stored obs (SNOTEL + Mammoth);
++    # Tier 2 -- a snowfall-weighted recent temperature from the Open-Meteo recent
++    # pull, for everyone else. `density_ratio` is a water fraction; None when there
++    # was no meaningful recent snow to judge (density then drops out, neutral).
++    density_ratio = measured_new_snow_density(obs, as_of)
++    if density_ratio is None and outlook is not None and outlook.recent is not None:
++        rec = outlook.recent
++        if rec.snowfall_72h_in is not None and rec.snowfall_72h_in >= DENSITY_MIN_SNOW_IN:
++            density_ratio = score_mod.density_from_temp(rec.snow_temp_72h_f)
++    density_quality = score_mod.density_score(density_ratio)     # 0-100 or None
++    density_factor = score_mod.density_powder_factor(density_ratio)   # [floor,1]
++    # Wind loading/scour (Phase 3): sustained recent wind strips/slabs fresh snow.
++    # Magnitude comes from the Open-Meteo recent pull (every mountain borrows it);
++    # the scour penalty is gated by how much loose new snow there is to move.
++    wind_mph = outlook.recent.wind_sustained_72h_mph \
++        if (outlook is not None and outlook.recent is not None) else None
++    wind_quality = score_mod.wind_quality(wind_mph)              # 0-100 or None
++    wind_scour = score_mod.wind_scour_index(wind_mph, fresh_72h)  # 0..1
++    # Buried rain/melt crust (Phase 5b, pillow stations only): a longer memory than
++    # the trailing-72h refreeze. The skiability headline, the quality score, and the
++    # commentary see the WORSE of the two; the self-relative `overall`/conditions
++    # keep the trailing signal alone (buried crust is inferential, so we contain it).
++    buried = buried_crust_index(obs, as_of)
++    effective_crust = max(refreeze, buried or 0.0)
++    # The skiability HEADLINE uses effective_crust even offline (a buried crust is
++    # real whether or not we have a live forecast). The snow-quality AGGREGATE and
++    # the commentary stay outlook-gated, though: a lone "no buried crust" reading
++    # with nothing else known isn't a full quality verdict, and emitting one would
++    # break the honest offline null (Phase 0) and inflate retro leaderboards.
++    crust_for_quality = effective_crust if outlook is not None else None
++    # Age-decayed on-ground powder (Phase 5): replaces the recent/week/7-day-cliff
++    # step. Passed as BOTH the recent and 7-day args so effective_powder_in's
++    # week bucket contributes nothing (the decay already spans the whole window);
++    # the density factor still discounts it, and the forecast term still adds on.
++    decayed_powder = decayed_new_snow_in(obs, as_of, refreeze=effective_crust)
+     skiability = score_mod.skiability_score(
+-        eff_depth, fresh_72h, fresh, forecast_72h_in,
+-        weather_q=weather_q, refreeze=refreeze, thaw=thaw)
++        eff_depth, decayed_powder, decayed_powder, forecast_72h_in,
++        weather_q=weather_q, refreeze=effective_crust, thaw=thaw,
++        recent_density_factor=density_factor, wind_scour=wind_scour)
++    # Explainable "how good is the surface" signal (Phase 0 scaffold): one named,
++    # debuggable number built from the surface-quality signals already computed
++    # here. crust/thaw are only meaningful with a forecast, so they read None
++    # off-network (matching the thaw_index/refreeze_index card fields below);
++    # density/wind are placeholders until Phases 2/3. SCAFFOLD ONLY -- surfaced on
++    # the card but weighted 0 everywhere, so it moves no grade. See
++    # config.SNOW_QUALITY_WEIGHTS / docs/snow-quality-plan.md.
++    snow_quality = score_mod.snow_quality_score(
++        weather_q=weather_q,
++        refreeze=crust_for_quality,
++        thaw=thaw if outlook is not None else None,
++        density=density_quality,
++        wind=wind_quality)
+     subscores = {
+         "season": season.percentile,
+         "in_season": month.percentile,
+@@ -378,12 +430,25 @@ def mountain_scorecard(
+         "incoming": incoming, "weather": weather, "weather_quality": weather_q,
+         "fresh_7d": fresh, "cover_factor": cover, "effective_depth": eff_depth,
+         "in_season": in_season, "data_age_days": age, "stale": stale,
+-        "skiability": skiability,
++        "skiability": skiability, "snow_quality": snow_quality,
++        # New-snow water fraction (Phase 2), for the card + commentary. None when
++        # there was no meaningful recent snow to judge.
++        "new_snow_density": density_ratio,
++        # Wind (Phase 3): sustained recent wind (mph) and the resulting scour
++        # penalty 0..1, for the card + commentary. None/0 off the live path.
++        "wind_sustained_mph": wind_mph,
++        "wind_scour": wind_scour,
+         # Per-horizon 24/48/72h forecast breakout (predicted inches + percentile),
+         # for the card's expandable forecast section. None off the live path.
+         "forecast_horizons": per_horizon_out,
+         "outlook": outlook, "thaw_index": thaw if outlook is not None else None,
+-        "refreeze_index": refreeze if outlook is not None else None,
++        # Crust severity the headline/quality/commentary see: the worse of the
++        # trailing-72h refreeze and the Phase 5b buried crust. None when neither is
++        # known (no outlook and not a pillow station).
++        "refreeze_index": crust_for_quality,
++        # The buried-crust component on its own (Phase 5b), so the card/commentary
++        # can tell an OLD buried rain crust from a fresh melt-freeze. None off pillow.
++        "buried_crust_index": buried,
+         # Absolute, cross-mountain-comparable inputs for ski.comparable's
+         # global/regional score -- distinct from the self-relative percentiles
+         # above (see config.GLOBAL_SCORE_WEIGHTS).
+@@ -392,6 +457,11 @@ def mountain_scorecard(
+             "fresh_in": fresh_72h,
+             "season_in": season_snow_equivalent_in(season),
+             "forecast_in": forecast_72h_in,
++            # Phase 4: the 0-100 SnowQuality value joins the leaderboard blend as a
++            # quality component (percentile-ranked across the population like the
++            # inches inputs). Not inches, but a comparable cross-mountain quantity.
++            # None (no recent storm / off-network) simply drops out of the blend.
++            "quality": snow_quality.value,
+         },
+         "subscores": subscores, "season_progress": sp,
+     }
+@@ -544,6 +614,119 @@ def fresh_snow_total(obs: pd.DataFrame, as_of: date | None = None,
+     return float(win.sum(skipna=True))
+ 
+ 
++def decayed_new_snow_in(obs: pd.DataFrame, as_of: date | None = None,
++                        refreeze: float = 0.0) -> float | None:
++    """Age-decayed on-ground powder inches for the skiability headline (Phase 5).
++
++    Each day's new snow is weighted by 0.5 ** (age_days / half_life), summed over
++    the trailing POWDER_DECAY['max_age_days']. The half-life is POWDER_DECAY's cold
++    value when the pack is undisturbed and shortens toward `min_half_life_days` as
++    the recent melt-freeze (`refreeze`, 0..1) rises -- so cold powder lingers and
++    thawed powder fades fast. Continuous, so there is no hard 7-day cliff: a storm
++    eight days ago still counts, just less than the same storm yesterday.
++
++    None when the window has no usable new-snow observations (same convention as
++    fresh_snow_total)."""
++    if obs is None or obs.empty:
++        return None
++    as_of = as_of or date.today()
++    end = pd.Timestamp(as_of)
++    p = POWDER_DECAY
++    start = end - pd.Timedelta(days=p["max_age_days"] - 1)
++    win = obs[(obs["date"] >= start) & (obs["date"] <= end)][["date", "new_snow_24hr"]]
++    if win["new_snow_24hr"].notna().sum() == 0:
++        return None
++    melt = max(0.0, min(1.0, refreeze))
++    half_life = max(p["min_half_life_days"], p["half_life_days_cold"] / (1.0 + p["melt_accel"] * melt))
++    age_days = (end - win["date"]).dt.days.clip(lower=0)
++    weights = 0.5 ** (age_days / half_life)
++    contrib = win["new_snow_24hr"].clip(lower=0).fillna(0.0) * weights
++    return float(contrib.sum())
++
++
++def buried_crust_index(obs: pd.DataFrame, as_of: date | None = None) -> float | None:
++    """Severity 0 (none) .. 1 (firm buried ice) of a persisting rain/melt crust,
++    from the stored pillow record (Phase 5b). SNOTEL + Mammoth only.
++
++    A rain-on-snow or strong melt pulse adds WATER without HEIGHT: a day whose SWE
++    jumps by >= CRUST_MEMORY['rain_swe_in'] while depth rises no more than
++    'depth_flat_in' is such a pulse (a snowfall would raise both). Each pulse's
++    severity (from the SWE jump) then fades as new snow buries it -- 'bury_full_in'
++    inches since the pulse largely erases it. The worst still-relevant crust wins.
++
++    Returns None when the station lacks a usable SWE+depth pair in the window (not
++    a pillow station) -- unknown, not zero, so those mountains fall back to the
++    trailing refreeze signal. 0.0 when it IS a pillow station with no live crust."""
++    if obs is None or obs.empty:
++        return None
++    as_of = as_of or date.today()
++    c = CRUST_MEMORY
++    end = pd.Timestamp(as_of)
++    start = end - pd.Timedelta(days=c["lookback_days"] - 1)
++    win = obs[(obs["date"] >= start) & (obs["date"] <= end)].sort_values("date")
++    if win["swe_inches"].notna().sum() < 2 or win["snow_depth_inches"].notna().sum() < 2:
++        return None                    # not a SWE+depth (pillow) station
++    dswe = win["swe_inches"].diff()
++    ddepth = win["snow_depth_inches"].diff()
++    worst = 0.0
++    for i, (_, row) in enumerate(win.iterrows()):
++        ds, dd = dswe.iloc[i], ddepth.iloc[i]
++        if pd.isna(ds) or pd.isna(dd):
++            continue
++        if ds >= c["rain_swe_in"] and dd <= c["depth_flat_in"]:
++            severity = _ramp_local(ds, c["rain_swe_in"], c["rain_swe_full_in"])
++            snow_since = win[win["date"] > row["date"]]["new_snow_24hr"].clip(lower=0).sum(skipna=True)
++            burial = 1.0 - _ramp_local(float(snow_since), c["bury_zero_in"], c["bury_full_in"])
++            worst = max(worst, severity * burial)
++    return float(worst)
++
++
++def _ramp_local(x: float, lo: float, hi: float) -> float:
++    """0 at/below lo, 1 at/above hi, linear between (mirrors score._ramp; kept here
++    so pipeline helpers don't reach into score for a two-line utility)."""
++    if hi <= lo:
++        return 1.0 if x >= hi else 0.0
++    return min(1.0, max(0.0, (x - lo) / (hi - lo)))
++
++
++def measured_new_snow_density(obs: pd.DataFrame, as_of: date | None = None,
++                              window_days: int = COMPARABLE_FRESH_WINDOW_DAYS) -> float | None:
++    """New-snow water fraction (SWE gain / depth gain) over the trailing window --
++    the Tier-1 (measured) density signal for stations with BOTH SWE and depth
++    (the 36 SNOTEL + Mammoth; verified 2026-07-17).
++
++    Depth gain is the trailing new-snow total; water gain is the sum of positive
++    day-over-day SWE changes in the window (settling/melt days, which are negative,
++    don't count as new water). Returns None when either channel is missing or the
++    accumulation is below DENSITY_MIN_SNOW_IN -- too little to tell light from
++    heavy, so the caller falls back to the Tier-2 temperature estimate. Clamped to
++    a physically plausible band so a data glitch can't emit an absurd ratio."""
++    if obs is None or obs.empty:
++        return None
++    as_of = as_of or date.today()
++    end = pd.Timestamp(as_of)
++    start = end - pd.Timedelta(days=window_days - 1)
++    win = obs[(obs["date"] >= start) & (obs["date"] <= end)]
++    if win.empty or win["swe_inches"].notna().sum() == 0:
++        return None            # no SWE channel -> not a measured-density station
++    depth_gain = win["new_snow_24hr"].sum(skipna=True) if win["new_snow_24hr"].notna().any() else 0.0
++    if depth_gain < DENSITY_MIN_SNOW_IN:
++        return None
++    # Water gain: positive SWE steps within the window, including the step from the
++    # last reading just before it (so a storm that began on `start` isn't clipped).
++    prior = obs[obs["date"] < start]["swe_inches"].dropna()
++    swe_series = win["swe_inches"].dropna()
++    if not prior.empty:
++        swe_series = pd.concat([prior.iloc[[-1]], swe_series])
++    water_gain = float(swe_series.diff().clip(lower=0).sum(skipna=True))
++    if water_gain <= 0.0:
++        return None
++    # float(): depth_gain is a numpy scalar from pandas .sum(); keep the ratio a
++    # plain Python float so it stays JSON-serializable through the card and the
++    # snow-quality component breakdown.
++    return float(max(0.02, min(0.40, water_gain / float(depth_gain))))
++
++
+ def season_snow_equivalent_in(season: SeasonGrade) -> float | None:
+     """Season-to-date total in a common SNOW-inches unit, for ski.comparable.
+ 

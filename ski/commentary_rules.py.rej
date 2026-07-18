@@ -1,0 +1,256 @@
+diff a/ski/commentary_rules.py b/ski/commentary_rules.py	(rejected hunks)
+@@ -41,6 +41,16 @@ from typing import Any
+ # sentence instead. Not a data fix -- a guard so the prose never says "1312 inches".
+ _MAX_PLAUSIBLE_BASE_IN = 250.0
+ 
++# New-snow water fraction thresholds: at/above _HEAVY_DENSITY the fresh snow fell
++# heavy/wet enough to lead the sentence over the raw totals; at/below _LIGHT_DENSITY
++# it's genuinely light and dry, worth vouching for in the positive note.
++_HEAVY_DENSITY = 0.15
++_LIGHT_DENSITY = 0.09
++# A surface quality factor at or above this, in decent weather, is clean enough to
++# vouch for in a small positive note (still conservative on "untouched" -- that
++# claim waits on wind in Phase 3).
++_QUALITY_CLEAN_FACTOR = 0.95
++
+ # ---------------------------------------------------------------------------
+ # Small phrasing helpers
+ # ---------------------------------------------------------------------------
+@@ -189,7 +199,111 @@ def _lead_generic(r: random.Random, grade: str) -> str:
+     ])
+ 
+ 
+-def _lead(r: random.Random, grade: str, f: dict) -> str:
++def _thaw_index(f: dict, card: dict | None) -> float | None:
++    """The incoming-thaw index, preferring the value now carried on `facts` and
++    falling back to the raw card outlook -- so the rules path and the AI path read
++    the same signal, but older callers that pass only a card still work."""
++    v = f.get("incoming_thaw_index")
++    if v is not None:
++        return v
++    return ((card or {}).get("outlook") or {}).get("thaw_index")
++
++
++def _refreeze_index(f: dict, card: dict | None) -> float | None:
++    """The refreeze/crust index, facts-first with a card fallback (see _thaw_index)."""
++    v = f.get("refreeze_crust_index")
++    if v is not None:
++        return v
++    return ((card or {}).get("outlook") or {}).get("refreeze_index")
++
++
++def _quality_problem(f: dict, card: dict | None) -> str | None:
++    """The dominant surface problem, or None if the surface is clean. Ordered
++    worst-skiing-first: a refrozen crust, then wind-scoured/slabbed fresh snow,
++    then an incoming thaw, then merely heavy/dense new snow."""
++    if (_refreeze_index(f, card) or 0.0) >= 0.5:
++        return "crust"
++    if (f.get("wind_scour_index") or 0.0) >= 0.4:
++        return "wind"
++    if (_thaw_index(f, card) or 0.0) >= 0.5:
++        return "thaw"
++    density = f.get("new_snow_density")
++    if density is not None and density >= _HEAVY_DENSITY:
++        return "heavy"
++    return None
++
++
++def _quality_drag(f: dict, card: dict | None) -> str | None:
++    """The surface problem the sentence should LEAD with, or None.
++
++    Fires only when the grade has real snow quantity behind it, so the default
++    lead would open with a celebratory inches/base line that a crust, an incoming
++    thaw, or heavy/wet snow would make misleading. Shared by `_lead` (to open on
++    it) and by the forecast/caveat clauses (to avoid repeating it)."""
++    fresh = f.get("fresh_snow_last_7_days_inches")
++    base = f.get("base_depth_inches")
++    if base is not None and base > _MAX_PLAUSIBLE_BASE_IN:
++        base = None
++    big = (fresh is not None and fresh >= 8) or (base is not None and base >= 45)
++    return _quality_problem(f, card) if big else None
++
++
++_QUALITY_PROBLEM_CLAUSE = {
++    "crust": [
++        "but a recent melt-freeze has left it firm and crusty",
++        "but it's set up firm and crusty after a thaw-refreeze",
++        "but a refrozen crust is the real story underfoot",
++    ],
++    "crust_buried": [
++        "but an old rain crust lurks just under the newer snow",
++        "but a buried melt crust from weeks back is still firm underfoot",
++        "but there's a persistent buried crust the new snow hasn't erased",
++    ],
++    "thaw": [
++        "but warm rain on the way is set to turn it heavy and wet",
++        "but an incoming thaw should leave it heavy and sloppy",
++        "but a warm, wet spell is about to soften it",
++    ],
++    "wind": [
++        "but sustained wind has scoured and wind-packed the fresh snow",
++        "but strong winds have hammered the new snow into slab and scour",
++        "but the wind has been stripping the fresh snow off exposed slopes",
++    ],
++    "heavy": [
++        "but it fell heavy and wet rather than light powder",
++        "but the new snow came in dense and heavy",
++        "but what fell is on the heavy, wet side, not blower",
++    ],
++}
++
++
++def _crust_flavor(f: dict) -> str:
++    """Which crust phrasing to use: a persistent BURIED crust (old rain layer under
++    newer snow) reads differently from a fresh melt-freeze. Buried wins the wording
++    when it's the strong signal."""
++    return "crust_buried" if (f.get("buried_crust_index") or 0.0) >= 0.5 else "crust"
++
++
++def _lead_quality(r: random.Random, grade: str, f: dict, problem: str) -> str:
++    """Lead by naming the snow that's down AND the surface problem undercutting it
++    -- the honest "big totals but crusty/thawing" sentence."""
++    fresh = f.get("fresh_snow_last_7_days_inches")
++    base = f.get("base_depth_inches")
++    if base is not None and base > _MAX_PLAUSIBLE_BASE_IN:
++        base = None
++    if fresh is not None and fresh >= 8:
++        qty = r.choice([f"{_inches(fresh)} fell this week",
++                        f"there's {_inches(fresh)} of fresh down",
++                        f"a good {_inches(fresh)} of new snow is down"])
++    else:
++        qty = r.choice([f"there's a {_inch_adj(base)} base",
++                        f"the base is a healthy {_inch_adj(base)}"])
++    key = _crust_flavor(f) if problem == "crust" else problem
++    clause = r.choice(_QUALITY_PROBLEM_CLAUSE[key])
++    return f"{_open(r, grade)}: {qty}, {clause}."
++
++
++def _lead(r: random.Random, grade: str, f: dict, card: dict | None = None) -> str:
+     """Choose the lead by whichever signal is genuinely driving the grade."""
+     fresh = f.get("fresh_snow_last_7_days_inches")
+     base = f.get("base_depth_inches")
+@@ -199,6 +313,12 @@ def _lead(r: random.Random, grade: str, f: dict) -> str:
+     if base is not None and base > _MAX_PLAUSIBLE_BASE_IN:
+         base = None
+ 
++    # Surface quality overrides quantity: big totals undercut by a crust or an
++    # incoming thaw lead with the problem, so the prose matches the docked grade.
++    problem = _quality_drag(f, card)
++    if problem is not None:
++        return _lead_quality(r, grade, f, problem)
++
+     if fresh is not None and fresh >= 8:
+         return _lead_fresh(r, grade, fresh)
+     if season is not None and season >= 70:
+@@ -229,7 +349,7 @@ def _forecast_active(r: random.Random, f: dict, card: dict | None) -> str | None
+     incoming = f.get("incoming_snow_inches")
+     window = _window(f.get("incoming_snow_window_hours"))
+     alert = f.get("storm_alert")
+-    thaw = ((card or {}).get("outlook") or {}).get("thaw_index")
++    thaw = _thaw_index(f, card)
+ 
+     # A meaningful incoming storm always wins the second sentence.
+     if incoming is not None and incoming >= 6:
+@@ -245,8 +365,9 @@ def _forecast_active(r: random.Random, f: dict, card: dict | None) -> str | None
+             f"And there's more coming: roughly {_inches(incoming)} in {window}.",
+         ])
+ 
+-    # A warm, wet spell coming in -- the surface is about to suffer.
+-    if thaw is not None and thaw >= 0.5:
++    # A warm, wet spell coming in -- the surface is about to suffer. Skip it when
++    # the lead already opened on this same thaw, so we don't say it twice.
++    if thaw is not None and thaw >= 0.5 and _quality_drag(f, card) != "thaw":
+         return r.choice([
+             "A warm, wet spell in the forecast is likely to soften the surface, though.",
+             "Watch the forecast, though -- warm rain is coming and the snow will go heavy.",
+@@ -262,9 +383,14 @@ def _forecast_active(r: random.Random, f: dict, card: dict | None) -> str | None
+     return None  # dry forecast is not "news" -- see _forecast_dry
+ 
+ 
+-def _forecast_dry(r: random.Random, f: dict) -> str | None:
++def _forecast_dry(r: random.Random, f: dict, card: dict | None = None) -> str | None:
+     """The dry-forecast filler, read up or down by how good things already are.
+     Lowest priority for the second sentence, behind any real caveat."""
++    # When the lead already opened on a surface problem (crust/thaw), let it stand
++    # rather than appending cheerful "plenty already down" filler that undercuts
++    # the warning. A real incoming storm still gets its say via _forecast_active.
++    if _quality_drag(f, card) is not None:
++        return None
+     tier = _tier(f["grade"])
+     if tier in ("great", "good"):
+         return r.choice([
+@@ -287,12 +413,19 @@ def _forecast_dry(r: random.Random, f: dict) -> str | None:
+ 
+ def _caveat(r: random.Random, f: dict, card: dict | None) -> str | None:
+     card = card or {}
+-    refreeze = (card.get("outlook") or {}).get("refreeze_index")
++    refreeze = _refreeze_index(f, card)
+     base = f.get("base_depth_inches")
+     stale = card.get("stale")
+     age = card.get("data_age_days")
+ 
+-    if refreeze is not None and refreeze >= 0.5:
++    # Skip the crust note when the lead already opened on it (see _quality_drag),
++    # so a big-totals-but-crusty card doesn't mention the crust twice.
++    if refreeze is not None and refreeze >= 0.5 and _quality_drag(f, card) != "crust":
++        if _crust_flavor(f) == "crust_buried":
++            return r.choice([
++                "Watch for an old buried rain crust under the newer snow.",
++                "A persistent buried melt crust still lurks a little way down.",
++            ])
+         return r.choice([
+             "Expect a firm, crusty surface early after a recent melt-freeze.",
+             "A recent melt-freeze means an icy start until it softens.",
+@@ -306,6 +439,36 @@ def _caveat(r: random.Random, f: dict, card: dict | None) -> str | None:
+         days = int(age)
+         unit = "day" if days == 1 else "days"
+         return f"(Latest station reading is {days} {unit} old.)"
++    # A genuinely clean, soft surface earns a small positive note when nothing
++    # more urgent claims the second sentence. The claim strengthens with the data
++    # we now have: light density (Phase 2) lets us say "dry"; calm wind (Phase 3)
++    # over fresh snow lets us say "wind-sheltered / untouched".
++    qf = f.get("surface_quality_factor")
++    weather_q = f.get("weather_quality")
++    density = f.get("new_snow_density")
++    fresh = f.get("fresh_snow_last_7_days_inches")
++    scour = f.get("wind_scour_index")
++    if (qf is not None and qf >= _QUALITY_CLEAN_FACTOR
++            and weather_q is not None and weather_q >= 65
++            and _tier(f["grade"]) in ("great", "good")):
++        light = density is not None and density <= _LIGHT_DENSITY
++        calm = scour is not None and scour <= 0.1
++        has_fresh = fresh is not None and fresh >= 4
++        if light and calm and has_fresh:
++            return r.choice([
++                "Best of all, it's light, dry snow the wind has left untouched.",
++                "And the snow is light, dry, and wind-sheltered -- cold smoke.",
++            ])
++        if light:
++            return r.choice([
++                "The snow is light and dry, too.",
++                "And what fell came in light and dry.",
++                "Best of all, it's light, dry snow underfoot.",
++            ])
++        return r.choice([
++            "The surface is soft and clean, too.",
++            "And the snow underfoot is soft and forgiving right now.",
++        ])
+     return None
+ 
+ 
+@@ -327,13 +490,13 @@ def render(facts: dict, card: dict | None = None) -> str:
+     seed = f"{facts.get('mountain')}|{facts.get('date')}|{grade}"
+     r = random.Random(seed)
+ 
+-    parts = [_lead(r, grade, facts)]
++    parts = [_lead(r, grade, facts, card)]
+     # Priority for the one optional second sentence: real forecast news, then a
+     # surface/data caveat (crust, thin base, stale station), then dry-forecast
+     # filler last -- so a stale-station note never loses to "nothing new".
+     second = (_forecast_active(r, facts, card)
+               or _caveat(r, facts, card)
+-              or _forecast_dry(r, facts))
++              or _forecast_dry(r, facts, card))
+     if second:
+         parts.append(second)
+     return " ".join(parts)

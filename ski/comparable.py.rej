@@ -1,0 +1,14 @@
+diff a/ski/comparable.py b/ski/comparable.py	(rejected hunks)
+@@ -42,6 +42,12 @@ COMPONENTS = {
+     "fresh": "abs_fresh_in",
+     "season": "abs_season_in",
+     "forecast": "abs_forecast_in",
++    # Phase 4: SnowQuality (0-100) -- NOT inches, but an absolute cross-mountain
++    # quantity, percentile-ranked across the population like the others. This is
++    # what stops the leaderboard being pure quantity: cold, dry, calm snow now
++    # outranks a wind-hammered/crusty pile of the same depth. Missing (no recent
++    # storm / off-network) drops out of the blend, same as any other component.
++    "quality": "abs_quality",
+ }
+ 
+ 

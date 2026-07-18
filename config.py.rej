@@ -1,4 +1,28 @@
 diff a/config.py b/config.py	(rejected hunks)
+@@ -1614,6 +1614,23 @@ SKI_POWDER_WEIGHTS = {
+ # only ski so much powder). ~24" lands near the top -> nearly a full letter.
+ POWDER_SCORE_CURVE = [(0, 0), (3, 22), (6, 38), (12, 62), (18, 80), (24, 90), (36, 100)]
+ 
++# ---------------------------------------------------------------------------
++# Powder recency decay (Phase 5) -- a great storm yesterday != the same storm 10
++# days ago, and cold snow keeps far longer than snow that's since seen a thaw.
++# ---------------------------------------------------------------------------
++# Replaces the old recent(72h)/week(3-7d)/hard-7-day-cliff step for the skiability
++# powder input: each day's new snow decays continuously by age (half-life below),
++# and the decay ACCELERATES when the pack has seen a recent melt-freeze (the
++# refreeze index) -- cold, dry snow is preserved; a thaw skis the old powder off
++# and crusts what's left. Contained to the skiability headline; the comparable
++# "fresh" input and the conditions "fresh" sub-score keep their fixed windows.
++POWDER_DECAY = {
++    "half_life_days_cold": 4.0,  # cold, undisturbed powder: half its value in 4 days
++    "min_half_life_days": 1.3,   # a full melt-freeze collapses it this fast
++    "melt_accel": 1.6,           # how hard refreeze shortens the half-life
++    "max_age_days": 12,          # how far back to look (beyond this, negligible)
++}
++
+ # Quality multiplier on (base + powder). Weather shaves up to (1 - weather_span);
+ # refreeze (icy crust) and thaw (incoming rain/warmth) each apply their own
+ # penalty. Floored so even a raining day keeps a sortable, non-zero number.
 @@ -1621,9 +1638,132 @@ SKI_QUALITY = {
      "weather_span": 0.25,     # weather_q=0 -> ├ù0.75, weather_q=100 -> ├ù1.0
      "refreeze_penalty": 0.35, # full refrozen crust -> ├ù0.65
@@ -133,3 +157,34 @@ diff a/config.py b/config.py	(rejected hunks)
  # Absolute skiability value (0-100) -> letter. Unlike GRADE_THRESHOLDS (uniform
  # percentiles) this scores a real inches-based quantity, so the cutoffs are
  # placed by what the number MEANS, then sanity-checked against the live roster's
+@@ -1842,17 +1982,23 @@ MEDIUM_RANGE = {
+ #   forecast -- next-72h phase-adjusted expected snowfall (absolute inches, not
+ #               the self-relative forecast_sub percentile) -- "is more coming".
+ #
+-# Known limitation, NOT solved here: absolute inches aren't perfectly
+-# comparable across climates -- a dense maritime inch and a dry continental
+-# inch differ in water content (future snow-QUALITY work), and a valley-sited
+-# station's inches can undercount a resort's real base (config.
+-# DEFAULT_BASE_OFFSET_IN, the elevation-offset work). Percentile ranking
+-# cannot fix either; both stay open TODOs for a future pass.
++# `quality` (Phase 4) is the SnowQuality value -- density + wind + crust + thaw +
++# warmth folded into one 0-100 number -- and it's what finally addresses the
++# "dense maritime inch vs. dry continental inch" limitation this docstring used to
++# just flag: cold, dry, calm snow now out-ranks a wind-hammered, crusty pile of the
++# same depth. (The valley-siting / DEFAULT_BASE_OFFSET_IN limitation is still open.)
++#
+ # Forecast carries more weight than a "what's on the ground" purist would give
+ # it: a big incoming storm is a primary reason to pick a mountain right now, so
+ # the RANK reflects it too (the skiability headline gets its own forecast bump
+ # via POWDER_SCORE_CURVE). base still leads -- coverage is the precondition.
+-GLOBAL_SCORE_WEIGHTS = {"base": 0.32, "fresh": 0.28, "season": 0.15, "forecast": 0.25}
++#
++# `quality` starts at a MODERATE share (~13% effective) on purpose: half of it
++# rides on coarse Open-Meteo wind, so we ramp it up only after validating the
++# reorderings it produces on the live roster (user decision, 2026-07-17). Weights
++# needn't sum to 1 -- ski.comparable._blend renormalizes over whatever's present.
++GLOBAL_SCORE_WEIGHTS = {"base": 0.30, "fresh": 0.26, "season": 0.14,
++                        "forecast": 0.22, "quality": 0.16}
+ 
+ # Trailing window (days) for the comparable score's "fresh" input -- shorter
+ # than FRESH_WINDOW_DAYS (7d) on purpose (see GLOBAL_SCORE_WEIGHTS docstring).

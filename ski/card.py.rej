@@ -1,0 +1,36 @@
+diff a/ski/card.py b/ski/card.py	(rejected hunks)
+@@ -146,6 +146,7 @@ def scorecard(
+     sub = card["subscores"]
+     base = card["base"]
+     ski = card["skiability"]
++    sq = card["snow_quality"]
+     outlook = card.get("outlook")
+     provider = outlook.provider if outlook is not None else None
+     return {
+@@ -180,6 +181,26 @@ def scorecard(
+             "powder_pts": _round(ski.powder_pts),
+             "powder_in": _round(ski.powder_in),
+             "quality_factor": _round(ski.quality_factor, 2),
++            # New-snow water fraction (Phase 2): ~0.05 blower .. ~0.20+ heavy/wet.
++            # Null when there was no meaningful recent snow to judge.
++            "new_snow_density": _round(card.get("new_snow_density"), 3),
++            # Wind (Phase 3): sustained recent wind (mph) and the 0..1 scour penalty
++            # it applied to the fresh snow. Null/0 off the live path.
++            "wind_sustained_mph": _round(card.get("wind_sustained_mph"), 0),
++            "wind_scour": _round(card.get("wind_scour"), 2),
++            # Buried rain/melt crust severity 0..1 (Phase 5b), pillow stations only;
++            # null off pillow. Distinguishes an old buried crust from a fresh thaw.
++            "buried_crust": _round(card.get("buried_crust_index"), 2),
++        },
++        # Explainable "how good is the surface" signal (Phase 0 SCAFFOLD): a
++        # single named 0-100 number with its component breakdown, surfaced for
++        # observation only -- weighted 0 in every consumer, so it governs no grade
++        # yet (see config.SNOW_QUALITY_WEIGHTS / docs/snow-quality-plan.md).
++        # `density`/`wind` components read null until Phases 2/3 supply them.
++        "snow_quality": {
++            "score": _round(sq.value),
++            "components": {k: _round(v, 0) for k, v in sq.components.items()},
++            "weights_used": sq.weights_used,
+         },
+         # Absolute inputs to ski.comparable's global/regional score -- distinct
+         # from the self-relative percentiles in `grades` (see
