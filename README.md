@@ -116,21 +116,21 @@ storms. Two outputs kept deliberately separate:
 
 The snow-quality rework ([PR #9](https://github.com/lpfitzgerald98-star/ClaudeProjects/pull/9),
 design in [docs/snow-quality-plan.md](docs/snow-quality-plan.md)) shipped an explainable
-`SnowQuality` signal (density ┬╖ wind ┬╖ crust ┬╖ thaw ┬╖ warmth) feeding the skiability grade, the
+`SnowQuality` signal (density · wind · crust · thaw · warmth) feeding the skiability grade, the
 leaderboard, and the commentary. Two calibration steps were deliberately deferred until the app is
 running live in-season, and a scheduled GitHub Action (`.github/workflows/gladegrade-reminders.yml`)
 opens a tracking issue when each comes due:
 
-- **[ ] Ramp the leaderboard `quality` weight moderate ΓåÆ strong** (~mid Jan). It's held at a moderate
+- **[ ] Ramp the leaderboard `quality` weight moderate → strong** (~mid Jan). It's held at a moderate
   `config.GLOBAL_SCORE_WEIGHTS["quality"] = 0.16` (~13% effective) because half of it rides on coarse
   Open-Meteo wind. Once live reorderings look sane (cold-dry out-ranking wind-hammered/crusty),
   raise it.
 - **[ ] Re-tune `SKIABILITY_GRADE_THRESHOLDS` on live data** (~end of season). The offline
   distribution was verified, but the live-only signals (wind scour, incoming thaw, Tier-2
-  temperature density, the lowered 0.22 quality floor) can't be backtested from stored history ΓÇö add
+  temperature density, the lowered 0.22 quality floor) can't be backtested from stored history — add
   a quality-signal log alongside `forecast_log`, then re-fit. See the "Snow-quality rework" section
   of [docs/tuning.md](docs/tuning.md). (`OVERALL_GRADE_THRESHOLDS` are unaffected.)
-- **[ ] B7 ΓÇö sun/aspect exposure** (deferred): needs new per-resort aspect/orientation data.
+- **[ ] B7 — sun/aspect exposure** (deferred): needs new per-resort aspect/orientation data.
 
 ## Confirmed data sources for Alta
 

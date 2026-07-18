@@ -157,11 +157,11 @@ of season.**
   (`use_network=False`), where thaw=0 and refreeze=0. Both terms only move
   live/network scores, and only in the intended direction.
 
-## Snow-quality rework: skiability distribution after Phases 2ΓÇô5 (2026-07-17)
+## Snow-quality rework: skiability distribution after Phases 2–5 (2026-07-17)
 
-The quality signals ΓÇö new-snow density (Phase 2), wind loading/scour (Phase 3),
+The quality signals — new-snow density (Phase 2), wind loading/scour (Phase 3),
 continuous powder recency decay (Phase 5a), and buried rain/melt crust (Phase 5b)
-ΓÇö plus a lowered skiability quality floor (`SKI_QUALITY.floor` 0.35 ΓåÆ 0.22, Phase
+— plus a lowered skiability quality floor (`SKI_QUALITY.floor` 0.35 → 0.22, Phase
 4) all move the **skiability** value, so its distribution was re-checked against
 `SKIABILITY_GRADE_THRESHOLDS`.
 
@@ -174,18 +174,18 @@ continuous powder recency decay (Phase 5a), and buried rain/melt crust (Phase 5b
 
 - **`SKIABILITY_GRADE_THRESHOLDS`: measured, still valid, no change.** Backtest of
   the OFFLINE-measurable shift (density Tier 1 on the 37 pillow stations, recency
-  decay for all, buried crust) across the roster ├ù 3 winter dates (Jan/Feb/Mar
+  decay for all, buried crust) across the roster × 3 winter dates (Jan/Feb/Mar
   2026), in-season only, n=247: min 8.5, p25 29.8, **median 43.6**, p75 56.2, p90
-  67.6. Grade histogram stays smooth and well-spread ΓÇö A+ 3.6%, A/A- 6.9%, the
-  B/B-/C+ middle ~48%, a real D/F tail 6.5% ΓÇö matching the curve's semantic intent
-  (A+ = deep base + real storm + good surface; median Γëê B-/B; thin/crusted/heavy
-  ΓåÆ C/D/F). The thresholds hold.
+  67.6. Grade histogram stays smooth and well-spread — A+ 3.6%, A/A- 6.9%, the
+  B/B-/C+ middle ~48%, a real D/F tail 6.5% — matching the curve's semantic intent
+  (A+ = deep base + real storm + good surface; median ≈ B-/B; thin/crusted/heavy
+  → C/D/F). The thresholds hold.
 
 - **Live-only shift is DEFERRED, by design.** Wind scour, incoming thaw, the Tier-2
   (temperature) density estimate for the 76 non-pillow mountains, and the lowered
   floor mostly bite only with a live outlook, so they can't be reconstructed from
   the stored history (`raw_observations` has no wind/precip/temperature record).
-  They push quality-compromised days lower ΓÇö the lowered floor deliberately opens
+  They push quality-compromised days lower — the lowered floor deliberately opens
   the D/F range for a big-but-wind-hammered-and-rained-on day that the old 0.35
   floor propped up at C. Re-fitting the cutoffs against the incomplete offline
   distribution would be worse than waiting, so: **keep the thresholds; revisit
@@ -195,6 +195,6 @@ continuous powder recency decay (Phase 5a), and buried rain/melt crust (Phase 5b
 
 - **Re-tune trigger (skiability):** any change to `SKI_BASE_MAX`/`SKI_POWDER_MAX`,
   `POWDER_SCORE_CURVE`, the `SKI_QUALITY` penalties or floor, `DENSITY_*`,
-  `POWDER_DECAY`, `WIND`, or `CRUST_MEMORY` shifts the skiability distribution ΓÇö
+  `POWDER_DECAY`, `WIND`, or `CRUST_MEMORY` shifts the skiability distribution —
   re-run the offline backtest above and, once live quality data has accumulated,
   the live one before trusting the letters.
