@@ -93,6 +93,7 @@ def _row_from_card(key: str, card: dict, profile: str) -> dict:
         abs_fresh_in=ci.get("fresh_in"),
         abs_season_in=ci.get("season_in"),
         abs_forecast_in=ci.get("forecast_in"),
+        abs_quality=ci.get("quality"),
     )
     return row
 

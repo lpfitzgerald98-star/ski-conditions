@@ -1,0 +1,135 @@
+diff a/config.py b/config.py	(rejected hunks)
+@@ -1621,9 +1638,132 @@ SKI_QUALITY = {
+     "weather_span": 0.25,     # weather_q=0 -> ├ù0.75, weather_q=100 -> ├ù1.0
+     "refreeze_penalty": 0.35, # full refrozen crust -> ├ù0.65
+     "thaw_penalty": 0.30,     # full incoming thaw  -> ├ù0.70
+-    "floor": 0.35,            # never scale below this (keeps off-days sortable)
++    "wind_penalty": 0.25,     # fully wind-hammered fresh snow -> ├ù0.75 (Phase 3)
++    # Lowered 0.35 -> 0.22 in Phase 4: with density + wind now stacking onto crust
++    # + thaw + weather, a genuinely awful day (deep base, big totals, but rained-on,
++    # refrozen, and wind-scoured) SHOULD be able to grade down into D/F instead of
++    # being propped up at C by a floor tuned when quality could barely move. Still
++    # non-zero so off-days stay sortable. Re-tune thresholds after this (Phase 6).
++    "floor": 0.22,
++}
++
++# ---------------------------------------------------------------------------
++# Wind loading / scour (Phase 3) -- sustained wind strips or slabs fresh snow
++# ---------------------------------------------------------------------------
++# Magnitude-only for now (direction -> aspect is deferred with B7): sustained
++# wind takes soft new snow and either scours it off the exposed slopes or packs
++# it into wind slab, so a big storm can ski far worse than its totals suggest.
++# The signal is the SUSTAINED recent wind (a high hourly quantile over the last
++# 72h, not a single gust), fetched from Open-Meteo hourly for every mountain via
++# the same recent-conditions path density uses.
++WIND = {
++    "sustained_quantile": 0.9,  # which hourly-wind quantile counts as "sustained"
++    "calm_mph": 12.0,           # at/below -> no scour (0 severity)
++    "gale_mph": 38.0,           # at/above -> full severity (1.0)
++    # Wind mostly matters when there's loose new snow to move. With fresh snow the
++    # penalty is full; with none it still applies at `no_fresh_weight` (wind can
++    # still scour/harden an old surface on exposed terrain, just less dramatically).
++    "fresh_gate_zero_in": 0.0,
++    "fresh_gate_full_in": 6.0,
++    "no_fresh_weight": 0.35,
+ }
+ 
++# ---------------------------------------------------------------------------
++# Snow Quality Score (0-100) -- explainable skiability signal (Phase 0 scaffold)
++# ---------------------------------------------------------------------------
++# One named, debuggable number for how good the SURFACE is (as opposed to how
++# MUCH snow there is). Higher = better. Built from component sub-scores, each
++# 0-100, blended over whichever are AVAILABLE -- a missing component renormalizes
++# out rather than counting as zero, the same convention as score.conditions_score
++# / score.overall_score. `density` and `wind` are placeholders here: they always
++# read None until Phases 2/3 wire real data in, so they contribute nothing yet.
++#
++# SCAFFOLD ONLY (Phase 0): this number is surfaced on the card for observation but
++# is weighted 0 in every consumer -- the skiability quality_factor and the
++# comparable leaderboard are unchanged -- so it moves no grade. It exists so we can
++# eyeball real values across the roster before making them load-bearing in Phase 4.
++# See docs/snow-quality-plan.md.
++SNOW_QUALITY_WEIGHTS = {
++    "density": 0.28,   # SWE:depth -- light/dry vs. heavy/dense (Phase 2)
++    "wind":    0.22,   # loading / scour of fresh snow (Phase 3; inert now)
++    "crust":   0.20,   # refrozen melt crust (from score.refreeze_index)
++    "thaw":    0.18,   # incoming rain/warmth (from score.thaw_index)
++    "warmth":  0.12,   # live weather comfort (from score.weather_quality)
++}
++
++# ---------------------------------------------------------------------------
++# New-snow density (Phase 2) -- "12 inches of blower vs. 12 inches of cement"
++# ---------------------------------------------------------------------------
++# The density of the RECENT storm's snow (water fraction = SWE gain / depth gain),
++# the single clearest quality lever: light, dry snow skis far better than dense,
++# wet snow of the same depth. Absolute, not relative -- heavy snow skis heavy at
++# every mountain (user decision, 2026-07-17). Two tiers feed one ratio:
++#   Tier 1 (measured): SWE-gain / depth-gain from stored obs, where BOTH SWE and
++#     depth exist -- the 36 SNOTEL stations + Mammoth (verified 2026-07-17).
++#   Tier 2 (derived):  a snowfall-weighted recent temperature, mapped to a ratio
++#     via DENSITY_FROM_TEMP, for everyone else (ACIS/ECCC/BCSWS/Open-Meteo). Uses
++#     only fields already fetched (snowfall + temperature_2m) -- no unit-ambiguous
++#     precip math, no new API params.
++# The ratio then maps to (a) a 0-100 quality sub-score for SNOW_QUALITY_WEIGHTS
++# and (b) a gentle multiplier on recent powder inches (a dense inch counts for
++# less), which is the only place density moves a GRADE in Phase 2 -- via
++# score.effective_powder_in -> skiability. Density does NOT enter the comparable
++# leaderboard until Phase 4. See docs/snow-quality-plan.md.
++
++# Minimum recent new snow (inches) before a density reading is trusted; below it
++# there's too little accumulation to tell light from heavy, so density -> None
++# (the component drops out, neutral, rather than reading noise as a verdict).
++DENSITY_MIN_SNOW_IN = 2.0
++
++# ---------------------------------------------------------------------------
++# Buried rain/melt crust persistence (Phase 5b) -- SNOTEL/pillow stations only
++# ---------------------------------------------------------------------------
++# The trailing refreeze index only sees the last 72h, but a mid-season rain-on-snow
++# event leaves an ice layer that keeps skiing firm for WEEKS until enough snow
++# buries it deeply. We can detect the event from the stored pillow record without
++# any temperature: rain (or strong melt) ADDS WATER WITHOUT ADDING HEIGHT, so a day
++# whose SWE jumps while depth stays flat or drops is a rain/melt pulse, not a
++# snowfall (snow raises both). The crust then fades as new snow accumulates on top.
++#
++# LIMITATION (why it's pillow-only): needs BOTH swe and depth -- the 36 SNOTEL +
++# Mammoth. ACIS/ECCC/BC-SWS/Open-Meteo lack one channel, so buried_crust_index
++# returns None there (unknown, not zero) and those mountains rely on the trailing
++# refreeze signal alone. No temperature means this is inferential -- deliberately
++# conservative thresholds, and it only touches the skiability headline + quality +
++# commentary, never the self-relative overall score.
++CRUST_MEMORY = {
++    "lookback_days": 40,       # how far back a buried crust still matters
++    "rain_swe_in": 0.4,        # SWE rise (in) on a flat/dropping-depth day = a pulse
++    "rain_swe_full_in": 1.2,   # SWE rise for a full-severity crust
++    "depth_flat_in": 1.0,      # depth rose <= this on the pulse day -> not snowfall
++    "bury_zero_in": 2.0,       # new snow since the pulse below this -> crust exposed
++    "bury_full_in": 24.0,      # new snow since above this -> crust deeply buried
++}
++
++# Snowfall-weighted recent air temperature (F) -> new-snow water fraction (Tier 2).
++# The classic snow-to-liquid relationship: very cold snow is fluffy (~5% water,
++# ~20:1), snow near freezing is dense/wet (~14-20%, ~5-7:1). Clamped at both ends.
++DENSITY_FROM_TEMP = [(10, 0.05), (20, 0.075), (28, 0.11), (32, 0.14), (36, 0.20)]
++
++# New-snow water fraction -> 0-100 density QUALITY (higher = lighter = better).
++# ~5-7% is blower/champagne (top marks); ~10% is a normal storm; ~13%+ is heavy;
++# ~20%+ is Sierra cement / rain-tinged. Absolute cutoffs by what the number means.
++DENSITY_SCORE_CURVE = [
++    (0.04, 100), (0.07, 92), (0.10, 76), (0.13, 54),
++    (0.17, 32), (0.22, 14), (0.30, 5),
++]
++
++# New-snow water fraction -> multiplier on RECENT powder inches (score.
++# effective_powder_in). Deliberately gentle -- density shades how much a fresh
++# inch is worth, it doesn't erase it: light snow gets full credit (1.0), classic
++# cement (~20%) counts for ~0.7 of its depth. Floored so it never zeroes out real
++# accumulation. A heavy foot still beats a dry inch.
++DENSITY_POWDER_FACTOR = [
++    (0.07, 1.00), (0.10, 0.96), (0.13, 0.88), (0.17, 0.78), (0.22, 0.68),
++    (0.30, 0.55),   # rain-saturated slush; clamps at the floor below
++]
++DENSITY_POWDER_FLOOR = 0.62
++
+ # Absolute skiability value (0-100) -> letter. Unlike GRADE_THRESHOLDS (uniform
+ # percentiles) this scores a real inches-based quantity, so the cutoffs are
+ # placed by what the number MEANS, then sanity-checked against the live roster's

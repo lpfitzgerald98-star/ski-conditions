@@ -19,6 +19,10 @@ from dataclasses import dataclass, field
 from config import (
     CONDITIONS,
     COVER_GATE,
+    DENSITY_FROM_TEMP,
+    DENSITY_POWDER_FACTOR,
+    DENSITY_POWDER_FLOOR,
+    DENSITY_SCORE_CURVE,
     DEPTH_SCORE_CURVE,
     DYNAMIC_WEIGHTS,
     FORECAST_THAW,
@@ -37,6 +41,8 @@ from config import (
     SKI_POWDER_WEIGHTS,
     SKI_QUALITY,
     SKIABILITY_GRADE_THRESHOLDS,
+    SNOW_QUALITY_WEIGHTS,
+    WIND,
 )
 from ski.grading import letter_grade
 
@@ -191,36 +197,110 @@ class Skiability:
     quality_factor: float = 1.0
 
 
+# --- new-snow density (Phase 2) --------------------------------------------
+def density_from_temp(snow_temp_f: float | None) -> float | None:
+    """Snowfall-weighted recent temperature (F) -> new-snow water fraction.
+
+    The Tier-2 density estimate for mountains without a SWE pillow: cold snow is
+    fluffy, snow near freezing is dense/wet (see config.DENSITY_FROM_TEMP). None
+    stays None -- no temperature, no verdict."""
+    if snow_temp_f is None:
+        return None
+    return piecewise(snow_temp_f, DENSITY_FROM_TEMP)
+
+
+def density_score(water_fraction: float | None) -> float | None:
+    """New-snow water fraction -> 0-100 density QUALITY (higher = lighter/better).
+
+    None -> None so it drops out of the quality blend (no recent snow, or no way
+    to judge it, is not a quality verdict). See config.DENSITY_SCORE_CURVE."""
+    if water_fraction is None:
+        return None
+    return piecewise(max(0.0, water_fraction), DENSITY_SCORE_CURVE)
+
+
+def density_powder_factor(water_fraction: float | None) -> float:
+    """New-snow water fraction -> a gentle multiplier on recent powder inches.
+
+    Light snow gets full credit (1.0); dense/wet snow counts for less, floored so
+    it never erases real accumulation. None (unknown density) -> 1.0: absent a
+    density read we don't discount the snow. See config.DENSITY_POWDER_FACTOR."""
+    if water_fraction is None:
+        return 1.0
+    return max(DENSITY_POWDER_FLOOR, piecewise(max(0.0, water_fraction), DENSITY_POWDER_FACTOR))
+
+
 def effective_powder_in(fresh_recent_in: float | None,
                         fresh_7d_in: float | None,
-                        forecast_72h_in: float | None) -> float:
+                        forecast_72h_in: float | None,
+                        recent_density_factor: float = 1.0) -> float:
     """Fold fresh + incoming snow into one recency/horizon-weighted inches figure.
 
     Snow already down this instant counts most (`recent`, the ~72h window); the
     rest of the trailing week is older and discounted (`week`); imminent forecast
     powder is nearly as good as on the ground (`forecast`). Missing inputs count
     as zero here (unlike a percentile pool) -- no forecast really is no incoming
-    snow, not "unknown", for the purpose of how good today skis."""
+    snow, not "unknown", for the purpose of how good today skis.
+
+    `recent_density_factor` (Phase 2, in [DENSITY_POWDER_FLOOR, 1.0]) discounts
+    the RECENT window by how heavy/wet that snow fell -- a dense inch skis like
+    less than a dry inch. It applies only to `recent`: the density read is a
+    property of the current storm, not of week-old snow or an unfallen forecast.
+    Defaults to 1.0 (no discount) so existing callers are unchanged."""
     w = SKI_POWDER_WEIGHTS
-    recent = max(0.0, fresh_recent_in or 0.0)
-    week_only = max(0.0, (fresh_7d_in or 0.0) - recent)   # days ~3-7, older snow
+    recent = max(0.0, fresh_recent_in or 0.0) * recent_density_factor
+    week_only = max(0.0, (fresh_7d_in or 0.0) - max(0.0, fresh_recent_in or 0.0))  # days ~3-7
     fc = max(0.0, forecast_72h_in or 0.0)
     return w["recent"] * recent + w["week"] * week_only + w["forecast"] * fc
 
 
+# --- wind loading / scour (Phase 3) ----------------------------------------
+def wind_severity(sustained_mph: float | None) -> float:
+    """Sustained recent wind (mph) -> 0 (calm) .. 1 (scouring gale). None -> 0."""
+    if sustained_mph is None:
+        return 0.0
+    return _ramp(sustained_mph, WIND["calm_mph"], WIND["gale_mph"])
+
+
+def wind_quality(sustained_mph: float | None) -> float | None:
+    """Sustained wind -> 0-100 wind QUALITY (calm=100, gale=0), the SnowQuality
+    wind component. None (no wind reading) -> None so it drops out of the blend."""
+    if sustained_mph is None:
+        return None
+    return 100.0 * (1.0 - wind_severity(sustained_mph))
+
+
+def wind_scour_index(sustained_mph: float | None,
+                     fresh_recent_in: float | None) -> float:
+    """Wind damage to the ski surface, 0 (none) .. 1 (stripped / slabbed).
+
+    Sustained wind scaled by how much loose new snow there is to move: full weight
+    with fresh snow, `no_fresh_weight` without it (exposed old snow still hardens).
+    See config.WIND. None wind -> 0 (no reading != windy)."""
+    sev = wind_severity(sustained_mph)
+    if sev <= 0.0:
+        return 0.0
+    fresh_gate = _ramp(max(0.0, fresh_recent_in or 0.0),
+                       WIND["fresh_gate_zero_in"], WIND["fresh_gate_full_in"])
+    weight = WIND["no_fresh_weight"] + (1.0 - WIND["no_fresh_weight"]) * fresh_gate
+    return sev * weight
+
+
 def skiability_quality_factor(weather_q: float | None, refreeze: float = 0.0,
-                              thaw: float = 0.0) -> float:
+                              thaw: float = 0.0, wind_scour: float = 0.0) -> float:
     """Multiplier in [floor, 1.0] from surface/weather quality.
 
-    Punitive by design: rain-on-snow, a refrozen crust, or an incoming thaw make
-    even a deep base ski badly, so they scale the score down. A missing weather
-    read is neutral (not a penalty)."""
+    Punitive by design: rain-on-snow, a refrozen crust, an incoming thaw, or
+    sustained wind stripping/slabbing the fresh snow all make even a deep base ski
+    badly, so they scale the score down. A missing weather read is neutral (not a
+    penalty)."""
     q = SKI_QUALITY
     factor = 1.0
     if weather_q is not None:
         factor *= (1.0 - q["weather_span"]) + q["weather_span"] * (max(0.0, min(100.0, weather_q)) / 100.0)
     factor *= 1.0 - q["refreeze_penalty"] * max(0.0, min(1.0, refreeze))
     factor *= 1.0 - q["thaw_penalty"] * max(0.0, min(1.0, thaw))
+    factor *= 1.0 - q["wind_penalty"] * max(0.0, min(1.0, wind_scour))
     return max(q["floor"], min(1.0, factor))
 
 
@@ -232,6 +312,8 @@ def skiability_score(
     weather_q: float | None = None,
     refreeze: float = 0.0,
     thaw: float = 0.0,
+    recent_density_factor: float = 1.0,
+    wind_scour: float = 0.0,
 ) -> Skiability:
     """Absolute "how good is the skiing here right now", 0-100 + letter.
 
@@ -240,20 +322,91 @@ def skiability_score(
     number means the same thing at every mountain, so it can be the headline that
     governs the grade in both directions (see config.SKIABILITY_GRADE_THRESHOLDS).
 
+    `recent_density_factor` (Phase 2) discounts the recent powder for heavy/wet
+    snow -- see effective_powder_in. Defaults to 1.0 (no discount).
+
     Returns value=None (grade "N/A") only when there's no base reading AND no
     snow signal of any kind -- nothing to judge."""
     have_base = base_depth_in is not None
-    powder_in = effective_powder_in(fresh_recent_in, fresh_7d_in, forecast_72h_in)
+    powder_in = effective_powder_in(fresh_recent_in, fresh_7d_in, forecast_72h_in,
+                                    recent_density_factor)
     if not have_base and powder_in <= 0.0 \
             and fresh_7d_in is None and forecast_72h_in is None:
         return Skiability(None, "N/A")
     base_pts = SKI_BASE_MAX * (depth_score(base_depth_in) or 0.0) / 100.0 if have_base else 0.0
     powder_pts = SKI_POWDER_MAX * piecewise(powder_in, POWDER_SCORE_CURVE) / 100.0
-    quality = skiability_quality_factor(weather_q, refreeze, thaw)
+    quality = skiability_quality_factor(weather_q, refreeze, thaw, wind_scour)
     value = max(0.0, min(100.0, (base_pts + powder_pts) * quality))
     return Skiability(value, letter_grade(value, SKIABILITY_GRADE_THRESHOLDS),
                       base_pts=base_pts, powder_pts=powder_pts,
                       powder_in=powder_in, quality_factor=quality)
+
+
+# --- snow quality (explainable surface signal; Phase 0 scaffold) ------------
+@dataclass
+class SnowQuality:
+    """A single, named, debuggable "how good is the surface" number.
+
+    `value` is 0-100 (higher = better surface), a weighted blend of `components`
+    over whichever are available. `components` keeps every part visible (name ->
+    0-100, or None when that signal isn't available) so a grade is explainable
+    rather than a black box; `weights_used` records which weights the blend
+    actually normalized over. See config.SNOW_QUALITY_WEIGHTS.
+
+    Phase 0: OBSERVABILITY ONLY -- computed and surfaced on the card, but weighted
+    0 in every consumer, so it changes no grade. `density`/`wind` are always None
+    until Phases 2/3."""
+    value: float | None
+    components: dict = field(default_factory=dict)   # name -> 0-100 (or None)
+    weights_used: dict = field(default_factory=dict)
+
+
+def _quality_from_index(index: float | None) -> float | None:
+    """A 0..1 penalty index (refreeze / thaw, 0 clean .. 1 severe) -> a 0-100
+    quality contribution (100 clean .. 0 severe). None (unknown) stays None so it
+    drops out of the blend instead of masquerading as a pristine surface."""
+    if index is None:
+        return None
+    return 100.0 * (1.0 - max(0.0, min(1.0, index)))
+
+
+def snow_quality_score(
+    weather_q: float | None = None,
+    refreeze: float | None = None,
+    thaw: float | None = None,
+    density: float | None = None,
+    wind: float | None = None,
+) -> SnowQuality:
+    """Explainable 0-100 snow-quality signal (higher = better surface).
+
+    Aggregates the surface-quality signals into one named number: crust (from the
+    backward refreeze index), thaw (from the forward incoming-thaw index), and
+    warmth (from live weather quality). `density` and `wind` are accepted as
+    0-100 sub-scores but are always None until Phases 2/3 supply them.
+
+    Blends over whatever is available, renormalizing the weights -- a missing
+    component drops out rather than counting as zero (same convention as
+    conditions_score). All-missing -> value None (nothing to judge).
+
+    SCAFFOLD (Phase 0): surfaced for observation, weighted 0 in every consumer;
+    the skiability quality_factor still governs the headline grade. See
+    config.SNOW_QUALITY_WEIGHTS and docs/snow-quality-plan.md."""
+    components = {
+        "density": None if density is None else max(0.0, min(100.0, density)),
+        "wind": None if wind is None else max(0.0, min(100.0, wind)),
+        "crust": _quality_from_index(refreeze),
+        "thaw": _quality_from_index(thaw),
+        "warmth": None if weather_q is None else max(0.0, min(100.0, weather_q)),
+    }
+    w = SNOW_QUALITY_WEIGHTS
+    parts = [(w.get(k, 0.0), v) for k, v in components.items()
+             if v is not None and w.get(k, 0.0) > 0]
+    if not parts:
+        return SnowQuality(None, components, {})
+    value = sum(wt * v for wt, v in parts) / sum(wt for wt, _ in parts)
+    used = {k: w[k] for k, v in components.items()
+            if v is not None and w.get(k, 0.0) > 0}
+    return SnowQuality(max(0.0, min(100.0, value)), components, used)
 
 
 # --- sub-score assembly ----------------------------------------------------

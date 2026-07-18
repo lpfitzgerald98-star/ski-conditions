@@ -57,6 +57,32 @@ def test_facts_use_only_card_numbers():
     assert facts["incoming_snow_inches"] == 6.0
 
 
+def test_facts_carry_surface_quality_signals():
+    """Phase 1: the surface-quality signals reach `facts`, so the AI path (which
+    only ever sees facts) can lead on a crust/thaw instead of raw inches."""
+    card = _card()
+    card["skiability"]["quality_factor"] = 0.68
+    card["outlook"] = {"refreeze_index": 0.8, "thaw_index": 0.1}
+    card["conditions"]["weather_quality"] = 55
+    card["snow_quality"] = {"score": 61.0, "components": {}, "weights_used": {}}
+    facts = commentary.facts_from_card(card)
+    assert facts["surface_quality_factor"] == 0.68
+    assert facts["refreeze_crust_index"] == 0.8
+    assert facts["incoming_thaw_index"] == 0.1
+    assert facts["weather_quality"] == 55
+    assert facts["snow_quality_score"] == 61.0
+
+
+def test_facts_surface_signals_default_none_when_absent():
+    """A card without outlook / snow_quality still yields facts (the fields are
+    simply None) -- older/offline cards must not break."""
+    facts = commentary.facts_from_card(_card())
+    assert facts is not None
+    assert facts["refreeze_crust_index"] is None
+    assert facts["incoming_thaw_index"] is None
+    assert facts["snow_quality_score"] is None
+
+
 def test_off_season_and_unscored_are_gated():
     assert commentary.facts_from_card(_card(in_season=False)) is None
     assert commentary.facts_from_card(_card(in_season=None)) is None

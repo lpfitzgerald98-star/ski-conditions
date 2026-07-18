@@ -150,6 +150,7 @@ def score_mountain(
         abs_fresh_in=ci.get("fresh_in"),
         abs_season_in=ci.get("season_in"),
         abs_forecast_in=ci.get("forecast_in"),
+        abs_quality=ci.get("quality"),
     )
     return row
 
