@@ -1,0 +1,204 @@
+# One-off (re-runnable) backfill: rebuild the retrospective per-date history so it
+# includes the 34 European resorts (added after the original 2020-> history was
+# built) AND re-scores every date with the current quality-aware engine, so the
+# whole timeline is consistent with today's snapshot instead of jumping at the
+# date the roster/scoring changed.
+#
+# Why a rebuild (not an append): scripts/build_snapshot.py --history SKIPS dates
+# whose file already exists, so old dates never pick up new mountains. This deletes
+# the target dates first, then rebuilds them (all 113 mountains) off the cached DB.
+#
+# Shape: prepare (warm the raw-obs DB cache, ensuring Europe's history is present)
+# -> backfill (parallel matrix, one job per YEAR; retro scoring is offline/no-network
+# so there are no rate limits; each year's files are disjoint so parallel commits
+# rebase cleanly) -> publish (rebuild today's live snapshot + deploy Pages once).
+#
+# Run: Actions -> this workflow -> "Run workflow" (defaults cover 2020..2026).
+# Safe to re-run. ~2.5h wall-clock. Public repo => free Action minutes.
+
+name: History backfill (add Europe + re-score)
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "First year to rebuild (inclusive)"
+        default: "2020"
+      end_year:
+        description: "Last year to rebuild (inclusive)"
+        default: "2026"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install pandas numpy requests
+
+      # Newest existing ski-db-* cache (the daily snapshot's warm DB), if any.
+      - name: Restore observation DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ski-db-backfill-${{ github.run_id }}
+          restore-keys: ski-db-
+
+      # The matrix scores with --no-ingest (offline), so the DB MUST already hold
+      # Europe's full history. Verify via a known European station; a full pull
+      # only happens on a cold cache (self-healing), otherwise a cheap tail top-up.
+      - name: Ensure Europe raw history is present, then re-cache for the matrix
+        run: |
+          need_full=0
+          if [ ! -f data/ski.db ]; then
+            need_full=1
+          else
+            set +e
+            python - <<'PY'
+          import sqlite3, sys, config
+          from ski.pipeline import mountain_station
+          st = mountain_station(config.MOUNTAINS["chamonix"])
+          n = sqlite3.connect("data/ski.db").execute(
+              "select count(*) from raw_observations where station_id=?", (st,)).fetchone()[0]
+          print("chamonix rows:", n)
+          sys.exit(0 if n > 3000 else 3)
+          PY
+            [ $? -ne 0 ] && need_full=1
+            set -e
+          fi
+          if [ "$need_full" = "1" ]; then
+            echo "== cold/incomplete DB: full period-of-record ingest =="
+            python scripts/build_snapshot.py --history-only --full-ingest --hist-start 2099-01-01 --hist-end 2099-01-01
+          else
+            echo "== warm DB with Europe present: incremental tail top-up =="
+            python scripts/build_snapshot.py --history-only --hist-start 2099-01-01 --hist-end 2099-01-01
+          fi
+
+      - name: Save warmed DB cache for the matrix jobs
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: ski-db-backfill-${{ github.run_id }}
+
+  # ---------------------------------------------------------------------------
+  backfill:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 350        # each ~1-year chunk is ~1.5-2.5h; under the 6h cap
+    strategy:
+      fail-fast: false          # one bad year must not cancel the others
+      max-parallel: 7
+      matrix:
+        year: [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install pandas numpy requests
+
+      - name: Restore the warmed DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ski-db-backfill-${{ github.run_id }}
+          restore-keys: ski-db-
+
+      - name: In requested range?
+        id: gate
+        run: |
+          y=${{ matrix.year }}
+          if [ "$y" -lt "${{ github.event.inputs.start_year }}" ] || [ "$y" -gt "${{ github.event.inputs.end_year }}" ]; then
+            echo "run=0" >> "$GITHUB_OUTPUT"; echo "year $y outside range -> skip"
+          else
+            echo "run=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Delete + rebuild this year's history (all 113 mountains, offline)
+        if: steps.gate.outputs.run == '1'
+        run: |
+          Y=${{ matrix.year }}
+          START="$Y-01-01"; END="$Y-12-31"
+          TODAY=$(date -u +%F)
+          if [ "$END" \> "$TODAY" ]; then END="$TODAY"; fi
+          echo "rebuilding $START .. $END"
+          python - "$START" "$END" <<'PY'
+          import os, glob, sys, datetime as dt
+          s = dt.date.fromisoformat(sys.argv[1]); e = dt.date.fromisoformat(sys.argv[2]); n = 0
+          for f in glob.glob("web/data/hist/*.json"):
+              b = os.path.basename(f)[:-5]
+              try:
+                  d = dt.date.fromisoformat(b)
+              except ValueError:
+                  continue
+              if s <= d <= e:
+                  os.remove(f); n += 1
+          print("deleted", n, "existing history files in range")
+          PY
+          python scripts/build_snapshot.py --history-only --no-ingest --hist-start "$START" --hist-end "$END"
+
+      - name: Commit + push (rebase-retry; per-year files are disjoint)
+        if: steps.gate.outputs.run == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/data/hist
+          git commit -m "History backfill: rebuild ${{ matrix.year }} with Europe [skip ci]" || { echo "nothing to commit"; exit 0; }
+          for i in $(seq 1 40); do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              echo "pushed on attempt $i"; exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $(( (RANDOM % 20) + 5 ))
+          done
+          echo "push failed after retries"; exit 1
+
+  # ---------------------------------------------------------------------------
+  publish:
+    needs: backfill
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ski-pages          # coordinate with the daily snapshot's Pages deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4      # now includes all committed backfilled history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install pandas numpy requests anthropic
+
+      - name: Restore DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ski-db-backfill-${{ github.run_id }}
+          restore-keys: ski-db-
+
+      # Regenerate today's live snapshot (scores.*.json / cards / meta) off the DB
+      # so the uploaded site is complete; --history appends nothing (all present).
+      - name: Rebuild today's snapshot
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/build_snapshot.py --no-ingest --history
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4
