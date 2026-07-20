@@ -32,7 +32,16 @@ function sortRows(rows) {
     if (va == null && vb == null) return a.name.localeCompare(b.name);
     if (va == null) return 1;
     if (vb == null) return -1;
-    return vb - va;
+    if (va !== vb) return vb - va;
+    // The primary display value saturates (skiability's powder curve tops out
+    // near 24"+, so several mountains can all land at exactly 100) -- break the
+    // tie with global_score, a non-saturating cross-mountain measure, instead of
+    // silently falling through to array order (which happened to be alphabetical
+    // and made a mid-pack mountain look like an unambiguous #1). Falls back to
+    // name so the order is always deterministic, never array-position luck.
+    const ga = a.global_score, gb = b.global_score;
+    if (ga != null && gb != null && ga !== gb) return gb - ga;
+    return a.name.localeCompare(b.name);
   });
 }
 
