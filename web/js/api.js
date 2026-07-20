@@ -46,6 +46,26 @@ export async function loadHistoryDate(dateStr) {
   return getJSON(`${DATA_BASE}/hist/${dateStr}.json`);
 }
 
+// The Trip Predictor's precomputed historical baseline (static mode): typical
+// conditions for every calendar date, keyed MM-DD -> {key: [baseline_score, n_years]}.
+// Loaded once, lazily, on the first future date pick. Null in live mode (the /trip
+// endpoint blends server-side) or when the file hasn't been built.
+let _tripBaseline = null;
+export async function loadTripBaseline() {
+  if (LIVE) return null;
+  if (_tripBaseline) return _tripBaseline;
+  try { _tripBaseline = await getJSON(`${DATA_BASE}/trip/baseline.json`); }
+  catch { _tripBaseline = null; }
+  return _tripBaseline;
+}
+
+// Live mode: the backend blends and ranks for a future date. Returns the same
+// {date, lead_days, current_weight, mountains:[...]} shape the static path builds.
+export async function loadTripLive(dateStr, profile) {
+  const q = new URLSearchParams({ date: dateStr, profile });
+  return getJSON(`${API_BASE}/trip?${q}`);
+}
+
 // One mountain's full scorecard.
 export async function loadCard(key, { network = false } = {}) {
   if (!LIVE) return getJSON(`${DATA_BASE}/cards/${key}.json`);

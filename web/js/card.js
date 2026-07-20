@@ -3,7 +3,7 @@
 // own curves, then grades, sub-score bars, incoming storms, weather and warnings.
 
 import { loadCard } from "./api.js";
-import { colorFor, textOn, badgeSVG, naColor } from "./grades.js";
+import { colorFor, textOn, badgeSVG, naColor, letterFor } from "./grades.js";
 import { state } from "./state.js";
 import { announce, focusSilently } from "./a11y.js";
 
@@ -22,6 +22,9 @@ export async function openCard(key, { network = false } = {}) {
   lastFocus = document.activeElement;
   el.hidden = false;
   const row = state.byKey[key];
+  // Future (trip) and historical dates both render a compact card straight from the
+  // roster row -- no per-date card files. The row carries the trip breakdown.
+  if (state.tripDate) { el.dataset.key = key; renderTripCard(row, key); return; }
   // Historical dates have no per-date card file (that'd be 79 x N files); render a
   // compact card straight from the roster row, which already carries the grades.
   if (state.histDate) { el.dataset.key = key; renderHistCard(row, key); return; }
@@ -277,6 +280,51 @@ function renderHistCard(row, key) {
   el.querySelector(".close").addEventListener("click", close);
   focusSilently(el.querySelector(".close"));
   announce(`${row.name}. As of ${state.histDate}, overall ${row.grade || "not scored"}.`);
+}
+
+// The Trip Predictor card: a blended prediction for a FUTURE date, built from the
+// roster row (no per-date card files). Shows the blend so it's explainable -- the
+// historical baseline, today's conditions, and how much each counts at this lead.
+function renderTripCard(row, key) {
+  if (!row) { el.innerHTML = '<div class="placeholder">No data.</div>'; return; }
+  const info = state.tripInfo || {};
+  const grd = v => (v == null ? "—" : (letterFor(v) || "—"));
+  const wpct = Math.round((row.current_weight ?? info.current_weight ?? 0) * 100);
+  const g = row.grade && row.grade !== "N/A" && row.grade !== "—" ? row.grade : "—";
+  const base = row.historical_baseline, cur = row.current_score;
+  const heroNum = row.trip_score != null ? Math.round(row.trip_score) : "—";
+  const offseason = row.trip_score == null;
+
+  el.innerHTML = `<button class="close" type="button" aria-label="Close details">✕</button>
+    <h2 id="detail-title">${escapeHTML(row.name)}</h2>
+    <div class="sub">trip prediction · ${state.tripDate} · ${info.lead_days} days out</div>
+    <div class="duo">
+      <div class="side hero">
+        <div class="lbl">Predicted for your trip</div>
+        <div class="score-row"><span class="badge">${badgeSVG(g, g, { size: 46 })}</span>
+          <span class="num">${heroNum}<span>${row.trip_score != null ? " / 100" : ""}</span></span></div>
+        <div class="of">${wpct}% today · ${100 - wpct}% history</div>
+      </div>
+      ${scoreTile("Historical baseline", "typical for this week of the year",
+                  grd(base), base != null ? Math.round(base) : null, " / 100")}
+    </div>
+    ${offseason
+      ? `<div class="rank-hero muted">no prediction — ${row.n_years ? "historically off-season this week" : "no historical record here"}</div>`
+      : ""}
+    <div class="grid2">
+      <div class="cell"><div class="k">Today's conditions</div>
+        <div class="v">${cur != null ? Math.round(cur) : "—"}${cur != null ? " <small>/100</small>" : ""}</div></div>
+      <div class="cell"><div class="k">Weight on today</div><div class="v">${wpct}<small>%</small></div></div>
+      <div class="cell"><div class="k">Lead time</div><div class="v">${info.lead_days}<small>days</small></div></div>
+      <div class="cell"><div class="k">History</div>
+        <div class="v">${row.n_years || 0}<small>yrs${row.low_confidence ? " · low conf" : ""}</small></div></div>
+    </div>
+    <div class="note">A trip this far out leans on how ${escapeHTML(row.name)} typically skis
+      this week of the year; today's live conditions blend in at ${wpct}% and fade as the
+      date recedes.</div>`;
+  el.querySelector(".close").addEventListener("click", close);
+  focusSilently(el.querySelector(".close"));
+  announce(`${row.name}. Trip prediction ${g}.`);
 }
 
 function escapeHTML(s) {

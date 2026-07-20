@@ -34,10 +34,12 @@ from pathlib import Path
 # Allow `python scripts/build_snapshot.py` from the project root.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS  # noqa: E402
-from ski import commentary, pipeline  # noqa: E402
+from config import (DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS,  # noqa: E402
+                    TRIP_LEAD_DECAY, TRIP_WINDOW_DAYS)
+from ski import commentary, pipeline, trip  # noqa: E402
 from ski.card import scorecard  # noqa: E402
-from ski.regions import region_tree  # noqa: E402
+from ski.db import read_observations  # noqa: E402
+from ski.regions import region_for, region_tree  # noqa: E402
 from ski.service import (  # noqa: E402
     GRADE_COLORS,
     NA_COLOR,
@@ -194,6 +196,11 @@ def build(keys: list[str], as_of: date, use_network: bool) -> dict:
         "ok": len(ok),
         "failed": failed,
         "network": use_network,
+        # Trip Predictor bounds/params the frontend needs to open the future date
+        # picker and run the lead-time blend (see web/js/main.js, ski.trip).
+        "trip": {"half_life_days": TRIP_LEAD_DECAY["half_life_days"],
+                 "window_days": TRIP_WINDOW_DAYS,
+                 "max_lead_days": TRIP_LEAD_DECAY["max_lead_days"]},
     }
     (WEB_DATA / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
     return meta
@@ -250,6 +257,65 @@ def build_history(keys: list[str], start: date, end: date,
     return {"built": built, "total": len(dates)}
 
 
+def build_trip_baseline(keys: list[str], ref_year: int = 2023) -> dict:
+    """Precompute the Trip Predictor's HISTORICAL baseline for every calendar date.
+
+    History is immutable, so a mountain's typical conditions for "March 14" never
+    change -- this is a pure build-time artifact. For each mountain we compute its
+    climatology once (ski.trip.climatology, a few group-bys over its whole record),
+    then for each calendar day of a reference non-leap year we resolve that day to
+    the mountain's own day-of-water-year (hemisphere-aware) and rank the roster with
+    the trip weights (ski.trip.score_baseline).
+
+    Output web/data/trip/baseline.json, keyed by calendar MM-DD:
+        {"generated_at", "half_life_days", "window_days",
+         "dates": {"03-14": {key: [baseline_score|null, n_years], ...}, ...}}
+
+    The frontend loads this once (lazily, on the first future date pick) and blends
+    each mountain's baseline with TODAY'S global score using the lead-time decay --
+    all the ranking stays here in Python; the client only does the 1-line blend.
+    Climatology is cached per station id (resorts sharing a station share it)."""
+    trip_dir = WEB_DATA / "trip"
+    trip_dir.mkdir(parents=True, exist_ok=True)
+
+    clim_by_station: dict[str, dict] = {}
+    meta_by_key: dict[str, dict] = {}
+    for key in keys:
+        m = MOUNTAINS[key]
+        station = pipeline.mountain_station(m)
+        if station not in clim_by_station:
+            try:
+                obs = read_observations(pipeline.DB_PATH, station)
+                clim_by_station[station] = trip.climatology(
+                    obs, pipeline.mountain_wy_start(m),
+                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m))
+            except Exception as exc:  # noqa: BLE001 -- one station, not the build
+                print(f"[trip] {key}: climatology failed ({exc})")
+                clim_by_station[station] = {}
+        meta_by_key[key] = {"station": station,
+                            "wy_start": pipeline.mountain_wy_start(m),
+                            "region": region_for(m)}
+
+    dates: dict[str, dict] = {}
+    d = date(ref_year, 1, 1)
+    end = date(ref_year, 12, 31)
+    while d <= end:
+        rows = trip.roster_baseline_rows(d, keys, meta_by_key, clim_by_station)
+        dates[d.strftime("%m-%d")] = {
+            r["key"]: [r["baseline_score"], r["n_years"]] for r in rows}
+        d += timedelta(days=1)
+
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "half_life_days": TRIP_LEAD_DECAY["half_life_days"],
+        "window_days": TRIP_WINDOW_DAYS,
+        "dates": dates,
+    }
+    (trip_dir / "baseline.json").write_text(
+        json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    return {"dates": len(dates), "mountains": len(keys)}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Build the static Pages snapshot.")
     ap.add_argument("--no-ingest", action="store_true",
@@ -266,6 +332,8 @@ def main() -> int:
     ap.add_argument("--hist-end", default=None, help="history range end YYYY-MM-DD (default today)")
     ap.add_argument("--history-only", action="store_true",
                     help="build ONLY history (skip today's snapshot)")
+    ap.add_argument("--no-trip", action="store_true",
+                    help="skip the Trip Predictor historical-baseline file")
     args = ap.parse_args()
 
     as_of = (datetime.strptime(args.as_of, "%Y-%m-%d").date()
@@ -286,6 +354,14 @@ def main() -> int:
             print("  failed:", ", ".join(meta["failed"]))
     else:
         meta = {"ok": len(keys), "failed": []}
+
+    if not args.no_trip and not args.history_only:
+        print(f"== Building Trip Predictor baseline ({len(keys)} mountains x 365 days) ==")
+        try:
+            t = build_trip_baseline(keys)
+            print(f"Trip baseline: {t['dates']} dates x {t['mountains']} mountains -> {WEB_DATA / 'trip'}")
+        except Exception as exc:  # noqa: BLE001 -- a baseline failure shouldn't sink the snapshot
+            print(f"Trip baseline FAILED: {exc}")
 
     if args.history or args.history_only:
         # Default range: the current + previous water years back to Nov 1, which

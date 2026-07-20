@@ -102,6 +102,21 @@ def piecewise(x: float, points: list[tuple[float, float]]) -> float:
     return float(points[-1][1])
 
 
+def decay_weight(x: float, half_life: float) -> float:
+    """Exponential half-life weight: 0.5 ** (x / half_life), clamped at x >= 0.
+
+    ONE curve, two axes -- the shared kernel behind both decays in this codebase.
+    Recency decay (pipeline.decayed_new_snow_in) passes x = an observation's AGE in
+    days, so older snow counts less. The Trip Predictor (ski.trip) passes x = LEAD
+    TIME in days, so today's live conditions count less the farther out the trip
+    date sits -- the conceptual inverse of recency, same math. `half_life` is the x
+    at which the weight falls to 0.5 (config.POWDER_DECAY / config.TRIP_LEAD_DECAY).
+    A non-positive half_life -> 0.0 (a degenerate curve that trusts nothing)."""
+    if half_life <= 0:
+        return 0.0
+    return 0.5 ** (max(0.0, x) / half_life)
+
+
 def depth_score(depth_inches: float | None) -> float | None:
     """Absolute base-depth quality: thin cover is thin cover anywhere."""
     if depth_inches is None:

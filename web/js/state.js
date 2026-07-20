@@ -25,6 +25,8 @@ export const state = {
   complete: false,   // stream finished (always true in static mode)
   inViewKeys: null,  // Set of keys currently in the map viewport (null = all)
   histDate: null,    // ISO date being viewed retrospectively (null = today/live)
+  tripDate: null,    // ISO FUTURE date being predicted (null = not in trip mode)
+  tripInfo: null,    // {lead_days, current_weight} for the active trip date
 };
 
 export function setInView(keys) { state.inViewKeys = keys; emit("inview", keys); }

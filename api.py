@@ -39,9 +39,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import DB_PATH, DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS
-from ski import cache, pipeline
-from ski.regions import region_tree
+from config import (DB_PATH, DEFAULT_PROFILE, GRADE_THRESHOLDS,
+                    LOW_CONFIDENCE_YEARS, MOUNTAINS, TRIP_LEAD_DECAY,
+                    TRIP_WINDOW_DAYS)
+from ski import cache, pipeline, trip
+from ski.db import read_observations
+from ski.grading import letter_grade
+from ski.regions import region_for, region_tree
 from ski.service import (
     GRADE_COLORS,
     NA_COLOR,
@@ -199,6 +203,9 @@ def meta() -> dict:
         "default_profile": DEFAULT_PROFILE,
         "region_tree": region_tree(),
         "roster_size": len(MOUNTAINS),
+        "trip": {"half_life_days": TRIP_LEAD_DECAY["half_life_days"],
+                 "window_days": TRIP_WINDOW_DAYS,
+                 "max_lead_days": TRIP_LEAD_DECAY["max_lead_days"]},
     }
 
 
@@ -286,6 +293,96 @@ def forecast_accuracy(mountain: str) -> dict:
         raise HTTPException(status_code=404, detail=f"unknown mountain '{mountain}'")
     df = pipeline.forecast_accuracy(mountain, db_path=DB_PATH)
     return {"mountain": mountain, "rows": df.to_dict(orient="records")}
+
+
+# ---------------------------------------------------------------------------
+# Trip Predictor (future-date ranking)
+# ---------------------------------------------------------------------------
+# The historical baseline is pure over immutable data, so we compute every
+# station's climatology once and reuse it for all dates, rebuilding only when the
+# calendar day rolls over (the daily ingest may have added observations). The cold
+# build is a few seconds over the roster; every request after is a cheap per-date
+# rank + blend. The static build ships this same data as web/data/trip/baseline.json.
+_TRIP_CACHE: dict = {"built_on": None, "clim": {}, "meta": {}}
+
+
+def _trip_context() -> dict:
+    """{clim: {station: climatology}, meta: {key: {station, wy_start, region}}},
+    cached per calendar day. Recomputed lazily on the first request of the day."""
+    today = date.today()
+    if _TRIP_CACHE["built_on"] == today and _TRIP_CACHE["clim"]:
+        return _TRIP_CACHE
+    clim: dict[str, dict] = {}
+    meta: dict[str, dict] = {}
+    for key in sorted(MOUNTAINS):
+        m = MOUNTAINS[key]
+        station = pipeline.mountain_station(m)
+        meta[key] = {"station": station, "wy_start": pipeline.mountain_wy_start(m),
+                     "region": region_for(m)}
+        if station not in clim:
+            try:
+                obs = read_observations(DB_PATH, station)
+                clim[station] = trip.climatology(
+                    obs, pipeline.mountain_wy_start(m),
+                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m))
+            except Exception:  # noqa: BLE001 -- one station, not the request
+                clim[station] = {}
+    _TRIP_CACHE.update(built_on=today, clim=clim, meta=meta)
+    return _TRIP_CACHE
+
+
+@app.get("/trip")
+def trip_forecast(
+    date: str = Query(..., description="target trip date, YYYY-MM-DD (must be today or later)"),  # noqa: A002
+    profile: str = Query(DEFAULT_PROFILE, description="profile for today's live conditions term"),
+) -> dict:
+    """Rank mountains for a FUTURE date, blending today's live conditions with the
+    historical baseline for that calendar window (see ski.trip).
+
+    Each row carries the full breakdown: `historical_baseline`, `current_score`
+    (today's global score), `current_weight` (how much today counts at this lead
+    time), and the blended `trip_score`/`trip_grade`. Ranked by trip_score, nulls
+    last. Past dates are rejected -- use /scores?as_of= (or the static history files)
+    for those."""
+    from datetime import date as _date  # local: the param shadows the module name
+    target = _parse_as_of(date)
+    today = _date.today()
+    lead = (target - today).days
+    if lead < 0:
+        raise HTTPException(status_code=400,
+                            detail="date is in the past; use /scores?as_of= for history")
+    if lead > TRIP_LEAD_DECAY["max_lead_days"]:
+        raise HTTPException(status_code=400,
+                            detail=f"date is beyond the {TRIP_LEAD_DECAY['max_lead_days']}-day horizon")
+
+    # Today's live conditions term = each mountain's current global score (the same
+    # cached snapshot the map boots off), so lead 0 converges to the live board.
+    current = {r["key"]: r.get("global_score") for r in _snapshot_rows(today, profile)}
+
+    ctx = _trip_context()
+    base = {r["key"]: r
+            for r in trip.roster_baseline_rows(target, sorted(MOUNTAINS),
+                                               ctx["meta"], ctx["clim"])}
+    rows = []
+    for key in sorted(MOUNTAINS):
+        b = base[key]
+        ts, w = trip.blend_trip_score(current.get(key), b["baseline_score"], lead)
+        row = mountain_summary(key)
+        row.update(
+            trip_score=ts,
+            trip_grade=letter_grade(ts, GRADE_THRESHOLDS) if ts is not None else "N/A",
+            historical_baseline=b["baseline_score"],
+            current_score=current.get(key),
+            current_weight=round(w, 3),
+            n_years=b["n_years"],
+            low_confidence=b["n_years"] < LOW_CONFIDENCE_YEARS,
+            in_season=b["in_season"],
+        )
+        rows.append(row)
+    rows = trip.rank_trip(rows)
+    return {"date": target.isoformat(), "today": today.isoformat(),
+            "lead_days": lead, "current_weight": round(trip.lead_weight(lead), 3),
+            "profile": profile, "mountains": rows}
 
 
 # ---------------------------------------------------------------------------

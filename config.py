@@ -1626,6 +1626,41 @@ POWDER_DECAY = {
     "max_age_days": 12,          # how far back to look (beyond this, negligible)
 }
 
+# ---------------------------------------------------------------------------
+# Trip Predictor (future-date ranking) -- the SAME exponential decay curve as the
+# powder recency decay above, applied to the INVERSE axis.
+# ---------------------------------------------------------------------------
+# The recency decay weights an OBSERVATION down as it AGES; the trip blend weights
+# TODAY'S CONDITIONS down as the trip date RECEDES. Same kernel (score.decay_weight,
+# 0.5 ** (x / half_life)), two axes -- x = observation age there, x = lead time here.
+#
+# TripScore = w * current_comparable_score + (1 - w) * historical_baseline_score,
+# with w = decay_weight(lead_days, half_life_days), blended over whichever terms
+# are present (ski.trip.blend_trip_score). At lead 0, w = 1 -> the trip score IS
+# today's global/regional score (converges to live scoring); months out, w ~ 0 ->
+# the ranking leans entirely on history. Half-life 5d: current conditions are ~25%
+# of the blend at 10 days out, ~14% at 14 -- the outer edge of real forecast skill.
+TRIP_LEAD_DECAY = {
+    "half_life_days": 5.0,   # weight on today's conditions halves every 5 lead days
+    "max_lead_days": 366,    # how far out the picker/endpoint will predict
+}
+
+# The historical baseline aggregates each mountain's conditions over a +/- window
+# of the target date's day-of-water-year, across ALL years (ski.trip.climatology).
+# Wider = smoother/more years per estimate but blurs the seasonal curve.
+TRIP_WINDOW_DAYS = 7
+
+# The baseline is a comparable score (ski.comparable.score_population) just like the
+# live global_score, but with ITS OWN weights: for a trip months out you can't catch
+# a specific storm, so the persistent PACK signals (typical base depth, cumulative
+# season total by that date) lead, and the transient `fresh` window is demoted (not
+# dropped -- averaged over decades it still separates a reliably-snowy-in-March
+# climate from one that's tapering off). `forecast` has no meaning in a historical
+# window and is omitted; `quality` is reserved for when a historical density/wind
+# proxy exists (the live density read has no multi-decade analog yet). Weights need
+# not sum to 1 -- score_population renormalizes over whatever's present.
+TRIP_BASELINE_WEIGHTS = {"base": 0.40, "season": 0.35, "fresh": 0.20, "quality": 0.05}
+
 # Quality multiplier on (base + powder). Weather shaves up to (1 - weather_span);
 # refreeze (icy crust) and thaw (incoming rain/warmth) each apply their own
 # penalty. Floored so even a raining day keeps a sortable, non-zero number.

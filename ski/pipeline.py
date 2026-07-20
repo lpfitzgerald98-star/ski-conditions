@@ -639,7 +639,10 @@ def decayed_new_snow_in(obs: pd.DataFrame, as_of: date | None = None,
     melt = max(0.0, min(1.0, refreeze))
     half_life = max(p["min_half_life_days"], p["half_life_days_cold"] / (1.0 + p["melt_accel"] * melt))
     age_days = (end - win["date"]).dt.days.clip(lower=0)
-    weights = 0.5 ** (age_days / half_life)
+    # Same exponential kernel as the Trip Predictor's lead-time decay, one source of
+    # truth (score.decay_weight). .map over the <=max_age_days-row window is cheap --
+    # this is not the hot full-history path _prepare warns about.
+    weights = age_days.map(lambda a: score_mod.decay_weight(a, half_life))
     contrib = win["new_snow_24hr"].clip(lower=0).fillna(0.0) * weights
     return float(contrib.sum())
 
