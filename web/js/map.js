@@ -393,6 +393,30 @@ function fitBounds(pts, maxZoom = 8) {
     pts.forEach(m => b.extend([m.longitude, m.latitude]));
     // Extra left padding so pins clear the detail card; less on small screens.
     const wide = window.innerWidth > 780;
+    // The full roster spans nearly the whole globe (Alaska to New Zealand), so
+    // fitting everyone in sometimes needs a zoom BELOW MAP_MIN_ZOOM (the floor
+    // that stops the world tiling sideways during ordinary panning -- see
+    // config.js). fitBounds silently clamps to the map's configured floor with
+    // no per-call override, so a wide fit left real mountains outside the
+    // resulting viewport with nothing visibly wrong -- exactly what made "View
+    // all mountains" report fewer than the full roster "in view" (map.js
+    // viewportKeys / sidebar's "N in view of M").
+    //
+    // Lift the floor for this fit, but DON'T restore it on moveend: MapLibre's
+    // setMinZoom re-clamps the CURRENT zoom immediately if it's now below the
+    // new floor, so restoring as soon as the camera settles would snap straight
+    // back to MAP_MIN_ZOOM and undo the very fit that needed to go below it.
+    // Instead restore lazily, the moment the zoom next reaches/passes the floor
+    // on its own (the user zooming back in, or a later fit) -- at that instant
+    // re-applying the floor is a no-op, so there's never a visible snap.
+    const floor = map.getMinZoom();
+    if (floor > 0) map.setMinZoom(0);
+    const restoreFloorWhenSafe = () => {
+      if (map.getZoom() < floor) return;
+      map.setMinZoom(floor);
+      map.off("zoom", restoreFloorWhenSafe);
+    };
+    map.on("zoom", restoreFloorWhenSafe);
     map.fitBounds(b, {
       padding: { top: 50, bottom: 50, left: 50, right: wide ? 90 : 50 },
       maxZoom, duration: prefersReducedMotion() ? 0 : 700,
