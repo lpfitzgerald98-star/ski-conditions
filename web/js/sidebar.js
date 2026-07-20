@@ -3,6 +3,7 @@
 // Space selects), which is what makes the whole roster reachable without a mouse.
 
 import { badgeSVG } from "./grades.js";
+import { isLeaf } from "./regions.js";
 import { state, visibleScores, displayValue } from "./state.js";
 
 let listEl = null;
@@ -34,12 +35,23 @@ function sortRows(rows) {
     if (vb == null) return -1;
     if (va !== vb) return vb - va;
     // The primary display value saturates (skiability's powder curve tops out
-    // near 24"+, so several mountains can all land at exactly 100) -- break the
-    // tie with global_score, a non-saturating cross-mountain measure, instead of
-    // silently falling through to array order (which happened to be alphabetical
-    // and made a mid-pack mountain look like an unambiguous #1). Falls back to
-    // name so the order is always deterministic, never array-position luck.
-    const ga = a.global_score, gb = b.global_score;
+    // near 24"+, so several mountains can all land at exactly 100 -- and a
+    // percentile RANK of a saturated value ties even harder: if every peer is
+    // also capped, nobody is "strictly below" anybody, so region_score/the
+    // parent-selection percentile can tie at 0 for an entire cohort). Break the
+    // tie with a non-saturating cross-mountain measure instead of silently
+    // falling through to array order (alphabetical, which made a mid-pack
+    // mountain look like an unambiguous #1/#2).
+    //
+    // Match whichever comparable score the CARD itself would show for this same
+    // view, so the leaderboard order and the scorecard's own rank claim can't
+    // contradict each other: worldwide/parent-region views -> global_score (the
+    // "#N worldwide" badge); a single leaf region -> regional_score (the "#N in
+    // <region>" hero banner), which is ranked against that region's own cohort,
+    // not the whole world, so it CAN legitimately differ from global_score.
+    const useRegional = state.region !== "All" && isLeaf(state.region);
+    const ga = useRegional ? a.regional_score : a.global_score;
+    const gb = useRegional ? b.regional_score : b.global_score;
     if (ga != null && gb != null && ga !== gb) return gb - ga;
     return a.name.localeCompare(b.name);
   });
