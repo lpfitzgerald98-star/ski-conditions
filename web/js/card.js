@@ -2,7 +2,7 @@
 // Two scores side by side (absolute overall + within-region percentile) on their
 // own curves, then grades, sub-score bars, incoming storms, weather and warnings.
 
-import { loadCard } from "./api.js";
+import { loadCard, loadTripPattern } from "./api.js";
 import { colorFor, textOn, badgeSVG, naColor, letterFor } from "./grades.js";
 import { state } from "./state.js";
 import { announce, focusSilently } from "./a11y.js";
@@ -22,9 +22,13 @@ export async function openCard(key, { network = false } = {}) {
   lastFocus = document.activeElement;
   el.hidden = false;
   const row = state.byKey[key];
+  const token = ++reqToken;
   // Future (trip) and historical dates both render a compact card straight from the
-  // roster row -- no per-date card files. The row carries the trip breakdown.
-  if (state.tripDate) { el.dataset.key = key; renderTripCard(row, key); return; }
+  // roster row -- no per-date card files. The row carries the trip breakdown. The
+  // token still guards trip cards: Part 1 of the commentary loads asynchronously
+  // (static mode fetches a per-mountain file), and a fast subsequent click must not
+  // let a stale fetch overwrite the card that's now showing.
+  if (state.tripDate) { el.dataset.key = key; renderTripCard(row, key, token); return; }
   // Historical dates have no per-date card file (that'd be 79 x N files); render a
   // compact card straight from the roster row, which already carries the grades.
   if (state.histDate) { el.dataset.key = key; renderHistCard(row, key); return; }
@@ -32,7 +36,6 @@ export async function openCard(key, { network = false } = {}) {
     el.innerHTML = `<div class="placeholder">Loading ${row ? escapeHTML(row.name) : key}…</div>`;
   }
   el.dataset.key = key;
-  const token = ++reqToken;
   try {
     const card = await loadCard(key, { network });
     if (token !== reqToken || state.selected !== key) return;   // superseded
@@ -282,10 +285,104 @@ function renderHistCard(row, key) {
   announce(`${row.name}. As of ${state.histDate}, overall ${row.grade || "not scored"}.`);
 }
 
+// -- Trip Predictor commentary (Parts 2+3) ----------------------------------
+// Part 1 (seasonal pattern) is written once, in Python, over the whole 366-day
+// climatology (ski.trip_commentary) -- see loadTripPattern. Parts 2 (how this
+// year is tracking vs. that pattern) and 3 (the takeaway) depend on TODAY's
+// live score and the picked date's lead time, which change daily and are
+// already sitting on every trip row in both modes -- writing them a second
+// time in Python would just be a second engine to keep in sync for numbers
+// Python doesn't need to look up again. Same combinatorial-variety trick as
+// the live commentary (ski/commentary_rules.py): a few phrasing choices per
+// slot, chosen by a seed stable per (mountain, trip date) so the SAME pick
+// always reads the same way, ported to JS since there's no seeded RNG built in.
+function _seededRng(seed) {
+  let h = 1779033703 ^ seed.length;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+const _pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
+
+const _TRACKING_BAND = [
+  [20, "running well ahead of"], [8, "running a bit ahead of"],
+  [-8, "tracking about in line with"], [-20, "running a bit behind"],
+  [-Infinity, "running well behind"],
+];
+function _trackingBand(delta) {
+  return _TRACKING_BAND.find(([floor]) => delta >= floor)[1];
+}
+
+// The takeaway's tier, from the trip grade -- same A/B/C/other-is-poor
+// collapse as commentary_rules._tier, independently implemented in JS since
+// it's a two-line lookup, not worth importing a whole module for.
+function _tier(grade) {
+  const l = (grade || "")[0];
+  return { A: "great", B: "good", C: "fair" }[l] || "poor";
+}
+const _TAKEAWAY = {
+  great: ["This is shaping up as a strong window for the trip.",
+          "Worth planning around -- this reads as one of the better bets."],
+  good: ["A solid, reasonable choice for the trip.",
+         "This should be a decent bet overall."],
+  fair: ["A middling read -- not a standout, but not a bad option either.",
+         "Nothing special expected here, but nothing alarming either."],
+  poor: ["Worth tempering expectations for this window.",
+         "This isn't shaping up as a strong pick right now."],
+};
+const _LOW_CONF_SUFFIX = [
+  " With a shorter station record here, hold this loosely.",
+  " The record here is thin, so treat this as a rough guide.",
+];
+
+// Part 2: how today compares to the historical pattern, explicit about how
+// much today's conditions actually count at this lead time -- the "be
+// explicit when this is mostly a historical read" requirement.
+function _trackingText(row, info, rng) {
+  const short = row.name.split(",")[0].trim();
+  const pct = Math.round((row.current_weight ?? info.current_weight ?? 0) * 100);
+  const lead = info.lead_days;
+  const weightClause = pct >= 50
+    ? _pick(rng, [`with the trip only ${lead} days out, today's conditions are doing most of the talking here`,
+                  `today's conditions carry real weight here (${pct}%) with the trip this close`])
+    : pct >= 15
+      ? _pick(rng, [`with the trip ${lead} days out, today's conditions still carry real weight (about ${pct}%) in this call`,
+                    `at ${pct}% weight, today's conditions still meaningfully shape this call ${lead} days out`])
+      : _pick(rng, [`with the trip ${lead} days out, today's conditions carry only about ${pct}% of this call -- this is mostly a historical read`,
+                    `at ${lead} days out there's no way to know what the snow will actually do; today's conditions carry only ${pct}% weight here`]);
+
+  if (row.current_score != null && row.historical_baseline != null) {
+    const band = _trackingBand(row.current_score - row.historical_baseline);
+    return _pick(rng, [
+      `Right now, ${short} is ${band} its usual pace for this date, though ${weightClause}.`,
+      `Today's conditions at ${short} are ${band} the historical norm for this date -- ${weightClause}.`,
+    ]);
+  }
+  if (row.historical_baseline != null) {
+    return `There's no live read on ${short} today (it's off-season right now), so this call leans entirely on its historical pattern for the date.`;
+  }
+  return `${short} doesn't have a deep historical record for this exact window, so ${weightClause}.`;
+}
+
+// Part 3: the plain-language takeaway.
+function _takeawayText(row, rng) {
+  let text = _pick(rng, _TAKEAWAY[_tier(row.trip_grade)]);
+  if (row.low_confidence) text += _pick(rng, _LOW_CONF_SUFFIX);
+  return text;
+}
+
 // The Trip Predictor card: a blended prediction for a FUTURE date, built from the
 // roster row (no per-date card files). Shows the blend so it's explainable -- the
-// historical baseline, today's conditions, and how much each counts at this lead.
-function renderTripCard(row, key) {
+// historical baseline, today's conditions, and how much each counts at this lead --
+// plus the three-part commentary (seasonal pattern / tracking / takeaway).
+async function renderTripCard(row, key, token) {
   if (!row) { el.innerHTML = '<div class="placeholder">No data.</div>'; return; }
   const info = state.tripInfo || {};
   const grd = v => (v == null ? "—" : (letterFor(v) || "—"));
@@ -294,6 +391,12 @@ function renderTripCard(row, key) {
   const base = row.historical_baseline, cur = row.current_score;
   const heroNum = row.trip_score != null ? Math.round(row.trip_score) : "—";
   const offseason = row.trip_score == null;
+
+  const rng = _seededRng(`${key}|${state.tripDate}`);
+  const commentaryParts = [row.pattern || ""];   // live mode: already on the row
+  if (row.trip_score != null) {
+    commentaryParts.push(_trackingText(row, info, rng), _takeawayText(row, rng));
+  }
 
   el.innerHTML = `<button class="close" type="button" aria-label="Close details">✕</button>
     <h2 id="detail-title">${escapeHTML(row.name)}</h2>
@@ -319,12 +422,26 @@ function renderTripCard(row, key) {
       <div class="cell"><div class="k">History</div>
         <div class="v">${row.n_years || 0}<small>yrs${row.low_confidence ? " · low conf" : ""}</small></div></div>
     </div>
-    <div class="note">A trip this far out leans on how ${escapeHTML(row.name)} typically skis
-      this week of the year; today's live conditions blend in at ${wpct}% and fade as the
-      date recedes.</div>`;
+    <div class="note commentary trip-commentary">
+      <p class="trip-pattern">${row.pattern ? escapeHTML(row.pattern) : "Loading seasonal pattern…"}</p>
+      ${commentaryParts.slice(1).map(p => `<p>${escapeHTML(p)}</p>`).join("")}
+    </div>`;
   el.querySelector(".close").addEventListener("click", close);
   focusSilently(el.querySelector(".close"));
   announce(`${row.name}. Trip prediction ${g}.`);
+
+  // Live mode already embedded `pattern` on the row -- nothing more to fetch.
+  // Static mode fetches it lazily (per-mountain file); fill it in once it
+  // lands, guarded so a fast subsequent click can't have this overwrite a
+  // card that's since moved on to a different mountain or date.
+  if (!row.pattern) {
+    let mmdd = state.tripDate.slice(5);
+    if (mmdd === "02-29") mmdd = "02-28";
+    const text = await loadTripPattern(key, mmdd);
+    if (token !== reqToken || state.tripDate == null) return;
+    const slot = el.querySelector(".trip-pattern");
+    if (slot) slot.textContent = text || "No seasonal pattern available for this mountain.";
+  }
 }
 
 function escapeHTML(s) {

@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import (DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS,  # noqa: E402
                     TRIP_LEAD_DECAY, TRIP_WINDOW_DAYS)
-from ski import commentary, pipeline, trip  # noqa: E402
+from ski import commentary, pipeline, trip, trip_commentary  # noqa: E402
 from ski.card import scorecard  # noqa: E402
 from ski.db import read_observations  # noqa: E402
 from ski.regions import region_for, region_tree  # noqa: E402
@@ -257,27 +257,17 @@ def build_history(keys: list[str], start: date, end: date,
     return {"built": built, "total": len(dates)}
 
 
-def build_trip_baseline(keys: list[str], ref_year: int = 2023) -> dict:
-    """Precompute the Trip Predictor's HISTORICAL baseline for every calendar date.
+def _build_climatology(keys: list[str]) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Each requested mountain's climatology (ski.trip.climatology, a few
+    group-bys over its whole station record), cached per station id so
+    resorts sharing a station (e.g. Alta/Snowbird) share the computation.
 
-    History is immutable, so a mountain's typical conditions for "March 14" never
-    change -- this is a pure build-time artifact. For each mountain we compute its
-    climatology once (ski.trip.climatology, a few group-bys over its whole record),
-    then for each calendar day of a reference non-leap year we resolve that day to
-    the mountain's own day-of-water-year (hemisphere-aware) and rank the roster with
-    the trip weights (ski.trip.score_baseline).
-
-    Output web/data/trip/baseline.json, keyed by calendar MM-DD:
-        {"generated_at", "half_life_days", "window_days",
-         "dates": {"03-14": {key: [baseline_score|null, n_years], ...}, ...}}
-
-    The frontend loads this once (lazily, on the first future date pick) and blends
-    each mountain's baseline with TODAY'S global score using the lead-time decay --
-    all the ranking stays here in Python; the client only does the 1-line blend.
-    Climatology is cached per station id (resorts sharing a station share it)."""
-    trip_dir = WEB_DATA / "trip"
-    trip_dir.mkdir(parents=True, exist_ok=True)
-
+    Returns (clim_by_station, meta_by_key) -- meta_by_key carries what
+    ski.trip.roster_baseline_rows and ski.trip_commentary both need per
+    mountain (station id, water-year start month, region) without re-reading
+    config.MOUNTAINS at every call site. Shared by build_trip_baseline (the
+    RANKED score) and build_trip_patterns (the PROSE) -- one pass over the DB
+    feeds both, since they read the exact same underlying trajectory."""
     clim_by_station: dict[str, dict] = {}
     meta_by_key: dict[str, dict] = {}
     for key in keys:
@@ -295,6 +285,28 @@ def build_trip_baseline(keys: list[str], ref_year: int = 2023) -> dict:
         meta_by_key[key] = {"station": station,
                             "wy_start": pipeline.mountain_wy_start(m),
                             "region": region_for(m)}
+    return clim_by_station, meta_by_key
+
+
+def build_trip_baseline(keys: list[str], clim_by_station: dict[str, dict],
+                        meta_by_key: dict[str, dict], ref_year: int = 2023) -> dict:
+    """Precompute the Trip Predictor's HISTORICAL baseline for every calendar date.
+
+    History is immutable, so a mountain's typical conditions for "March 14" never
+    change -- this is a pure build-time artifact. For each calendar day of a
+    reference non-leap year we resolve that day to each mountain's own
+    day-of-water-year (hemisphere-aware) and rank the roster with the trip
+    weights (ski.trip.score_baseline).
+
+    Output web/data/trip/baseline.json, keyed by calendar MM-DD:
+        {"generated_at", "half_life_days", "window_days",
+         "dates": {"03-14": {key: [baseline_score|null, n_years], ...}, ...}}
+
+    The frontend loads this once (lazily, on the first future date pick) and blends
+    each mountain's baseline with TODAY'S global score using the lead-time decay --
+    all the ranking stays here in Python; the client only does the 1-line blend."""
+    trip_dir = WEB_DATA / "trip"
+    trip_dir.mkdir(parents=True, exist_ok=True)
 
     dates: dict[str, dict] = {}
     d = date(ref_year, 1, 1)
@@ -314,6 +326,45 @@ def build_trip_baseline(keys: list[str], ref_year: int = 2023) -> dict:
     (trip_dir / "baseline.json").write_text(
         json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     return {"dates": len(dates), "mountains": len(keys)}
+
+
+def build_trip_patterns(keys: list[str], clim_by_station: dict[str, dict],
+                        meta_by_key: dict[str, dict], ref_year: int = 2023) -> dict:
+    """Precompute the Trip Predictor's seasonal-pattern PROSE (Part 1 of the
+    trip commentary -- see ski.trip_commentary) for every mountain x calendar
+    date. Doesn't depend on "today" at all (only climatology + season_window,
+    both stable data), so unlike baseline.json this never needs same-day
+    freshness -- it's rebuilt whenever the snapshot rebuilds, same as
+    everything else, but nothing would go stale if it weren't.
+
+    Written ONE FILE PER MOUNTAIN (web/data/trip/patterns/<key>.json, MM-DD ->
+    text), not folded into baseline.json: baseline.json drives the WHOLE
+    leaderboard on every date pick and stays deliberately tiny (~1KB/mountain
+    for a [score, n_years] pair); prose for all 366 days of all 113 mountains
+    would multiply that by roughly 200x. Splitting per mountain mirrors the
+    two sharding precedents already in this codebase -- per-mountain live
+    cards (web/data/cards/<key>.json) and per-date history (web/data/hist/
+    <date>.json) -- and the frontend fetches a mountain's pattern file lazily,
+    only when that mountain's trip card actually opens (see web/js/api.js
+    loadTripPattern, web/js/card.js renderTripCard)."""
+    patterns_dir = WEB_DATA / "trip" / "patterns"
+    patterns_dir.mkdir(parents=True, exist_ok=True)
+
+    for key in keys:
+        mk = meta_by_key[key]
+        clim = clim_by_station.get(mk["station"], {})
+        name = MOUNTAINS[key]["name"]
+        season_window = MOUNTAINS[key].get("season_window")
+        out: dict[str, str] = {}
+        d = date(ref_year, 1, 1)
+        end = date(ref_year, 12, 31)
+        while d <= end:
+            out[d.strftime("%m-%d")] = trip_commentary.seasonal_pattern_text(
+                key, name, mk["wy_start"], season_window, clim, d)
+            d += timedelta(days=1)
+        (patterns_dir / f"{key}.json").write_text(
+            json.dumps(out, separators=(",", ":")), encoding="utf-8")
+    return {"mountains": len(keys)}
 
 
 def main() -> int:
@@ -356,12 +407,15 @@ def main() -> int:
         meta = {"ok": len(keys), "failed": []}
 
     if not args.no_trip and not args.history_only:
-        print(f"== Building Trip Predictor baseline ({len(keys)} mountains x 365 days) ==")
+        print(f"== Building Trip Predictor climatology ({len(keys)} mountains) ==")
         try:
-            t = build_trip_baseline(keys)
+            clim_by_station, meta_by_key = _build_climatology(keys)
+            t = build_trip_baseline(keys, clim_by_station, meta_by_key)
             print(f"Trip baseline: {t['dates']} dates x {t['mountains']} mountains -> {WEB_DATA / 'trip'}")
+            p = build_trip_patterns(keys, clim_by_station, meta_by_key)
+            print(f"Trip patterns: {p['mountains']} mountains -> {WEB_DATA / 'trip' / 'patterns'}")
         except Exception as exc:  # noqa: BLE001 -- a baseline failure shouldn't sink the snapshot
-            print(f"Trip baseline FAILED: {exc}")
+            print(f"Trip baseline/patterns FAILED: {exc}")
 
     if args.history or args.history_only:
         # Default range: the current + previous water years back to Nov 1, which

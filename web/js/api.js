@@ -59,6 +59,23 @@ export async function loadTripBaseline() {
   return _tripBaseline;
 }
 
+// The Trip Predictor's seasonal-pattern PROSE (Part 1 of trip commentary --
+// see ski.trip_commentary), static mode only: one file per mountain, MM-DD ->
+// text, fetched lazily and cached per mountain, only when that mountain's
+// trip card actually opens (never the whole leaderboard at once -- see
+// scripts/build_snapshot.build_trip_patterns for why it's sharded this way).
+// Live mode doesn't need this at all: GET /trip already embeds `pattern` on
+// every row inline (see api.py trip_forecast), so this returns null there.
+const _tripPatternCache = new Map();
+export async function loadTripPattern(key, mmdd) {
+  if (LIVE) return null;
+  if (!_tripPatternCache.has(key)) {
+    _tripPatternCache.set(key, getJSON(`${DATA_BASE}/trip/patterns/${key}.json`).catch(() => null));
+  }
+  const patterns = await _tripPatternCache.get(key);
+  return patterns ? (patterns[mmdd] ?? null) : null;
+}
+
 // Live mode: the backend blends and ranks for a future date. Returns the same
 // {date, lead_days, current_weight, mountains:[...]} shape the static path builds.
 export async function loadTripLive(dateStr, profile) {

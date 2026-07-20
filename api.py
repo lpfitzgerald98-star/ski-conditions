@@ -42,7 +42,7 @@ from fastapi.staticfiles import StaticFiles
 from config import (DB_PATH, DEFAULT_PROFILE, GRADE_THRESHOLDS,
                     LOW_CONFIDENCE_YEARS, MOUNTAINS, TRIP_LEAD_DECAY,
                     TRIP_WINDOW_DAYS)
-from ski import cache, pipeline, trip
+from ski import cache, pipeline, trip, trip_commentary
 from ski.db import read_observations
 from ski.grading import letter_grade
 from ski.regions import region_for, region_tree
@@ -367,6 +367,8 @@ def trip_forecast(
     for key in sorted(MOUNTAINS):
         b = base[key]
         ts, w = trip.blend_trip_score(current.get(key), b["baseline_score"], lead)
+        mk = ctx["meta"][key]
+        m = MOUNTAINS[key]
         row = mountain_summary(key)
         row.update(
             trip_score=ts,
@@ -377,6 +379,18 @@ def trip_forecast(
             n_years=b["n_years"],
             low_confidence=b["n_years"] < LOW_CONFIDENCE_YEARS,
             in_season=b["in_season"],
+            # Part 1 of the trip commentary (seasonal pattern) -- cheap pure
+            # Python, computed inline per request rather than read from a file
+            # (the static build's web/data/trip/patterns/<key>.json), since
+            # live mode has no daily-build artifact to read and this doesn't
+            # depend on anything expensive: the SAME per-day climatology cache
+            # (ctx["clim"]) this request already built for the score blend.
+            # Parts 2/3 (current-vs-baseline tracking + takeaway) are added
+            # client-side from the fields already on this row -- see
+            # web/js/card.js.
+            pattern=trip_commentary.seasonal_pattern_text(
+                key, m["name"], mk["wy_start"], m.get("season_window"),
+                ctx["clim"].get(mk["station"], {}), target),
         )
         rows.append(row)
     rows = trip.rank_trip(rows)
