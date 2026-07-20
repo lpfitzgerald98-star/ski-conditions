@@ -144,11 +144,20 @@ async function enterHistory(d) {
 // live mode asks the /trip endpoint, which returns the same shape already blended.
 function tripGrade(v) { return v == null ? "—" : (letterFor(v) || "—"); }
 
+// Storm alerts (row.alert -- the map pin's pulsing ring, the sidebar's ⚠ chip, the
+// tooltip text) are computed live over a 24/72h forecast window (see
+// pipeline.forecast_incoming_storms). A trip date beyond that window wouldn't
+// include whatever storm triggered it, so carrying today's `alert` straight
+// through would flag a storm that's long past (or hasn't happened yet) by the
+// time the trip actually occurs. 3 days matches that 72h ceiling.
+const TRIP_ALERT_HORIZON_DAYS = 3;
+
 // Overlay a trip score onto the fields the map/list/card already read, and carry
 // the breakdown for the card. in_season drives the leaderboard's tier sort, so a
 // date with no rankable prediction (off-season / no history) sinks and dims.
 function asTripRow(base, { trip_score, historical_baseline, current_score,
-                          current_weight, n_years, low_confidence, in_season }) {
+                          current_weight, n_years, low_confidence, in_season },
+                   leadDays) {
   const g = tripGrade(trip_score);
   return {
     ...base,
@@ -157,6 +166,7 @@ function asTripRow(base, { trip_score, historical_baseline, current_score,
     global_score: trip_score, regional_score: trip_score,
     in_season: in_season ?? (trip_score != null),
     status: "live",
+    alert: leadDays <= TRIP_ALERT_HORIZON_DAYS ? !!base.alert : false,
     trip_score, historical_baseline, current_score,
     current_weight, n_years, low_confidence,
   };
@@ -176,7 +186,7 @@ async function computeTrip(d) {
   if (LIVE) {
     const data = await loadTripLive(d, state.profile);
     return {
-      rows: data.mountains.map(m => asTripRow(m, m)),
+      rows: data.mountains.map(m => asTripRow(m, m, data.lead_days)),
       info: { lead_days: data.lead_days, current_weight: data.current_weight },
     };
   }
@@ -194,7 +204,7 @@ async function computeTrip(d) {
       trip_score: ts, historical_baseline: bScore, current_score: r.global_score ?? null,
       current_weight: w, n_years: nYears, low_confidence: nYears < 10,
       in_season: ts != null,
-    });
+    }, lead);
   });
   return { rows, info: { lead_days: lead, current_weight: Math.pow(0.5, Math.max(0, lead) / hl) } };
 }
