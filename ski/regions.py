@@ -15,30 +15,40 @@ from __future__ import annotations
 
 _STATE_REGION = {
     "UT": "Utah",
-    "CO": "Colorado",
+    # Southwest folded into Colorado (2026-07: a 1-mountain region can never get a
+    # meaningful within-region rank -- rank_against needs at least one peer -- and
+    # Taos sits culturally/geographically in the same southern-Rockies belt).
+    "CO": "Colorado", "NM": "Colorado", "AZ": "Colorado",
     "CA": "Tahoe & Sierra", "NV": "Tahoe & Sierra",
-    "WA": "Pacific Northwest", "OR": "Pacific Northwest",
+    # Alaska folded into Pacific Northwest for the same reason (1-mountain region);
+    # both are Pacific-coast climates.
+    "WA": "Pacific Northwest", "OR": "Pacific Northwest", "AK": "Pacific Northwest",
     "WY": "Northern Rockies", "MT": "Northern Rockies", "ID": "Northern Rockies",
-    "NM": "Southwest", "AZ": "Southwest",
-    "AK": "Alaska",
     "VT": "Northeast", "NH": "Northeast", "ME": "Northeast",
     "NY": "Northeast", "MA": "Northeast",
     "BC": "British Columbia",
     "AB": "Alberta",
     "QC": "Eastern Canada", "ON": "Eastern Canada",
     "AU": "Australia", "NZ": "New Zealand",
-    "CL": "Chile", "AR": "Argentina",
-    # Europe: leaves are mountain RANGES, not countries. A country code maps to
-    # the range holding most of its resorts; the resorts on the other side of a
-    # split country (French Pyrenees, Italian Dolomites) set an explicit
-    # `region` override in their MOUNTAINS entry (see `region_for`).
-    "FR": "Alps", "CH": "Alps", "AT": "Alps", "IT": "Alps",
-    "DE": "Alps", "SI": "Alps",
-    "ES": "Pyrenees", "AD": "Pyrenees",
-    "NO": "Scandinavia", "SE": "Scandinavia", "FI": "Scandinavia",
-    "RO": "Carpathians", "SK": "Carpathians", "PL": "Carpathians",
-    "BG": "Balkans",
-    "GB": "Scotland",
+    # South America stays ONE leaf (2026-07: only 5 mountains total; a Chile/
+    # Argentina split added a region-picker layer for no ranking benefit).
+    "CL": "South America", "AR": "South America",
+    # Europe: leaves are NORTH/SOUTH, not individual mountain ranges (2026-07:
+    # the prior 7-way range split -- Alps/Dolomites/Pyrenees/Scandinavia/
+    # Carpathians/Balkans/Scotland -- was too granular for a useful within-region
+    # leaderboard). Nordic + British Isles resorts are the clearly northern
+    # cluster; everything else (Alpine, Iberian, Carpathian, Balkan) groups as
+    # Southern Europe. The old per-mountain `region` overrides for the Dolomites/
+    # Pyrenees (needed because FR/IT default to the Alps) are gone -- both ranges
+    # now land in the same Southern Europe bucket as the Alps, so the country-code
+    # default is already correct.
+    "FR": "Southern Europe", "CH": "Southern Europe", "AT": "Southern Europe",
+    "IT": "Southern Europe", "DE": "Southern Europe", "SI": "Southern Europe",
+    "ES": "Southern Europe", "AD": "Southern Europe",
+    "RO": "Southern Europe", "SK": "Southern Europe", "PL": "Southern Europe",
+    "BG": "Southern Europe",
+    "NO": "Northern Europe", "SE": "Northern Europe", "FI": "Northern Europe",
+    "GB": "Northern Europe",
 }
 
 
@@ -82,28 +92,19 @@ _PARENT: dict[str, str | None] = {
     "Western North America": "Northern Hemisphere",
     "East Coast (incl. Canada)": "Northern Hemisphere",
     "Europe": "Northern Hemisphere",
-    "South America": "Southern Hemisphere",
+    "South America": "Southern Hemisphere",   # now a LEAF (Chile+Argentina merged)
     "Oceania": "Southern Hemisphere",
-    "Alps": "Europe",
-    "Dolomites": "Europe",
-    "Pyrenees": "Europe",
-    "Scandinavia": "Europe",
-    "Carpathians": "Europe",
-    "Balkans": "Europe",
-    "Scotland": "Europe",
+    "Northern Europe": "Europe",
+    "Southern Europe": "Europe",
     "Utah": "Western North America",
-    "Colorado": "Western North America",
+    "Colorado": "Western North America",      # now includes the old Southwest
     "Tahoe & Sierra": "Western North America",
-    "Pacific Northwest": "Western North America",
+    "Pacific Northwest": "Western North America",   # now includes the old Alaska
     "Northern Rockies": "Western North America",
-    "Southwest": "Western North America",
-    "Alaska": "Western North America",
     "British Columbia": "Western North America",
     "Alberta": "Western North America",
     "Northeast": "East Coast (incl. Canada)",
     "Eastern Canada": "East Coast (incl. Canada)",
-    "Chile": "South America",
-    "Argentina": "South America",
     "Australia": "Oceania",
     "New Zealand": "Oceania",
 }

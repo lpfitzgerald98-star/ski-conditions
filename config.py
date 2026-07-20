@@ -1185,12 +1185,10 @@ MOUNTAINS = {
         "storm_floor_inches": {24: 3, 72: 6},
         "season_window": {"start": (12, 10), "end": (3, 31)},
     },
-    # Dolomites (region override: the IT country code defaults to "Alps")
     "cortina": {
         "name": "Cortina d'Ampezzo, IT",
         "data_source": "openmeteo",
         "openmeteo_id": "46.5405,12.1357",
-        "region": "Dolomites",
         "latitude": 46.5405,
         "longitude": 12.1357,
         "verified": True,
@@ -1201,14 +1199,12 @@ MOUNTAINS = {
         "name": "Val Gardena, IT",
         "data_source": "openmeteo",
         "openmeteo_id": "46.556,11.762",
-        "region": "Dolomites",
         "latitude": 46.556,
         "longitude": 11.762,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
         "season_window": {"start": (12, 1), "end": (4, 10)},
     },
-    # Pyrenees (Saint-Lary overrides: the FR country code defaults to "Alps")
     "baqueira_beret": {
         "name": "Baqueira-Beret, ES",
         "data_source": "openmeteo",
@@ -1243,7 +1239,6 @@ MOUNTAINS = {
         "name": "Saint-Lary-Soulan, FR",
         "data_source": "openmeteo",
         "openmeteo_id": "42.8129,0.3218",
-        "region": "Pyrenees",
         "latitude": 42.8129,
         "longitude": 0.3218,
         "verified": True,

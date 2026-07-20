@@ -36,14 +36,18 @@ def test_every_leaf_is_rooted():
 
 def test_ancestors_nearest_first():
     assert ancestors("Utah") == ["Western North America", "Northern Hemisphere"]
-    assert ancestors("Argentina") == ["South America", "Southern Hemisphere"]
+    # South America is now a LEAF (Chile+Argentina merged, 2026-07: too few
+    # mountains for a country-level split to be worth a picker layer).
+    assert ancestors("South America") == ["Southern Hemisphere"]
     assert ancestors("Northern Hemisphere") == []
 
 
 def test_descendant_leaves_of_parent():
-    assert descendant_leaves("South America") == {"Chile", "Argentina"}
+    # South America has no children of its own now -- its descendant set is
+    # itself, same as any other leaf.
+    assert descendant_leaves("South America") == {"South America"}
     assert "Utah" in descendant_leaves("Northern Hemisphere")
-    assert "Chile" not in descendant_leaves("Northern Hemisphere")
+    assert "South America" not in descendant_leaves("Northern Hemisphere")
     # a leaf's descendant set is itself
     assert descendant_leaves("Utah") == {"Utah"}
 
@@ -58,25 +62,34 @@ def test_unknown_region_is_its_own_leaf():
 def test_region_of_still_parses_names():
     """The hierarchy sits ON TOP of the leaf parse; the parse itself is unchanged."""
     assert region_of("Alta, UT") == "Utah"
-    assert region_of("Cerro Catedral, AR") == "Argentina"
-    assert region_of("Zermatt, CH") == "Alps"
-    assert region_of("Bansko, BG") == "Balkans"
+    # South America no longer splits by country (2026-07 consolidation).
+    assert region_of("Cerro Catedral, AR") == "South America"
+    assert region_of("Zermatt, CH") == "Southern Europe"
+    assert region_of("Bansko, BG") == "Southern Europe"
+    assert region_of("Hemsedal, NO") == "Northern Europe"
+    assert region_of("Cairngorm, GB") == "Northern Europe"
+
+
+def test_western_north_america_folds_the_1_mountain_regions():
+    """Alaska and Southwest each had exactly one mountain -- too few for a
+    within-region rank to ever mean anything (rank_against needs a real peer) --
+    so they fold into a geographically adjacent, larger neighbor."""
+    assert region_of("Alyeska, AK") == "Pacific Northwest"
+    assert region_of("Taos Ski Valley, NM") == "Colorado"
 
 
 def test_europe_sits_under_northern_hemisphere():
-    assert ancestors("Alps") == ["Europe", "Northern Hemisphere"]
-    assert descendant_leaves("Europe") == {
-        "Alps", "Dolomites", "Pyrenees", "Scandinavia",
-        "Carpathians", "Balkans", "Scotland",
-    }
+    assert ancestors("Southern Europe") == ["Europe", "Northern Hemisphere"]
+    assert ancestors("Northern Europe") == ["Europe", "Northern Hemisphere"]
+    assert descendant_leaves("Europe") == {"Northern Europe", "Southern Europe"}
 
 
 def test_region_override_beats_the_country_parse():
-    """A split country's minority resorts pin their range explicitly; every
-    override in the real roster must itself be a leaf the tree knows."""
-    assert region_for({"name": "Chamonix, FR"}) == "Alps"
-    assert region_for({"name": "Saint-Lary-Soulan, FR", "region": "Pyrenees"}) == "Pyrenees"
-    assert region_for({"name": "Cortina d'Ampezzo, IT", "region": "Dolomites"}) == "Dolomites"
+    """An explicit per-mountain `region` still wins over the country-code parse
+    (the mechanism the old Dolomites/Pyrenees split used) -- verified generically
+    since no mountain in the real roster still needs one post-consolidation."""
+    assert region_for({"name": "Chamonix, FR"}) == "Southern Europe"
+    assert region_for({"name": "Chamonix, FR", "region": "Northern Europe"}) == "Northern Europe"
 
     from config import MOUNTAINS
     tree_ids = {n["id"] for n in region_tree()}
