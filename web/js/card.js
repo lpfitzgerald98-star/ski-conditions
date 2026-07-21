@@ -311,6 +311,16 @@ function _seededRng(seed) {
 }
 const _pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
 
+// Beyond this many days out, there's no live forecast signal left to talk
+// about at all -- matches config.MEDIUM_RANGE['horizon_hours'] (240h = 10
+// days), the real outer edge of forecast skill the scoring engine itself
+// uses (see pipeline.medium_range_percentile). A reader planning a trip this
+// far out isn't asking "what's the forecast" -- they're asking "how does this
+// mountain usually ski this time of year", so Part 2 (today-vs-baseline
+// tracking, "no live read" caveats) has nothing useful to add and is skipped
+// entirely; the takeaway (Part 3) carries the "so what" alone, grade-driven.
+const _NEAR_TERM_LEAD_DAYS = 10;
+
 const _TRACKING_BAND = [
   [20, "running well ahead of"], [8, "running a bit ahead of"],
   [-8, "tracking about in line with"], [-20, "running a bit behind"],
@@ -320,9 +330,13 @@ function _trackingBand(delta) {
   return _TRACKING_BAND.find(([floor]) => delta >= floor)[1];
 }
 
-// The takeaway's tier, from the trip grade -- same A/B/C/other-is-poor
-// collapse as commentary_rules._tier, independently implemented in JS since
-// it's a two-line lookup, not worth importing a whole module for.
+// The takeaway's tier, from the BLENDED trip grade (row.grade -- the same
+// letter the hero badge shows), not the raw historical baseline alone: this
+// is what makes an A+ read positively regardless of why it's an A+ (strong
+// current conditions near-term, or a strong historical pattern far out).
+// Same A/B/C/other-is-poor collapse as commentary_rules._tier, independently
+// implemented in JS since it's a two-line lookup, not worth importing a
+// whole module for.
 function _tier(grade) {
   const l = (grade || "")[0];
   return { A: "great", B: "good", C: "fair" }[l] || "poor";
@@ -343,37 +357,47 @@ const _LOW_CONF_SUFFIX = [
 ];
 
 // Part 2: how today compares to the historical pattern, explicit about how
-// much today's conditions actually count at this lead time -- the "be
-// explicit when this is mostly a historical read" requirement.
+// much today's conditions actually count at this lead time. Returns null
+// beyond _NEAR_TERM_LEAD_DAYS -- there's no live forecast signal left to
+// weigh in on at that range, so there's nothing honest to say about "today"
+// at all (see _NEAR_TERM_LEAD_DAYS); the takeaway alone carries Part 3.
 function _trackingText(row, info, rng) {
+  const lead = info.lead_days;
+  if (lead > _NEAR_TERM_LEAD_DAYS) return null;
+
   const short = row.name.split(",")[0].trim();
   const pct = Math.round((row.current_weight ?? info.current_weight ?? 0) * 100);
-  const lead = info.lead_days;
   const weightClause = pct >= 50
     ? _pick(rng, [`with the trip only ${lead} days out, today's conditions are doing most of the talking here`,
                   `today's conditions carry real weight here (${pct}%) with the trip this close`])
-    : pct >= 15
-      ? _pick(rng, [`with the trip ${lead} days out, today's conditions still carry real weight (about ${pct}%) in this call`,
-                    `at ${pct}% weight, today's conditions still meaningfully shape this call ${lead} days out`])
-      : _pick(rng, [`with the trip ${lead} days out, today's conditions carry only about ${pct}% of this call -- this is mostly a historical read`,
-                    `at ${lead} days out there's no way to know what the snow will actually do; today's conditions carry only ${pct}% weight here`]);
+    : _pick(rng, [`with the trip ${lead} days out, today's conditions still carry real weight (about ${pct}%) in this call`,
+                  `at ${pct}% weight, today's conditions still meaningfully shape this call ${lead} days out`]);
 
   if (row.current_score != null && row.historical_baseline != null) {
     const band = _trackingBand(row.current_score - row.historical_baseline);
     return _pick(rng, [
-      `Right now, ${short} is ${band} its usual pace for this date, though ${weightClause}.`,
+      `Right now, ${short} is ${band} its usual pace for this date, and ${weightClause}.`,
       `Today's conditions at ${short} are ${band} the historical norm for this date -- ${weightClause}.`,
     ]);
   }
-  if (row.historical_baseline != null) {
-    return `There's no live read on ${short} today (it's off-season right now), so this call leans entirely on its historical pattern for the date.`;
+  if (row.current_score != null) {
+    // No baseline (thin/no historical record for this window), but a live
+    // read exists and the trip is close enough for it to matter.
+    return `There's no deep historical record for this exact window at ${short}, so ${weightClause}.`;
   }
-  return `${short} doesn't have a deep historical record for this exact window, so ${weightClause}.`;
+  // No live read even though the trip is within the forecast-relevant
+  // window (e.g. the mountain is between seasons right now) -- worth saying
+  // here, unlike the far-out case, since the reader might expect one.
+  return `There's no live conditions read for ${short} right now, so this call leans on its historical pattern for the date.`;
 }
 
-// Part 3: the plain-language takeaway.
+// Part 3: the plain-language takeaway, driven by the BLENDED grade -- close
+// in, that's mostly today's conditions; far out, it's almost entirely the
+// historical baseline. Either way, an A+ reads positively here: the tier
+// comes from row.grade, the same letter already blended for exactly this
+// lead time, not a second, disconnected judgment call.
 function _takeawayText(row, rng) {
-  let text = _pick(rng, _TAKEAWAY[_tier(row.trip_grade)]);
+  let text = _pick(rng, _TAKEAWAY[_tier(row.grade)]);
   if (row.low_confidence) text += _pick(rng, _LOW_CONF_SUFFIX);
   return text;
 }
@@ -395,7 +419,9 @@ async function renderTripCard(row, key, token) {
   const rng = _seededRng(`${key}|${state.tripDate}`);
   const commentaryParts = [row.pattern || ""];   // live mode: already on the row
   if (row.trip_score != null) {
-    commentaryParts.push(_trackingText(row, info, rng), _takeawayText(row, rng));
+    const tracking = _trackingText(row, info, rng);   // null beyond the forecast-relevant window
+    if (tracking) commentaryParts.push(tracking);
+    commentaryParts.push(_takeawayText(row, rng));
   }
 
   el.innerHTML = `<button class="close" type="button" aria-label="Close details">✕</button>
