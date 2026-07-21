@@ -1,0 +1,70 @@
+# One-time (repeatable) backfill of historical mean_temp_f into the cached
+# observation DB, so the Tier-2 (temperature-derived) density + preservation
+# signals become station-specific instead of falling back to the regional prior.
+#
+# Why a dedicated workflow, not the daily snapshot's --full-ingest: Open-Meteo's
+# archive API rate-limits (429) hard on 54 back-to-back full-history pulls, and a
+# plain full-ingest has no backoff -- on a cold cache it could leave stations with
+# NO data and drop them from the site. scripts/backfill_temp.py is RESUMABLE (only
+# chases stations still missing temp) and backs off on 429, and it runs against the
+# WARM cached DB so a failed station simply keeps its existing snow history.
+#
+# Safe to run repeatedly: each dispatch fills more of the gap. Dispatch from the
+# Actions tab (or `gh workflow run temp-backfill.yml`) until it reports full
+# coverage, then run the "Ski snapshot" workflow once to re-score + redeploy.
+name: Temp backfill (Tier-2 density)
+
+on:
+  workflow_dispatch:
+
+# Share the snapshot's concurrency group so the two never race the DB cache.
+concurrency:
+  group: ski-pages
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pandas numpy requests
+
+      - name: Restore observation DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ski-db-${{ github.run_id }}
+          restore-keys: |
+            ski-db-
+
+      # GUARD: only touch a WARM DB. A cold/tiny DB means the daily snapshot
+      # hasn't seeded the cache yet -- backfilling then would save a partial DB
+      # (depth-only stations only) and drop the SWE stations from the site.
+      - name: Require a warm DB
+        run: |
+          rows=$(python -c "import sqlite3, os; print(sqlite3.connect('data/ski.db').execute('select count(*) from raw_observations').fetchone()[0]) if os.path.exists('data/ski.db') else print(0)" 2>/dev/null || echo 0)
+          echo "db rows: $rows"
+          if [ "$rows" -lt 100000 ]; then
+            echo "::error::DB cache is cold/incomplete ($rows rows). Run the 'Ski snapshot' workflow first to seed it, then re-run this."
+            exit 1
+          fi
+
+      - name: Backfill mean_temp_f (resumable, 429-backoff)
+        run: python scripts/backfill_temp.py
+
+      # Save only after a successful backfill, so a partial/failed run never
+      # overwrites the good cache. Newest ski-db-* wins the restore-key prefix,
+      # so the next snapshot run reads this temp-enriched DB.
+      - name: Save observation DB cache
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: ski-db-${{ github.run_id }}
