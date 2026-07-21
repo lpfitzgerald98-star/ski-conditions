@@ -57,18 +57,23 @@ jobs:
             exit 1
           fi
 
-      # `|| true` so a partial run (some stations still rate-limited) still counts
-      # as success -- backfill_temp only ADDS temp via COALESCE, never removes snow
-      # data, so partial progress is always worth persisting and is safe to save.
-      # The script is resumable, so a re-dispatch chases only the stations still
-      # missing temp.
+      # STEP-level timeout (not the job's) so a heavily-throttled run gets cut off
+      # with runway left in the job for the Save step to still execute -- a step
+      # timeout, unlike a job timeout, reliably lets subsequent steps run. `|| true`
+      # so hitting it (or a handful of stations still 429ing) counts as success:
+      # backfill_temp only ADDS temp via COALESCE, never touches snow data, so
+      # whatever got through is always worth persisting. Resumable across dispatches.
       - name: Backfill mean_temp_f (resumable, 429-backoff)
-        run: python scripts/backfill_temp.py || echo "partial (some stations still rate-limited); progress saved, re-dispatch to finish"
+        timeout-minutes: 300
+        run: python scripts/backfill_temp.py || echo "partial/timed out; progress saved below, re-dispatch to finish the rest"
 
-      # Persist even on a partial run (see above). Newest ski-db-* wins the
-      # restore-key prefix, so the next snapshot run reads this temp-enriched DB.
+      # ALWAYS persist, including after the step timeout above or a job cancellation --
+      # backfill_temp.py commits each station's upsert immediately, so the local
+      # data/ski.db already reflects every station that finished even if the process
+      # never reached "Done." Skipping the save here is what silently discarded a
+      # whole 68/72-station run once already; never repeat that.
       - name: Save observation DB cache
-        if: ${{ !cancelled() }}
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: data
