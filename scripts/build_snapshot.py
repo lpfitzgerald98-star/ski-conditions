@@ -276,9 +276,16 @@ def _build_climatology(keys: list[str]) -> tuple[dict[str, dict], dict[str, dict
         if station not in clim_by_station:
             try:
                 obs = read_observations(pipeline.DB_PATH, station)
+                # Regional literature priors + per-network trust shrink the noisy
+                # measured density/preservation (see ski.trip / config priors).
+                src = m.get("data_source", pipeline.DEFAULT_SOURCE)
+                d_prior, d_trust = trip.density_priors(region_for(m), src)
+                p_prior, p_trust = trip.preservation_priors(region_for(m), src)
                 clim_by_station[station] = trip.climatology(
                     obs, pipeline.mountain_wy_start(m),
-                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m))
+                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m),
+                    density_prior=d_prior, density_trust=d_trust,
+                    preservation_prior=p_prior, preservation_trust=p_trust)
             except Exception as exc:  # noqa: BLE001 -- one station, not the build
                 print(f"[trip] {key}: climatology failed ({exc})")
                 clim_by_station[station] = {}

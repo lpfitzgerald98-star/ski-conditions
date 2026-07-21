@@ -1656,10 +1656,131 @@ TRIP_WINDOW_DAYS = 7
 # season total by that date) lead, and the transient `fresh` window is demoted (not
 # dropped -- averaged over decades it still separates a reliably-snowy-in-March
 # climate from one that's tapering off). `forecast` has no meaning in a historical
-# window and is omitted; `quality` is reserved for when a historical density/wind
-# proxy exists (the live density read has no multi-decade analog yet). Weights need
-# not sum to 1 -- score_population renormalizes over whatever's present.
-TRIP_BASELINE_WEIGHTS = {"base": 0.40, "season": 0.35, "fresh": 0.20, "quality": 0.05}
+# window and is omitted.
+#
+# `quality` is the climatological new-snow density proxy (ski.trip.climatology): the
+# multi-decade analog of the live density read, from whichever tier a station has --
+# measured SWE-gain/depth-gain (Tier 1, SWE-channel stations) or snowfall-weighted
+# historical temperature (Tier 2, depth-only ACIS/ECCC/Open-Meteo networks). It
+# carries real weight (0.20, slightly above the live global 0.16) because by mid/late
+# winter every serious climate is "deep enough" -- base and season totals saturate and
+# stop separating anyone, so density is the signal that actually tells a
+# reliably-cold-and-dry mountain from a maritime cement factory. A station with
+# NEITHER tier (no SWE channel and no stored temperature) has no density read and
+# renormalizes it out, so it only ever helps rank the stations that CAN judge it.
+# Weights need not sum to 1 -- score_population renormalizes over whatever's present;
+# the ratios are what matter.
+TRIP_BASELINE_WEIGHTS = {"base": 0.27, "season": 0.23, "fresh": 0.12,
+                         "quality": 0.20, "preservation": 0.10, "consistency": 0.08}
+
+# Consistency (Phase: "what skiers want" #frequency/reliability) -- feast-or-famine.
+# Skiers value a place that RELIABLY delivers, not one that's epic one year and bare the
+# next (the Sierra's knock; Steenburgh's point that Alta's crown is frequency, not just
+# low density). Measured as the inter-year coefficient of variation of season-to-date at
+# each day-of-water-year -- low CV = reliable. Crucially it's built on the cumulative
+# SEASON aggregate, which compares fairly across our mixed roster; a daily powder-day
+# frequency does NOT (ERA5/Open-Meteo smooths daily peaks to ~half a point station's, so
+# it would bury all 54 reanalysis resorts -- verified, e.g. Val Thorens max daily 20" vs
+# Palisades 66"). Needs enough years to mean anything.
+CONSISTENCY_MIN_YEARS = 8
+
+# ---------------------------------------------------------------------------
+# Regional density & preservation priors (research-grounded)
+# ---------------------------------------------------------------------------
+# Automated station density math is noisy in confirmable ways: CDEC's SWE sensor
+# quantizes in coarse ~0.12" steps (zero-inflating the water fraction -> snow reads
+# far too light, e.g. Mammoth), and SNOTEL depth settles within the 24h window (snow
+# reads too heavy). So each station's MEASURED climatological water fraction is shrunk
+# toward a regional prior taken from the literature, by a trust weight set per network.
+#
+# Priors are new-snow water fraction (= 1 / snow-to-liquid ratio). Sources:
+#   Baxter et al. 2005 (BAMS/Wea.Forecasting), 30-yr SLR climatology, 7760 stations:
+#     Rockies CO/WY/MT SLR 15-18; Wasatch (SLC) 14.2; West Coast (Cascades/Sierra)
+#     "abruptly 9-11".  Judson & Doesken 2000: Rockies lightest, Cascades & Sierra
+#     denser, Olympics heaviest (~250 kg/m3).  Steenburgh 2008: Alta ~8.4% water.
+#   International extrapolated from analogous climate + first-hand consensus (interior
+#   BC/Alberta "champagne", cold-dry Scandinavia; maritime NZ/Australia/coastal wet).
+# These are REGIONAL MEANS -- within-region detail comes from the measured read (that's
+# why good-data networks keep real trust), so two Utah resorts can still differ.
+REGION_DENSITY_PRIOR = {          # water fraction; lower = lighter/drier = better
+    "Colorado":          0.068,
+    "Northern Rockies":  0.070,
+    "Alberta":           0.072,
+    "Northern Europe":   0.075,
+    "Utah":              0.076,
+    "British Columbia":  0.085,
+    "Eastern Canada":    0.085,
+    "Northeast":         0.090,
+    "Southern Europe":   0.090,
+    "South America":     0.092,
+    "Tahoe & Sierra":    0.105,
+    "Pacific Northwest": 0.105,
+    "New Zealand":       0.105,
+    "Australia":         0.110,
+}
+
+# How much to trust a network's MEASURED density vs. the regional prior (0 = pure
+# prior, 1 = pure measurement). "Balanced": good-data networks keep real within-region
+# signal; known-broken CDEC and depth-less BC-SWS fall to pure prior (this subsumes
+# "drop CDEC from Tier-1"). Tier-2 temperature networks are slightly more trusted than
+# SNOTEL because the temperature->density path has no settling/quantization artifact.
+DENSITY_SOURCE_TRUST = {
+    "snotel": 0.3,     # real SWE+depth, but same-day depth SETTLING biases the ratio
+                       # heavy in a large, confirmable way (Alta measured ~0.15 wf vs
+                       # literature ~0.084) -- so lean mostly on the grounded prior.
+    "cdec":   0.0,     # coarse SWE quantization -> ratio unusable; pure prior
+    "bcsws":  0.0,     # SWE only, no depth channel -> no Tier-1 read; pure prior
+    "acis":   0.6,     # Tier-2 temperature
+    "eccc":   0.6,     # Tier-2 temperature
+    "openmeteo": 0.6,  # Tier-2 temperature
+}
+DENSITY_TRUST_DEFAULT = 0.5
+
+# Preservation (Phase: "what skiers want" beyond fresh density) -- how well the pack
+# HOLDS between storms, since powder days are <~20% of a season (ZRankings). The
+# dominant, measurable driver is midwinter melt exposure: a snowpack that repeatedly
+# warms above freezing gets crusty/wet regardless of how the snow first fell. Where a
+# station has temperature (Tier-2 networks), preservation is measured from the
+# climatological fraction of season days above PRESERVATION_WARM_F; elsewhere it falls
+# to a regional prior. Aspect and elevation (the other ZRankings factors) aren't in the
+# per-mountain data yet -- flagged for a future pass. Scores are 0-100, higher = better.
+PRESERVATION_WARM_F = 32.0        # a day's mean temp above this = melt/rain exposure
+PRESERVATION_WARM_PENALTY = 1.3   # warm-day fraction -> score via 100*(1 - penalty*frac)
+PRESERVATION_FLOOR = 25.0
+REGION_PRESERVATION_PRIOR = {     # 0-100; continental/high/cold preserve, maritime melt
+    "Colorado":          90,
+    "Northern Rockies":  88,
+    "Alberta":           88,
+    "Utah":              85,
+    "Northern Europe":   82,
+    "Southern Europe":   78,
+    "British Columbia":  72,
+    "South America":     72,
+    "Eastern Canada":    70,
+    "Tahoe & Sierra":    60,
+    "Pacific Northwest": 58,
+    "New Zealand":       55,
+    "Northeast":         55,
+    "Australia":         45,
+}
+# Same per-network trust idea as density: only temperature networks can MEASURE melt
+# exposure; SWE/no-temp networks use the regional preservation prior outright.
+PRESERVATION_SOURCE_TRUST = {
+    "acis":   0.6, "eccc": 0.6, "openmeteo": 0.6,
+    "snotel": 0.0, "cdec": 0.0, "bcsws": 0.0,
+}
+PRESERVATION_TRUST_DEFAULT = 0.0
+
+# NOTE: "right-side-up" storm structure (denser snow first, lighter on top = flotation;
+# Steenburgh's hero snow) was prototyped as a climatological intra-storm temperature
+# trend but REJECTED on evidence: the daily-resolution temp-change proxy is confounded
+# by frontal warming (it flagged interior-BC champagne-powder resorts as the WORST) and
+# skewed systematically positive (+1.5 mean), handing temperature networks an unfair
+# edge over the US-West SWE stations. Aspect and elevation are likewise out -- aspect
+# isn't in the data (a resort spans all aspects) and resort lat/lon reference
+# inconsistent points (valley town vs summit) so elevation-from-coordinates is noise.
+# All three stay documented-but-unbuilt; the temperature-based density and preservation
+# signals already capture the reliably-measurable part of "what skiers want".
 
 # Quality multiplier on (base + powder). Weather shaves up to (1 - weather_span);
 # refreeze (icy crust) and thaw (incoming rain/warmth) each apply their own
@@ -1834,6 +1955,21 @@ COVER_GATE = {
     "snowfall_settle_ratio": 0.30,  # trailing 30d snowfall -> settled-depth proxy
     "swe_to_depth_ratio": 3.0,      # current SWE -> settled depth (~33% density)
 }
+
+# Cumulative SEASON-TO-DATE SWE -> fresh SNOWFALL inches (NOT settled depth). The
+# season component compares "how many inches have fallen this season" across the
+# roster, but the two networks measure it on different scales: reported-snowfall
+# stations (ACIS/ECCC/Open-Meteo) sum actual FRESH snowfall, while SWE stations
+# (SNOTEL/CDEC/BC-SWS) accumulate WATER. Converting cumulative SWE with the settled
+# swe_to_depth_ratio (3.0) understated SWE stations ~3-4x versus snowfall stations --
+# e.g. Alta read a 53" mid-Feb season vs a true ~195" of snowfall, burying all of
+# Utah/Colorado/Tahoe/the Rockies. Cumulative fresh snow falls at ~10:1, so that is
+# the right ratio to put both networks on one "inches of snow that fell" scale. This
+# is deliberately a single climate-neutral ratio: quantity is quantity (the Cascades
+# genuinely get more inches), and the density/preservation QUALITY axes -- not this
+# ratio -- are what dock heavy maritime snow. See ski.trip.climatology and
+# pipeline.season_snow_equivalent_in.
+SEASON_SWE_TO_SNOWFALL_RATIO = 10.0
 
 # ---------------------------------------------------------------------------
 # In-season gate -- is there enough snow to ski AT ALL?

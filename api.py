@@ -322,9 +322,14 @@ def _trip_context() -> dict:
         if station not in clim:
             try:
                 obs = read_observations(DB_PATH, station)
+                src = m.get("data_source", pipeline.DEFAULT_SOURCE)
+                d_prior, d_trust = trip.density_priors(region_for(m), src)
+                p_prior, p_trust = trip.preservation_priors(region_for(m), src)
                 clim[station] = trip.climatology(
                     obs, pipeline.mountain_wy_start(m),
-                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m))
+                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m),
+                    density_prior=d_prior, density_trust=d_trust,
+                    preservation_prior=p_prior, preservation_trust=p_trust)
             except Exception:  # noqa: BLE001 -- one station, not the request
                 clim[station] = {}
     _TRIP_CACHE.update(built_on=today, clim=clim, meta=meta)

@@ -51,8 +51,9 @@ def test_cdec_empty_inputs():
 
 
 # --- ECCC ------------------------------------------------------------------
-def _feat(date_s, snow_cm=None, depth_cm=None):
-    return {"properties": {"LOCAL_DATE": date_s, "TOTAL_SNOW": snow_cm, "SNOW_ON_GRND": depth_cm}}
+def _feat(date_s, snow_cm=None, depth_cm=None, temp_c=None):
+    return {"properties": {"LOCAL_DATE": date_s, "TOTAL_SNOW": snow_cm,
+                           "SNOW_ON_GROUND": depth_cm, "MEAN_TEMPERATURE": temp_c}}
 
 
 def test_eccc_reported_snowfall_cm_to_inches():
@@ -80,6 +81,18 @@ def test_eccc_derives_new_snow_when_snowfall_absent():
     assert _isnan(ns[0])
     assert round(ns[1], 3) == 5.0
     assert ns[2] == 0.0
+
+
+def test_eccc_mean_temp_celsius_to_fahrenheit():
+    feats = [
+        _feat("2024-01-01 00:00:00", snow_cm=2.54, depth_cm=25.4, temp_c=0.0),    # 32 F
+        _feat("2024-01-02 00:00:00", snow_cm=2.54, depth_cm=25.4, temp_c=-10.0),  # 14 F
+        _feat("2024-01-03 00:00:00", snow_cm=2.54, depth_cm=25.4, temp_c=None),   # NaN
+    ]
+    df = parse_features(feats)
+    assert round(df["mean_temp_f"].iloc[0], 1) == 32.0
+    assert round(df["mean_temp_f"].iloc[1], 1) == 14.0
+    assert _isnan(df["mean_temp_f"].iloc[2])
 
 
 def test_eccc_empty():
@@ -128,6 +141,26 @@ def test_openmeteo_units_and_nulls():
     assert round(df["snow_depth_inches"].iloc[0], 1) == 39.4
     assert _isnan(df["snow_depth_inches"].iloc[1])
     assert df["swe_inches"].isna().all()
+
+
+def test_openmeteo_reads_mean_temp_and_tolerates_absence():
+    # temperature_2m_mean is fetched in Fahrenheit (temperature_unit set on the call),
+    # so it flows straight to mean_temp_f; None -> NaN.
+    df = parse_om({"daily": {
+        "time": ["2024-01-01", "2024-01-02", "2024-01-03"],
+        "snowfall_sum": [2.54, 2.54, 2.54],
+        "snow_depth_max": [1.0, 1.0, 1.0],
+        "temperature_2m_mean": [15.0, None, 28.5],
+    }})
+    assert df["mean_temp_f"].iloc[0] == 15.0
+    assert _isnan(df["mean_temp_f"].iloc[1])
+    assert df["mean_temp_f"].iloc[2] == 28.5
+    # A response WITHOUT the temp variable (older archive pull) must not crash: the
+    # column comes back all-NaN, aligned to the dates.
+    df2 = parse_om({"daily": {
+        "time": ["2024-01-01", "2024-01-02"],
+        "snowfall_sum": [2.54, 0.0], "snow_depth_max": [1.0, 1.0]}})
+    assert len(df2) == 2 and df2["mean_temp_f"].isna().all()
 
 
 def test_openmeteo_empty():

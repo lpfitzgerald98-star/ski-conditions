@@ -4,10 +4,12 @@ Neither SNOTEL (US) nor ACIS (US COOP) covers Canada. ECCC publishes daily
 climate observations through the MSC GeoMet OGC API (api.weather.gc.ca), no key
 required. We read the `climate-daily` collection, which reports snow in
 centimetres:
-  TOTAL_SNOW   = new snowfall (cm)     -> new_snow_24hr   (REPORTED new snow)
-  SNOW_ON_GRND = snow depth (cm)       -> snow_depth_inches
+  TOTAL_SNOW       = new snowfall (cm)   -> new_snow_24hr   (REPORTED new snow)
+  SNOW_ON_GROUND   = snow depth (cm)     -> snow_depth_inches
+  MEAN_TEMPERATURE = daily mean temp (C) -> mean_temp_f      (Tier-2 density proxy)
 Canadian climate stations don't report SWE, so these mountains grade on the
-"new_snow" season metric.
+"new_snow" season metric, and read snow density from the mean temperature the day
+it fell (Tier-2; see ski.trip.climatology / score.density_from_temp).
 
 Two station flavors, handled transparently (as in the ACIS client): most report
 snowfall directly (use it); depth-only stations get new-snow derived from
@@ -24,6 +26,10 @@ BASE = "https://api.weather.gc.ca/collections/climate-daily/items"
 USER_AGENT = "ski-conditions-app (historical grading)"
 CM_TO_IN = 1.0 / 2.54
 _PAGE = 10000
+
+
+def _c_to_f(c: float) -> float:
+    return c * 9.0 / 5.0 + 32.0
 
 
 def fetch_station_daily(climate_id: str, timeout: int = 90, since=None) -> pd.DataFrame:
@@ -59,17 +65,19 @@ def fetch_station_daily(climate_id: str, timeout: int = 90, since=None) -> pd.Da
 
 def parse_features(features: list) -> pd.DataFrame:
     """Parse GeoJSON climate-daily features into the canonical obs frame."""
-    dates, depth_cm, snow_cm = [], [], []
+    dates, depth_cm, snow_cm, temp_c = [], [], [], []
     for f in features:
         p = f.get("properties", f)
         dates.append(p.get("LOCAL_DATE"))
-        depth_cm.append(_num(p.get("SNOW_ON_GRND")))
+        depth_cm.append(_num(p.get("SNOW_ON_GROUND")))
         snow_cm.append(_num(p.get("TOTAL_SNOW")))
+        temp_c.append(_num(p.get("MEAN_TEMPERATURE")))
 
     df = pd.DataFrame({
         "date": pd.to_datetime(dates, errors="coerce"),
         "swe_inches": np.nan,                                    # ECCC has no SWE
         "snow_depth_inches": np.array(depth_cm, dtype=float) * CM_TO_IN,
+        "mean_temp_f": _c_to_f(np.array(temp_c, dtype=float)),
         "_reported_snow": np.array(snow_cm, dtype=float) * CM_TO_IN,
     })
     df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)

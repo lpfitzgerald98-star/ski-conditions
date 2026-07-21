@@ -16,7 +16,7 @@ from datetime import date
 
 import pandas as pd
 
-from config import COVER_GATE, MOUNTAINS
+from config import MOUNTAINS, SEASON_SWE_TO_SNOWFALL_RATIO
 from ski import forecast_log
 from ski.grading import SeasonGrade
 from ski.db import upsert_observations
@@ -180,9 +180,11 @@ def _season_grade(metric, current_value):
     )
 
 
-def test_season_snow_equivalent_converts_swe_gain_by_density_ratio():
+def test_season_snow_equivalent_converts_swe_gain_to_fresh_snowfall():
+    # Cumulative SWE -> fresh SNOWFALL inches (~10:1), NOT settled depth (3:1) -- so
+    # SWE stations land on the same "inches that fell" scale as snowfall networks.
     sg = _season_grade("swe_gain", 10.0)
-    assert season_snow_equivalent_in(sg) == 10.0 * COVER_GATE["swe_to_depth_ratio"]
+    assert season_snow_equivalent_in(sg) == 10.0 * SEASON_SWE_TO_SNOWFALL_RATIO
 
 
 def test_season_snow_equivalent_passes_new_snow_through():

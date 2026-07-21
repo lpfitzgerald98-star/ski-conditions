@@ -72,6 +72,23 @@ def test_parse_derives_new_snow_when_snowfall_absent():
     assert list(df["snow_depth_inches"]) == [10.0, 16.0, 14.0, 20.0]
 
 
+def test_parse_reads_mean_temp_and_tolerates_absence():
+    # 4-element rows (snow, snwd, avgt): avgt (already F) flows to mean_temp_f;
+    # M -> NaN. Rows without a 4th cell (older 2-elem style) still parse, temp NaN.
+    df = parse_stndata({"data": [
+        ["2024-01-01", "3.0", "10", "18"],
+        ["2024-01-02", "0.0", "9", "M"],     # missing temp -> NaN
+        ["2024-01-03", "5.0", "14", "31.5"],
+    ]})
+    temps = list(df["mean_temp_f"])
+    assert temps[0] == 18.0
+    assert _isnan(temps[1])
+    assert temps[2] == 31.5
+    # A response that predates the avgt element (3-col rows) must not crash.
+    df2 = parse_stndata({"data": [["2024-01-01", "3.0", "10"]]})
+    assert _isnan(df2["mean_temp_f"].iloc[0])
+
+
 def test_parse_sorts_and_drops_bad_dates():
     payload = {"data": [
         ["2024-01-03", "1.0", "5"],

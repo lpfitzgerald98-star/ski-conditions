@@ -16,9 +16,14 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import sqlite3
+
+import numpy as np
+
 from config import INGEST_OVERLAP_DAYS  # noqa: E402
 from ski import pipeline  # noqa: E402
-from ski.db import max_observation_date, upsert_observations  # noqa: E402
+from ski.db import (connect, max_observation_date,  # noqa: E402
+                    read_observations, upsert_observations)
 from ski.sources import snotel  # noqa: E402
 
 
@@ -103,6 +108,69 @@ def test_ingest_full_flag_forces_full_pull(monkeypatch):
     try:
         pipeline.ingest_mountain("alta", db_path=path, full=True)
         assert captured["since"] is None
+    finally:
+        os.unlink(path)
+
+
+def test_mean_temp_roundtrips_and_is_optional():
+    """A frame WITH mean_temp_f stores and reads back; a frame WITHOUT it (SWE
+    sources) still writes, and that column reads back NULL/NaN."""
+    path = _temp_db()
+    try:
+        station = "USC00000001"
+        with_temp = pd.DataFrame([
+            {**_obs(date(2026, 1, 1), 10), "mean_temp_f": 18.0},
+            {**_obs(date(2026, 1, 2), 12), "mean_temp_f": np.nan},
+        ])
+        upsert_observations(path, station, with_temp)
+        df = read_observations(path, station)
+        assert "mean_temp_f" in df.columns
+        assert df["mean_temp_f"].iloc[0] == 18.0
+        assert pd.isna(df["mean_temp_f"].iloc[1])
+        # A SWE-source frame (no temp column) must still upsert fine.
+        upsert_observations(path, "766:UT:SNTL", pd.DataFrame([_obs(date(2026, 1, 1), 10)]))
+        assert read_observations(path, "766:UT:SNTL")["mean_temp_f"].isna().all()
+    finally:
+        os.unlink(path)
+
+
+def test_incremental_tail_without_temp_preserves_backfilled_temp():
+    """COALESCE guard: a later incremental row lacking mean_temp_f must not null out
+    a temperature an earlier full pull already stored for that (station, date)."""
+    path = _temp_db()
+    try:
+        station = "USC00000002"
+        upsert_observations(path, station, pd.DataFrame([
+            {**_obs(date(2026, 1, 1), 10), "mean_temp_f": 20.0}]))
+        # Re-ingest the same day from a frame with NO temp column (e.g. a source that
+        # dropped it) -> the stored 20.0 must survive.
+        upsert_observations(path, station, pd.DataFrame([_obs(date(2026, 1, 1), 11)]))
+        df = read_observations(path, station)
+        assert df["mean_temp_f"].iloc[0] == 20.0
+        assert df["snow_depth_inches"].iloc[0] == 11.0    # the rest still updates
+    finally:
+        os.unlink(path)
+
+
+def test_migration_adds_temp_column_to_legacy_db():
+    """A DB created under the pre-temp schema gains mean_temp_f on next connect()."""
+    path = _temp_db()
+    try:
+        # Build a legacy table WITHOUT mean_temp_f, then let connect() migrate it.
+        raw = sqlite3.connect(path)
+        raw.execute("CREATE TABLE raw_observations (station_id TEXT, date TEXT, "
+                    "swe_inches REAL, snow_depth_inches REAL, new_snow_24hr REAL, "
+                    "PRIMARY KEY (station_id, date))")
+        raw.execute("INSERT INTO raw_observations VALUES ('S', '2026-01-01', 1, 2, 0.5)")
+        raw.commit()
+        raw.close()
+        conn = connect(path)                    # triggers _migrate
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(raw_observations)")}
+        conn.close()
+        assert "mean_temp_f" in cols
+        # Legacy row survived and reads back with NaN temp.
+        df = read_observations(path, "S")
+        assert len(df) == 1 and pd.isna(df["mean_temp_f"].iloc[0])
     finally:
         os.unlink(path)
 

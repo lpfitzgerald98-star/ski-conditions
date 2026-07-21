@@ -18,7 +18,7 @@ from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, CRUST_MEMORY,
                     FORECAST_HORIZON_WEIGHTS,
                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
                     INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, POWDER_DECAY,
-                    SEASON_METRIC, STORM_THRESHOLDS)
+                    SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, STORM_THRESHOLDS)
 from ski import forecast_log
 from ski import score as score_mod
 from ski.db import max_observation_date, read_observations, upsert_observations
@@ -731,21 +731,21 @@ def measured_new_snow_density(obs: pd.DataFrame, as_of: date | None = None,
 
 
 def season_snow_equivalent_in(season: SeasonGrade) -> float | None:
-    """Season-to-date total in a common SNOW-inches unit, for ski.comparable.
+    """Season-to-date total in a common FRESH-SNOWFALL-inches unit, for ski.comparable.
 
     `grade_season_to_date` cumulates whichever metric a mountain's source
     provides: `swe_gain` (water-inches, the SWE networks) or `new_snow`
     (already snow-inches, the ACIS/ECCC/Open-Meteo depth-change networks). A
-    global comparable pool can't mix the two, so water-inches are converted
-    via the same nominal density ratio COVER_GATE already uses to turn a SWE
-    reading into a settled-depth one. Coarse (real snow density varies by
-    climate -- see config.GLOBAL_SCORE_WEIGHTS's known-limitation note) but
-    internally consistent, and better than silently comparing water to snow.
+    global comparable pool can't mix the two, so water-inches are converted to
+    fresh snowfall via SEASON_SWE_TO_SNOWFALL_RATIO (~10:1, the fresh-snow
+    density) -- NOT the settled-depth ratio, which understated SWE stations
+    ~3-4x and buried Utah/Colorado/Tahoe/the Rockies against snowfall-reporting
+    stations. See config.SEASON_SWE_TO_SNOWFALL_RATIO.
     """
     if season is None or season.current_value is None or math.isnan(season.current_value):
         return None
     if season.metric == "swe_gain":
-        return season.current_value * COVER_GATE["swe_to_depth_ratio"]
+        return season.current_value * SEASON_SWE_TO_SNOWFALL_RATIO
     return season.current_value
 
 

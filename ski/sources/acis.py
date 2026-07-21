@@ -11,8 +11,12 @@ client produces, so the grading engine doesn't care where a mountain's data came
 from:
   snow = daily snowfall (in)      -> new_snow_24hr   (REPORTED new snow)
   snwd = snow depth (in)          -> snow_depth_inches
+  avgt = daily mean air temp (F)  -> mean_temp_f      (Tier-2 density proxy)
 COOP has no snow-water-equivalent, so `swe_inches` is NaN and these mountains
 grade on the "new_snow" season metric (config: per-mountain `season_metric`).
+`avgt` (already Fahrenheit -- ACIS defaults to English units) feeds the Tier-2
+climatological density: without a SWE pillow we read snow density from how cold it
+was when it fell (see ski.trip.climatology / score.density_from_temp).
 
 Two station flavors, handled transparently:
   * Most COOP stations report snowfall directly -> use it as new_snow_24hr.
@@ -55,7 +59,7 @@ def fetch_station_daily(
     """
     if since is not None:
         sdate = since.isoformat()
-    payload = {"sid": sid, "sdate": sdate, "edate": edate, "elems": "snow,snwd"}
+    payload = {"sid": sid, "sdate": sdate, "edate": edate, "elems": "snow,snwd,avgt"}
     resp = http.post(BASE, json=payload,
                          headers={"User-Agent": USER_AGENT}, timeout=timeout)
     resp.raise_for_status()
@@ -63,18 +67,20 @@ def fetch_station_daily(
 
 
 def parse_stndata(payload: dict) -> pd.DataFrame:
-    """Parse an ACIS StnData response (rows of [date, snow, snwd])."""
+    """Parse an ACIS StnData response (rows of [date, snow, snwd, avgt])."""
     rows = payload.get("data", [])
-    dates, snowfall, depth = [], [], []
+    dates, snowfall, depth, temp = [], [], [], []
     for r in rows:
         dates.append(r[0])
         snowfall.append(_val(r[1]) if len(r) > 1 else np.nan)
         depth.append(_val(r[2]) if len(r) > 2 else np.nan)
+        temp.append(_val(r[3]) if len(r) > 3 else np.nan)
 
     df = pd.DataFrame({
         "date": pd.to_datetime(dates, errors="coerce"),
         "swe_inches": np.nan,                       # COOP has no SWE
         "snow_depth_inches": pd.to_numeric(depth, errors="coerce"),
+        "mean_temp_f": pd.to_numeric(temp, errors="coerce"),
         "_reported_snow": pd.to_numeric(snowfall, errors="coerce"),
     })
     df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)

@@ -48,6 +48,13 @@ COMPONENTS = {
     # outranks a wind-hammered/crusty pile of the same depth. Missing (no recent
     # storm / off-network) drops out of the blend, same as any other component.
     "quality": "abs_quality",
+    # Preservation (0-100) -- how well the pack HOLDS between storms (midwinter melt
+    # exposure). Only the Trip Predictor weights this today (TRIP_BASELINE_WEIGHTS);
+    # live rows carry no abs_preservation, so it drops out of the live global score.
+    "preservation": "abs_preservation",
+    # Consistency (0-100) -- inter-year reliability (low feast-or-famine). Trip-only,
+    # same as preservation; live rows have no abs_consistency so it drops out live.
+    "consistency": "abs_consistency",
 }
 
 

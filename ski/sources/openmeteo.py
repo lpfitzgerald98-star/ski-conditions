@@ -50,7 +50,8 @@ def fetch_station_daily(loc: str, timeout: int = 90, since=None) -> pd.DataFrame
         "latitude": lat, "longitude": lon,
         "start_date": start_date,
         "end_date": pd.Timestamp.today().strftime("%Y-%m-%d"),
-        "daily": "snowfall_sum,snow_depth_max",
+        "daily": "snowfall_sum,snow_depth_max,temperature_2m_mean",
+        "temperature_unit": "fahrenheit",   # else the archive defaults to Celsius
         "timezone": "auto",
     }
     resp = http.get(ARCHIVE, params=params,
@@ -65,14 +66,19 @@ def parse_archive(payload: dict) -> pd.DataFrame:
     dates = daily.get("time", [])
     snowfall_cm = daily.get("snowfall_sum", [])
     depth_m = daily.get("snow_depth_max", [])
+    temp_f = daily.get("temperature_2m_mean", [])
 
     depth = pd.to_numeric(pd.Series(depth_m, dtype="object"), errors="coerce") * M_TO_IN
     snow = (pd.to_numeric(pd.Series(snowfall_cm, dtype="object"), errors="coerce") * CM_TO_IN).clip(lower=0)
+    temp = pd.to_numeric(pd.Series(temp_f, dtype="object"), errors="coerce")  # already F
+    if len(temp) != len(dates):        # variable absent in this response -> all-NaN
+        temp = pd.Series([np.nan] * len(dates))
     df = pd.DataFrame({
         "date": pd.to_datetime(pd.Series(dates), errors="coerce"),
         "swe_inches": np.nan,
         "snow_depth_inches": depth.to_numpy(),
         "new_snow_24hr": snow.to_numpy(),
+        "mean_temp_f": temp.to_numpy(),
     })
     return df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
 

@@ -23,9 +23,20 @@ CREATE TABLE IF NOT EXISTS raw_observations (
     swe_inches        REAL,            -- snow water equivalent (NRCS WTEQ)
     snow_depth_inches REAL,            -- snow depth (NRCS SNWD)
     new_snow_24hr     REAL,            -- derived: positive day-over-day depth change
+    mean_temp_f       REAL,            -- daily mean air temp (F); the Tier-2 density
+                                       -- proxy for depth-only networks (ACIS/ECCC/
+                                       -- Open-Meteo). NULL for SWE stations, which
+                                       -- judge density directly (Tier-1).
     PRIMARY KEY (station_id, date)
 );
 """
+
+# Columns added after the original schema shipped, so an existing DB needs an
+# in-place ALTER rather than a rebuild (raw_observations is expensive to refill).
+# Each is a nullable REAL, so the migration is additive and self-healing: connect()
+# adds any that a live file is missing, and old rows read back as NULL until the
+# next full-period-of-record ingest backfills them.
+_ADDED_COLUMNS = {"mean_temp_f": "REAL"}
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
@@ -41,20 +52,35 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, timeout=cache.BUSY_TIMEOUT_S)
     cache.apply_pragmas(conn)
     conn.execute(SCHEMA)
+    _migrate(conn)
     conn.commit()
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add any post-ship columns a pre-existing DB is missing (see _ADDED_COLUMNS).
+
+    Idempotent and cheap: a PRAGMA read plus at most one ALTER per new column, only
+    the first time a given file is opened after the column was introduced."""
+    existing = {r[1] for r in conn.execute("PRAGMA table_info(raw_observations)")}
+    for col, decl in _ADDED_COLUMNS.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE raw_observations ADD COLUMN {col} {decl}")
 
 
 def upsert_observations(db_path: str | Path, station_id: str, df: pd.DataFrame) -> int:
     """Insert-or-replace daily rows for a station.
 
     `df` must have columns: date (date/Timestamp), swe_inches,
-    snow_depth_inches, new_snow_24hr. Returns the number of rows written.
+    snow_depth_inches, new_snow_24hr. `mean_temp_f` is optional -- depth-only
+    sources (ACIS/ECCC/Open-Meteo) supply it for the Tier-2 density proxy; SWE
+    sources omit it and it stores NULL. Returns the number of rows written.
     """
     required = {"date", "swe_inches", "snow_depth_inches", "new_snow_24hr"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"observations frame missing columns: {sorted(missing)}")
+    has_temp = "mean_temp_f" in df.columns
 
     rows = []
     for r in df.itertuples(index=False):
@@ -65,6 +91,7 @@ def upsert_observations(db_path: str | Path, station_id: str, df: pd.DataFrame) 
             _nan_to_none(r.swe_inches),
             _nan_to_none(r.snow_depth_inches),
             _nan_to_none(r.new_snow_24hr),
+            _nan_to_none(r.mean_temp_f) if has_temp else None,
         ))
 
     conn = connect(db_path)
@@ -72,12 +99,16 @@ def upsert_observations(db_path: str | Path, station_id: str, df: pd.DataFrame) 
         conn.executemany(
             """
             INSERT INTO raw_observations
-                (station_id, date, swe_inches, snow_depth_inches, new_snow_24hr)
-            VALUES (?, ?, ?, ?, ?)
+                (station_id, date, swe_inches, snow_depth_inches, new_snow_24hr,
+                 mean_temp_f)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(station_id, date) DO UPDATE SET
                 swe_inches        = excluded.swe_inches,
                 snow_depth_inches = excluded.snow_depth_inches,
-                new_snow_24hr     = excluded.new_snow_24hr
+                new_snow_24hr     = excluded.new_snow_24hr,
+                -- COALESCE so an incremental tail without temp (or a SWE source)
+                -- never nulls out a mean_temp_f a full pull already backfilled.
+                mean_temp_f       = COALESCE(excluded.mean_temp_f, mean_temp_f)
             """,
             rows,
         )
@@ -115,7 +146,7 @@ def read_observations(db_path: str | Path, station_id: str) -> pd.DataFrame:
     try:
         df = pd.read_sql_query(
             """
-            SELECT date, swe_inches, snow_depth_inches, new_snow_24hr
+            SELECT date, swe_inches, snow_depth_inches, new_snow_24hr, mean_temp_f
             FROM raw_observations
             WHERE station_id = ?
             ORDER BY date ASC
