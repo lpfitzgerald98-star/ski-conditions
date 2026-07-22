@@ -151,6 +151,10 @@ def score_mountain(
         abs_season_in=ci.get("season_in"),
         abs_forecast_in=ci.get("forecast_in"),
         abs_quality=ci.get("quality"),
+        # Mountain character (config.TERRAIN_STATS) -- static, not conditions.
+        abs_vertical_ft=ci.get("vertical_drop_ft"),
+        abs_acres=ci.get("skiable_acres"),
+        abs_pct_advanced_expert=ci.get("pct_advanced_expert"),
     )
     return row
 

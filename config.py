@@ -1670,8 +1670,16 @@ TRIP_WINDOW_DAYS = 7
 # renormalizes it out, so it only ever helps rank the stations that CAN judge it.
 # Weights need not sum to 1 -- score_population renormalizes over whatever's present;
 # the ratios are what matter.
-TRIP_BASELINE_WEIGHTS = {"base": 0.27, "season": 0.23, "fresh": 0.12,
-                         "quality": 0.20, "preservation": 0.10, "consistency": 0.08}
+# `vertical`/`acreage`/`difficulty` (2026-07-22): the same static mountain-character
+# facts as GLOBAL_SCORE_WEIGHTS (see config.TERRAIN_STATS) -- a mountain's inherent
+# size/challenge doesn't depend on the trip date any more than it depends on today's
+# weather, so it carries the SAME kind of weight here as on the live board (~0.15
+# combined, on par with quality/preservation/consistency together). base/season/fresh
+# trimmed slightly to make room; quality/preservation/consistency (already validated
+# against real climatology this session) are untouched.
+TRIP_BASELINE_WEIGHTS = {"base": 0.22, "season": 0.19, "fresh": 0.10,
+                         "quality": 0.20, "preservation": 0.10, "consistency": 0.08,
+                         "vertical": 0.05, "acreage": 0.04, "difficulty": 0.06}
 
 # Consistency (Phase: "what skiers want" #frequency/reliability) -- feast-or-famine.
 # Skiers value a place that RELIABLY delivers, not one that's epic one year and bare the
@@ -2163,8 +2171,162 @@ MEDIUM_RANGE = {
 # rides on coarse Open-Meteo wind, so we ramp it up only after validating the
 # reorderings it produces on the live roster (user decision, 2026-07-17). Weights
 # needn't sum to 1 -- ski.comparable._blend renormalizes over whatever's present.
-GLOBAL_SCORE_WEIGHTS = {"base": 0.30, "fresh": 0.26, "season": 0.14,
-                        "forecast": 0.22, "quality": 0.16}
+GLOBAL_SCORE_WEIGHTS = {"base": 0.24, "fresh": 0.21, "season": 0.12,
+                        "forecast": 0.19, "quality": 0.16,
+                        "vertical": 0.06, "acreage": 0.05, "difficulty": 0.07}
+
+# ---------------------------------------------------------------------------
+# Mountain character -- "is this just a better MOUNTAIN, independent of the
+# weather" (user decision, 2026-07-22): a legendary big mountain (Jackson Hole)
+# should outrank a smaller neighbor (Grand Targhee) getting the same storm,
+# because it IS a bigger, more challenging mountain -- not because of anything
+# about conditions. STATIC per-resort facts, researched once (Wikipedia/
+# official-site/OnTheSnow stats, cross-checked across sources), not derived
+# from anything that changes day to day -- unlike aspect/elevation-from-
+# coordinates (tried and rejected earlier: resort lat/lon reference
+# inconsistent points), these are the resort's own published statistics.
+#
+# Three components, "size + challenge blended" (user's chosen weighting):
+#   vertical_drop_ft     -- summit-to-base vertical, the classic "real
+#                            mountain" proxy (long sustained runs).
+#   skiable_acres        -- total skiable terrain. None for a handful of
+#                            European/Nordic resorts that publish only piste-km,
+#                            not acreage (drops out of that mountain's blend
+#                            rather than a guessed conversion).
+#   pct_advanced_expert  -- % of terrain rated advanced+expert (black+double-
+#                            black combined for North America; black runs for
+#                            Europe's green/blue/red/black scale) -- captures
+#                            "serious mountain for committed skiers" separately
+#                            from raw size (a resort can be huge and mostly
+#                            beginner terrain, or compact and brutally steep).
+#
+# Percentile-ranked across the WHOLE roster via the same ski.comparable
+# machinery as base/fresh/season/quality (see comparable.COMPONENTS) -- a
+# missing field for one mountain just drops out of THAT mountain's blend,
+# renormalized, same convention as everywhere else. Applied to BOTH the live
+# global score and the Trip Predictor baseline (config.TRIP_BASELINE_WEIGHTS):
+# a mountain's character doesn't depend on today's weather OR the calendar,
+# so unlike quality/preservation it should not vary by lead time or trip date.
+#
+# Weight ~0.18 combined (vertical+acreage+difficulty), deliberately on par with
+# `quality` (0.16) -- a MEANINGFUL edge, per user's explicit choice, not a
+# tiebreaker. base/fresh/season/forecast trimmed slightly to make room;
+# quality's own validated weight is untouched.
+TERRAIN_STATS = {
+    "alpe_dhuez": {"vertical_drop_ft": 7297, "skiable_acres": None, "pct_advanced_expert": 20},  # 3-tier 20% difficult; no acreage published
+    "alta": {"vertical_drop_ft": 2538, "skiable_acres": 2614, "pct_advanced_expert": 55},  # official site figures
+    "alyeska": {"vertical_drop_ft": 2500, "skiable_acres": 1610, "pct_advanced_expert": 37},  # combined adv/expert tier
+    "arapahoe_basin": {"vertical_drop_ft": 2530, "skiable_acres": 1428, "pct_advanced_expert": 73},  # 49%+24%
+    "are": {"vertical_drop_ft": 2854, "skiable_acres": 1080, "pct_advanced_expert": 41},  # 36%+5%
+    "aspen": {"vertical_drop_ft": 3267, "skiable_acres": 673, "pct_advanced_expert": 52},  # 26%+26%, Aspen Mtn only
+    "bachelor": {"vertical_drop_ft": 3365, "skiable_acres": 4323, "pct_advanced_expert": 50},  # 30%+20%
+    "baker": {"vertical_drop_ft": 1589, "skiable_acres": 1000, "pct_advanced_expert": 31},  # 3-tier 31% most difficult
+    "bansko": {"vertical_drop_ft": 5053, "skiable_acres": 938, "pct_advanced_expert": 8},  # 1540m longest-run vertical, 75km piste
+    "baqueira_beret": {"vertical_drop_ft": 3642, "skiable_acres": 5617, "pct_advanced_expert": 11},  # acres from official hectares
+    "big_sky": {"vertical_drop_ft": 4350, "skiable_acres": 5850, "pct_advanced_expert": 60},  # 3-tier advanced bucket
+    "big_white": {"vertical_drop_ft": 2549, "skiable_acres": 2765, "pct_advanced_expert": 28},  # 4-tier 22%+6%
+    "blue_mountain": {"vertical_drop_ft": 720, "skiable_acres": 365, "pct_advanced_expert": 35},  # 16%+19%
+    "bogus_basin": {"vertical_drop_ft": 1800, "skiable_acres": 2600, "pct_advanced_expert": 33},  # 3-tier 33% most difficult
+    "breckenridge": {"vertical_drop_ft": 3398, "skiable_acres": 2908, "pct_advanced_expert": 55},  # 4-tier 19%+36%
+    "brian_head": {"vertical_drop_ft": 1320, "skiable_acres": 650, "pct_advanced_expert": 30},  # 4-tier 35/35/20/10
+    "bridger_bowl": {"vertical_drop_ft": 2600, "skiable_acres": 2000, "pct_advanced_expert": 60},  # 18%+42%
+    "brighton": {"vertical_drop_ft": 1875, "skiable_acres": 1050, "pct_advanced_expert": 40},  # 4-tier 24/36/27/13
+    "cairngorm": {"vertical_drop_ft": 1837, "skiable_acres": None, "pct_advanced_expert": None},  # no acreage, UK red/black not a clean equivalent
+    "cardrona": {"vertical_drop_ft": 1969, "skiable_acres": 1520, "pct_advanced_expert": 55},  # 30%+25%
+    "cerro_catedral": {"vertical_drop_ft": 3510, "skiable_acres": 1483, "pct_advanced_expert": 25},  # 20%+5%; trail-count ratio gives ~53%, notable variance
+    "cervinia": {"vertical_drop_ft": 4692, "skiable_acres": 1300, "pct_advanced_expert": 18},  # %adv borrowed from combined Matterhorn area, low confidence
+    "chamonix": {"vertical_drop_ft": 9186, "skiable_acres": None, "pct_advanced_expert": 68},  # 45.7% red+22.3% black; no acreage, only piste-km
+    "copper": {"vertical_drop_ft": 2738, "skiable_acres": 2507, "pct_advanced_expert": 54},  # aggregated adv+expert
+    "coronet_peak": {"vertical_drop_ft": 1516, "skiable_acres": 691, "pct_advanced_expert": 43},  # 25%+18%, sources vary
+    "cortina": {"vertical_drop_ft": 5627, "skiable_acres": 1500, "pct_advanced_expert": 16},  # direct published black%
+    "crystal_mtn": {"vertical_drop_ft": 2872, "skiable_acres": 2600, "pct_advanced_expert": 35},  # official site stats
+    "davos": {"vertical_drop_ft": 6674, "skiable_acres": 4000, "pct_advanced_expert": 35},  # whole Davos Klosters (6 sectors, 320km)
+    "deer_valley": {"vertical_drop_ft": 3040, "skiable_acres": 5726, "pct_advanced_expert": 27},  # 2025-26 post-expansion acreage; pct split pre-expansion
+    "engelberg": {"vertical_drop_ft": 6562, "skiable_acres": 875, "pct_advanced_expert": 15},  # 70km total, 15% black
+    "falls_creek": {"vertical_drop_ft": 1247, "skiable_acres": 1112, "pct_advanced_expert": 23},  # 450ha converted
+    "fernie": {"vertical_drop_ft": 3550, "skiable_acres": 2500, "pct_advanced_expert": 30},  # acreage cited as '2500+'
+    "formigal": {"vertical_drop_ft": 2428, "skiable_acres": 2200, "pct_advanced_expert": 39},  # run-count based %, moderate confidence
+    "grand_targhee": {"vertical_drop_ft": 2270, "skiable_acres": 2602, "pct_advanced_expert": 45},  # 30%+15%
+    "grandvalira": {"vertical_drop_ft": 3051, "skiable_acres": 2625, "pct_advanced_expert": 13},  # direct published black%
+    "heavenly": {"vertical_drop_ft": 3500, "skiable_acres": 4800, "pct_advanced_expert": 35},  # 4-tier 20/45/25/10
+    "hemsedal": {"vertical_drop_ft": 2658, "skiable_acres": 1300, "pct_advanced_expert": 27},  # 19%+8%
+    "hood_meadows": {"vertical_drop_ft": 2777, "skiable_acres": 2150, "pct_advanced_expert": 45},  # 15%+30%
+    "hunter": {"vertical_drop_ft": 1600, "skiable_acres": 320, "pct_advanced_expert": 45},  # 3-tier advanced bucket
+    "ischgl": {"vertical_drop_ft": 4962, "skiable_acres": 2975, "pct_advanced_expert": 2},  # Silvretta Arena incl. Samnaun; unusually low black%, mostly red
+    "jackson_hole": {"vertical_drop_ft": 4139, "skiable_acres": 2500, "pct_advanced_expert": 50},  # official, inbounds acres only
+    "jasna": {"vertical_drop_ft": 3481, "skiable_acres": 698, "pct_advanced_expert": 47},  # 1061m vert, 34%+13%
+    "june_mountain": {"vertical_drop_ft": 2545, "skiable_acres": 1500, "pct_advanced_expert": 44},  # 610ha=1507ac; 4-tier 16/40/26/18
+    "kasprowy_wierch": {"vertical_drop_ft": 3192, "skiable_acres": 41, "pct_advanced_expert": 100},  # tiny area, only 3.3km piste, all rated difficult
+    "keystone": {"vertical_drop_ft": 3128, "skiable_acres": 3148, "pct_advanced_expert": 49},  # official stats
+    "kicking_horse": {"vertical_drop_ft": 4314, "skiable_acres": 3486, "pct_advanced_expert": 60},  # 4-tier 45%+15%
+    "killington": {"vertical_drop_ft": 3050, "skiable_acres": 1977, "pct_advanced_expert": 43},  # acres incl. Pico
+    "kirkwood": {"vertical_drop_ft": 2000, "skiable_acres": 2300, "pct_advanced_expert": 58},  # 4-tier 12/30/38/20
+    "kitzbuehel": {"vertical_drop_ft": 3937, "skiable_acres": 2350, "pct_advanced_expert": 11},  # KitzSki 188km
+    "kranjska_gora": {"vertical_drop_ft": 2494, "skiable_acres": 250, "pct_advanced_expert": 17},  # small resort, category split looks incomplete
+    "la_plagne": {"vertical_drop_ft": 6562, "skiable_acres": 2471, "pct_advanced_expert": 11},  # La Plagne sector only, not whole Paradiski
+    "lake_louise": {"vertical_drop_ft": 3250, "skiable_acres": 4200, "pct_advanced_expert": 30},  # official site, advanced/expert combined figure
+    "las_lenas": {"vertical_drop_ft": 3904, "skiable_acres": 43000, "pct_advanced_expert": 40},  # huge acreage incl. off-piste/backcountry bowls
+    "levi": {"vertical_drop_ft": 1066, "skiable_acres": None, "pct_advanced_expert": 8},  # no acreage published, only piste-km
+    "mammoth": {"vertical_drop_ft": 3100, "skiable_acres": 3500, "pct_advanced_expert": 35},  # 4-tier 25/40/20/15
+    "marmot_basin": {"vertical_drop_ft": 3000, "skiable_acres": 1720, "pct_advanced_expert": 40},  # official site, advanced+expert combined 40%
+    "mont_sainte_anne": {"vertical_drop_ft": 2051, "skiable_acres": 450, "pct_advanced_expert": 33},  # 18%+15%
+    "mont_tremblant": {"vertical_drop_ft": 2116, "skiable_acres": 763, "pct_advanced_expert": 47},  # 3-tier difficult%
+    "mt_buller": {"vertical_drop_ft": 1411, "skiable_acres": 741, "pct_advanced_expert": 55},  # 4-tier 51%+4%
+    "mt_hotham": {"vertical_drop_ft": 1296, "skiable_acres": 605, "pct_advanced_expert": 40},  # 245ha 'skiable terrain' converted
+    "mt_hutt": {"vertical_drop_ft": 2241, "skiable_acres": 902, "pct_advanced_expert": 30},  # 17%+13%, sources vary widely
+    "mt_rose": {"vertical_drop_ft": 1800, "skiable_acres": 1200, "pct_advanced_expert": 50},  # 4-tier 20/30/40/10
+    "nakiska": {"vertical_drop_ft": 2411, "skiable_acres": 1021, "pct_advanced_expert": 14},  # Wikipedia infobox, 10%+4% black+dbl-black
+    "nevados_de_chillan": {"vertical_drop_ft": 2854, "skiable_acres": 2471, "pct_advanced_expert": 30},  # acreage sources vary widely (500-10000ha)
+    "norquay": {"vertical_drop_ft": 1650, "skiable_acres": 190, "pct_advanced_expert": 44},  # small resort; 4-tier 28%+16%
+    "palisades_tahoe": {"vertical_drop_ft": 2850, "skiable_acres": 6000, "pct_advanced_expert": 30},  # 3-tier (25/45/30)
+    "park_city": {"vertical_drop_ft": 3226, "skiable_acres": 7300, "pct_advanced_expert": 44},  # largest US resort, combined PCMR+Canyons
+    "perisher": {"vertical_drop_ft": 1165, "skiable_acres": 3076, "pct_advanced_expert": 18},  # vertical varies 350-380m by source
+    "poiana_brasov": {"vertical_drop_ft": 2763, "skiable_acres": 171, "pct_advanced_expert": 37},  # 842m vertical, 13.7km piste
+    "portillo": {"vertical_drop_ft": 2500, "skiable_acres": 1235, "pct_advanced_expert": 57},  # 31%+26%
+    "powder_mtn": {"vertical_drop_ft": 2519, "skiable_acres": 8464, "pct_advanced_expert": 35},  # total incl. hike-to/guided terrain
+    "red_mountain": {"vertical_drop_ft": 2919, "skiable_acres": 2682, "pct_advanced_expert": 37},  # 3-tier top category is combined adv+expert
+    "revelstoke": {"vertical_drop_ft": 5620, "skiable_acres": 3121, "pct_advanced_expert": 45},  # source gives combined directly
+    "ruka": {"vertical_drop_ft": 659, "skiable_acres": None, "pct_advanced_expert": 16},  # no acreage published, only piste-km
+    "saint_lary": {"vertical_drop_ft": 3011, "skiable_acres": 1730, "pct_advanced_expert": 10},  # 918m vertical, 700ha
+    "schweitzer": {"vertical_drop_ft": 2400, "skiable_acres": 2900, "pct_advanced_expert": 50},  # 35%+15%
+    "sestriere": {"vertical_drop_ft": 4867, "skiable_acres": 5000, "pct_advanced_expert": 9},  # acres from whole Via Lattea, as marketed
+    "silver_star": {"vertical_drop_ft": 2500, "skiable_acres": 3282, "pct_advanced_expert": 45},  # 4-tier 35%+10%
+    "snowbird": {"vertical_drop_ft": 3240, "skiable_acres": 2500, "pct_advanced_expert": 35},  # combined adv/expert reported directly
+    "soelden": {"vertical_drop_ft": 6267, "skiable_acres": 1825, "pct_advanced_expert": 20},  # 29.2km black/146km
+    "solitude": {"vertical_drop_ft": 2494, "skiable_acres": 1200, "pct_advanced_expert": 50},  # combined adv/expert reported directly
+    "st_anton": {"vertical_drop_ft": 4945, "skiable_acres": 3813, "pct_advanced_expert": 16},  # St Anton proper (305km), not whole Arlberg
+    "st_moritz": {"vertical_drop_ft": 4386, "skiable_acres": 1938, "pct_advanced_expert": 21},  # Corviglia sector; acres conv from 155km
+    "steamboat": {"vertical_drop_ft": 3668, "skiable_acres": 3741, "pct_advanced_expert": 50},  # 41%+9%
+    "stevens_pass": {"vertical_drop_ft": 1800, "skiable_acres": 1125, "pct_advanced_expert": 35},  # 3-tier 35% most difficult
+    "stowe": {"vertical_drop_ft": 2360, "skiable_acres": 545, "pct_advanced_expert": 29},  # 14%+15%
+    "stratton": {"vertical_drop_ft": 2003, "skiable_acres": 670, "pct_advanced_expert": 28},  # 17%+11%
+    "sugarbush": {"vertical_drop_ft": 2600, "skiable_acres": 484, "pct_advanced_expert": 34},  # 27%+7%
+    "sugarloaf": {"vertical_drop_ft": 2820, "skiable_acres": 1360, "pct_advanced_expert": 46},  # 25%+21%
+    "sun_peaks": {"vertical_drop_ft": 2894, "skiable_acres": 4270, "pct_advanced_expert": 32},  # 3-tier top category is combined adv+expert
+    "sun_valley": {"vertical_drop_ft": 3400, "skiable_acres": 2829, "pct_advanced_expert": 22},  # 20%+2%
+    "sunday_river": {"vertical_drop_ft": 2340, "skiable_acres": 870, "pct_advanced_expert": 31},  # 19%+12%
+    "sunshine_village": {"vertical_drop_ft": 3514, "skiable_acres": 3358, "pct_advanced_expert": 47},  # Wikipedia 4-tier, 40%+7%
+    "taos": {"vertical_drop_ft": 3281, "skiable_acres": 1294, "pct_advanced_expert": 51},  # combined adv+expert
+    "telluride": {"vertical_drop_ft": 4425, "skiable_acres": 2000, "pct_advanced_expert": 41},  # official combined adv/expert tier
+    "the_remarkables": {"vertical_drop_ft": 1171, "skiable_acres": 540, "pct_advanced_expert": 30},  # 3-tier advanced%; vertical varies 357-468m
+    "thredbo": {"vertical_drop_ft": 2205, "skiable_acres": 1186, "pct_advanced_expert": 31},  # 480ha converted
+    "treble_cone": {"vertical_drop_ft": 2297, "skiable_acres": 1359, "pct_advanced_expert": 45},  # 3-tier advanced%
+    "trysil": {"vertical_drop_ft": 2247, "skiable_acres": None, "pct_advanced_expert": 48},  # no acreage published, only piste-km
+    "vail": {"vertical_drop_ft": 3450, "skiable_acres": 5317, "pct_advanced_expert": 53},  # Wikipedia infobox
+    "val_disere": {"vertical_drop_ft": 5100, "skiable_acres": None, "pct_advanced_expert": 45},  # own-resort trail count; no acreage published
+    "val_gardena": {"vertical_drop_ft": 4147, "skiable_acres": 2263, "pct_advanced_expert": 11},  # Val Gardena sector, not whole 500km Sella Ronda
+    "val_thorens": {"vertical_drop_ft": 3050, "skiable_acres": None, "pct_advanced_expert": 49},  # 38% red+11% black; no acreage published
+    "valle_nevado": {"vertical_drop_ft": 2657, "skiable_acres": 2224, "pct_advanced_expert": 56},  # 41%+15%
+    "verbier": {"vertical_drop_ft": 6004, "skiable_acres": 5150, "pct_advanced_expert": 25},  # whole 4 Vallees, as marketed
+    "whakapapa": {"vertical_drop_ft": 2198, "skiable_acres": 1360, "pct_advanced_expert": 25},  # 3-tier advanced%
+    "whistler_blackcomb": {"vertical_drop_ft": 5280, "skiable_acres": 8171, "pct_advanced_expert": 23},  # combined WB stats
+    "whiteface": {"vertical_drop_ft": 3430, "skiable_acres": 288, "pct_advanced_expert": 38},  # 3-tier expert bucket
+    "wildcat": {"vertical_drop_ft": 2112, "skiable_acres": 225, "pct_advanced_expert": 30},  # 3-tier expert bucket
+    "winter_park": {"vertical_drop_ft": 3060, "skiable_acres": 3081, "pct_advanced_expert": 55},  # 52% most-difficult+3% expert
+    "wolf_creek": {"vertical_drop_ft": 1604, "skiable_acres": 1600, "pct_advanced_expert": 45},  # 25%+20%
+    "zermatt": {"vertical_drop_ft": 7427, "skiable_acres": 2500, "pct_advanced_expert": 18},  # acres conv from 200km; combined Zermatt-Cervinia %
+    "zugspitze": {"vertical_drop_ft": 4298, "skiable_acres": 500, "pct_advanced_expert": 25},  # Garmisch-Classic only, excl. glacier field
+}
 
 # Trailing window (days) for the comparable score's "fresh" input -- shorter
 # than FRESH_WINDOW_DAYS (7d) on purpose (see GLOBAL_SCORE_WEIGHTS docstring).

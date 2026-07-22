@@ -55,6 +55,15 @@ COMPONENTS = {
     # Consistency (0-100) -- inter-year reliability (low feast-or-famine). Trip-only,
     # same as preservation; live rows have no abs_consistency so it drops out live.
     "consistency": "abs_consistency",
+    # Mountain character (2026-07-22, config.TERRAIN_STATS): STATIC per-resort facts,
+    # not conditions -- "is this just a better mountain" (Jackson Hole > its smaller
+    # neighbor Grand Targhee, same storm). Present on BOTH live and trip rows (see
+    # pipeline.py / ski.trip.baseline_row) since a mountain's size/challenge doesn't
+    # depend on the weather or the calendar. Missing for a handful of resorts with no
+    # published acreage/difficulty split -- drops out of THAT mountain's blend.
+    "vertical": "abs_vertical_ft",
+    "acreage": "abs_acres",
+    "difficulty": "abs_pct_advanced_expert",
 }
 
 

@@ -41,7 +41,8 @@ import pandas as pd
 from config import (COMPARABLE_FRESH_WINDOW_DAYS, CONSISTENCY_MIN_YEARS,
                     COVER_GATE, PRESERVATION_FLOOR, PRESERVATION_WARM_F,
                     PRESERVATION_WARM_PENALTY, SEASON_SWE_TO_SNOWFALL_RATIO,
-                    TRIP_BASELINE_WEIGHTS, TRIP_LEAD_DECAY, TRIP_WINDOW_DAYS)
+                    TERRAIN_STATS as _TERRAIN, TRIP_BASELINE_WEIGHTS,
+                    TRIP_LEAD_DECAY, TRIP_WINDOW_DAYS)
 from ski import comparable
 from ski.grading import _daily_increment, _prepare
 from ski.score import decay_weight, density_from_temp, density_score, is_in_season
@@ -96,8 +97,9 @@ def climatology(obs: pd.DataFrame, wy_start: int, season_start_dowy: int,
     """Per day-of-water-year (1..366): a mountain's typical conditions across all
     years, as the same absolute inputs ski.comparable ranks live.
 
-    Returns {dowy: {base_in, fresh_in, season_in, quality, preservation, consistency,
-    n_years}} (empty when there's no usable history). Smoothed over +/- `window_days`:
+    Returns {dowy: {base_in, fresh_in, season_in, quality, water_fraction,
+    preservation, consistency, n_years}} (empty when there's no usable history).
+    Smoothed over +/- `window_days`:
       base_in    median settled base depth (snow depth, or SWE x ratio when a
                  pillow station reports no depth) -- the persistent pack.
       fresh_in   typical trailing-window fresh: mean daily new snow x the comparable
@@ -249,6 +251,11 @@ def climatology(obs: pd.DataFrame, wy_start: int, season_start_dowy: int,
             "fresh_in": None if f is None or np.isnan(f) else float(max(0.0, f)),
             "season_in": None if s is None or np.isnan(s) else float(max(0.0, s)),
             "quality": None if q is None else float(q),
+            # The raw water fraction behind `quality` (post-prior-shrinkage), so
+            # commentary can quote a real snow-to-liquid figure instead of just the
+            # 0-100 score -- e.g. "~9% water content" is a verifiable technical claim,
+            # "quality 84" on its own is not.
+            "water_fraction": None if wf is None or np.isnan(wf) else float(wf),
             "preservation": None if pv is None or np.isnan(pv) else float(pv),
             "consistency": cons,
             "n_years": ny_int,
@@ -312,6 +319,12 @@ def baseline_row(clim: dict[int, dict], dowy: int, key: str, region: str) -> dic
         "abs_preservation": c.get("preservation"),
         # Climatological consistency: inter-year reliability (feast-or-famine penalty).
         "abs_consistency": c.get("consistency"),
+        # Mountain character (config.TERRAIN_STATS): STATIC facts about the resort,
+        # not conditions -- doesn't depend on the climatology dowy at all, unlike
+        # every other abs_* field above, so it's the same value at every trip date.
+        "abs_vertical_ft": _TERRAIN.get(key, {}).get("vertical_drop_ft"),
+        "abs_acres": _TERRAIN.get(key, {}).get("skiable_acres"),
+        "abs_pct_advanced_expert": _TERRAIN.get(key, {}).get("pct_advanced_expert"),
         "n_years": c.get("n_years", 0),
     }
 

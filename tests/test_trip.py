@@ -321,6 +321,23 @@ def test_priors_lookup_helpers():
     assert pt2 == 0.0                            # no temp -> pure preservation prior
 
 
+def test_baseline_row_carries_static_terrain_facts():
+    # Mountain character (config.TERRAIN_STATS) doesn't depend on the climatology
+    # or the target date at all -- baseline_row must carry the SAME real per-
+    # mountain vertical/acreage/difficulty every time, not something derived.
+    clim = trip.climatology(_obs([2021, 2022, 2023]), 10, 1, "new_snow")
+    dowy = trip.target_dowy(date(2021, 1, 15), 10)
+    jh = trip.baseline_row(clim, dowy, "jackson_hole", "Northern Rockies")
+    gt = trip.baseline_row(clim, dowy, "grand_targhee", "Northern Rockies")
+    assert jh["abs_vertical_ft"] == 4139
+    assert jh["abs_acres"] == 2500
+    assert jh["abs_pct_advanced_expert"] == 50
+    assert gt["abs_vertical_ft"] == 2270
+    # A key with no config.MOUNTAINS entry / no terrain data -> None, not a crash.
+    unknown = trip.baseline_row(clim, dowy, "not_a_real_mountain_key", "Nowhere")
+    assert unknown["abs_vertical_ft"] is None
+
+
 def test_consistency_reliable_beats_boom_bust():
     # Same long-run mean snowfall, different inter-year variance. A steady climate must
     # score HIGHER consistency than a boom/bust one (the Sierra feast-or-famine knock).

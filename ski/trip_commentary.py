@@ -13,6 +13,20 @@ grade explanation:
      deterministic, and honest by construction (it can only ever describe
      numbers actually in the climatology, never invented ones).
 
+     Part 1 now has a second half, QUALITY & CHARACTER (`_quality_character_
+     text`): what the snow is actually LIKE, not just how much of it there is
+     -- density (a real snow-to-liquid-derived water-content %, not just a
+     0-100 score), how well the pack holds between storms (preservation), and
+     whether this mountain is reliable or boom-or-bust year to year
+     (consistency). These are exactly the ranking components ski.trip.
+     climatology computes (config.REGION_DENSITY_PRIOR / PRESERVATION / the
+     inter-year CV) -- this paragraph is the receipts for THOSE numbers, so a
+     skeptical reader can see the actual water-content percentage and
+     reliability figure behind a mountain's score instead of just trusting a
+     ranking position. Silent (contributes nothing) wherever a signal is
+     genuinely absent -- e.g. a depth-only station with no measured density
+     and no regional prior -- never a fabricated placeholder.
+
   2. HOW THIS YEAR IS TRACKING and 3. THE TAKEAWAY are NOT here. They need
      TODAY's live score and the picked date's lead time, both of which are
      already sitting on every trip row in BOTH the static JS blend
@@ -201,6 +215,144 @@ _OFF_SEASON_CLAUSE = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Quality & character clauses -- the receipts behind the ranking's density/
+# preservation/consistency components (config.REGION_DENSITY_PRIOR etc.).
+# Bands are placed at the same cutoffs the DENSITY_SCORE_CURVE / preservation /
+# consistency math already uses to draw meaningful distinctions elsewhere in
+# the codebase, not arbitrary new thresholds.
+# ---------------------------------------------------------------------------
+_DENSITY_BAND = [  # (max water fraction, band)
+    (0.07, "very_light"), (0.10, "light"), (0.14, "moderate"),
+    (0.20, "dense"), (1.0, "heavy"),
+]
+_DENSITY_CLAUSE = {
+    "very_light": [
+        "{short} typically sees very light, dry snow -- around {pct}% water content",
+        "the snow here typically runs very light and dry, roughly {pct}% water content",
+    ],
+    "light": [
+        "{short} typically sees fairly light, dry snow -- around {pct}% water content",
+        "snow here is typically on the drier side, roughly {pct}% water content",
+    ],
+    "moderate": [
+        "{short} typically sees moderate-density snow, around {pct}% water content",
+        "the snow here runs moderate density on average, roughly {pct}% water content",
+    ],
+    "dense": [
+        "{short} typically sees fairly dense, damp snow -- around {pct}% water content",
+        "snow here tends to run heavier than average, roughly {pct}% water content",
+    ],
+    "heavy": [
+        "{short} typically sees heavy, wet snow -- around {pct}% water content",
+        "the snow here characteristically runs quite heavy and wet, roughly {pct}% water content",
+    ],
+}
+
+_PRESERVATION_BAND = [  # (min score, band)
+    (80, "high"), (60, "good"), (40, "fair"), (0, "poor"),
+]
+# All standalone declarative clauses (no leading conjunction) -- _quality_
+# character_text supplies "and "/"though " when attaching one to the density
+# clause, and uses them bare when preservation stands as its own sentence.
+_PRESERVATION_CLAUSE = {
+    "high": [
+        "the pack historically holds up well between storms, with limited midwinter melt exposure",
+        "coverage here typically holds steady between storms rather than melting out",
+    ],
+    "good": [
+        "the pack generally holds onto snow reasonably well between storms",
+        "conditions here typically hold up decently between storms",
+    ],
+    "fair": [
+        "there's some real midwinter melt/rain exposure here between storms",
+        "the pack here is only moderately good at holding between storms",
+    ],
+    "poor": [
+        "this mountain is prone to real midwinter melt or rain exposure between storms",
+        "coverage here can degrade meaningfully between storms historically",
+    ],
+}
+# "and" for the good bands (reinforcing the density clause), "though" for the
+# weak ones (a contrast/caveat) -- picked by band, not randomized, since the
+# connector's TONE has to match the clause it's joining, unlike phrasing choice.
+_PRESERVATION_CONNECTOR = {"high": "and", "good": "and", "fair": "though", "poor": "though"}
+
+_CONSISTENCY_BAND = [  # (min score, band)
+    (80, "high"), (60, "good"), (40, "fair"), (0, "poor"),
+]
+_CONSISTENCY_CLAUSE = {
+    "high": [
+        "{short} is also historically very consistent year to year",
+        "this is a historically reliable mountain -- season totals don't vary much",
+    ],
+    "good": [
+        "{short}'s season-to-season variability is historically fairly modest",
+        "year-to-year variability here is historically fairly contained",
+    ],
+    "fair": [
+        "{short} shows real year-to-year variability -- some seasons run well above or below normal",
+        "there's a meaningful boom/bust element here from year to year historically",
+    ],
+    "poor": [
+        "{short} is a genuinely boom-or-bust mountain historically -- excellent seasons and weak ones both happen regularly",
+        "year-to-year swings here are historically large -- this isn't a mountain that delivers the same season twice",
+    ],
+}
+
+
+def _band(value: float, table: list[tuple[float, str]], descending: bool = False) -> str:
+    """First band whose threshold `value` clears. `table` sorted ascending by
+    threshold; `descending=True` for min-score tables (>=80 -> 'high' etc)."""
+    if descending:
+        for threshold, band in table:
+            if value >= threshold:
+                return band
+        return table[-1][1]
+    for threshold, band in table:
+        if value <= threshold:
+            return band
+    return table[-1][1]
+
+
+def _sentence(clause: str) -> str:
+    """A standalone clause -> a capitalized, period-terminated sentence."""
+    return clause[:1].upper() + clause[1:] + "."
+
+
+def _quality_character_text(c: dict, short: str, r: random.Random) -> str:
+    """The quality & character paragraph: density (real water-content %),
+    preservation, and consistency -- the receipts behind the ranking's
+    quality/preservation/consistency components, in plain technical language.
+    Empty string when NONE of the three signals are available (never invents
+    one), and degrades gracefully when only some are present."""
+    wf = c.get("water_fraction")
+    pres = c.get("preservation")
+    cons = c.get("consistency")
+    if wf is None and pres is None and cons is None:
+        return ""
+
+    parts: list[str] = []
+    if wf is not None:
+        pct = f"{wf * 100:.0f}" if wf * 100 >= 1 else f"{wf * 100:.1f}"
+        band = _band(wf, _DENSITY_BAND)
+        clause = r.choice(_DENSITY_CLAUSE[band]).format(short=short, pct=pct)
+        if pres is not None:
+            pband = _band(pres, _PRESERVATION_BAND, descending=True)
+            connector = _PRESERVATION_CONNECTOR[pband]
+            clause += f", {connector} " + r.choice(_PRESERVATION_CLAUSE[pband])
+        parts.append(_sentence(clause))
+    elif pres is not None:
+        pband = _band(pres, _PRESERVATION_BAND, descending=True)
+        parts.append(_sentence(r.choice(_PRESERVATION_CLAUSE[pband])))
+
+    if cons is not None:
+        cband = _band(cons, _CONSISTENCY_BAND, descending=True)
+        parts.append(_sentence(r.choice(_CONSISTENCY_CLAUSE[cband]).format(short=short)))
+
+    return " ".join(parts)
+
+
 def _fmt_date(target: date) -> str:
     """'January 5' -- %-d/%#d (no leading zero) is platform-specific (glibc vs
     MSVC), so build it by hand rather than picking one and breaking the other."""
@@ -271,4 +423,6 @@ def seasonal_pattern_text(key: str, name: str, wy_start: int,
     if n_years and n_years < low_confidence_years:
         parts.append(r.choice(_LOW_CONFIDENCE_CLAUSE) + ".")
 
-    return " ".join(p[:1].upper() + p[1:] for p in parts)
+    pattern = " ".join(p[:1].upper() + p[1:] for p in parts)
+    quality = _quality_character_text(c, short, r)
+    return f"{pattern} {quality}" if quality else pattern

@@ -138,3 +138,67 @@ def test_missing_season_window_does_not_crash():
     clim = _rising_climatology()
     text = tc.seasonal_pattern_text("x", "Nowindow, XX", 10, None, clim, date(2026, 2, 1))
     assert isinstance(text, str) and text
+
+
+# --- quality & character paragraph (density/preservation/consistency) ------
+def _with_quality(clim: dict[int, dict], **fields) -> dict[int, dict]:
+    """Overlay water_fraction/preservation/consistency onto every dowy of an
+    existing climatology dict, leaving base/fresh/season/n_years untouched."""
+    return {d: {**row, **fields} for d, row in clim.items()}
+
+
+def test_no_quality_signals_adds_nothing():
+    # None of the three fields present (legacy shape, e.g. an older cached
+    # climatology) -> the paragraph contributes nothing, no fabricated claim.
+    clim = _rising_climatology()
+    text = tc.seasonal_pattern_text("x", "Testmountain, XX", 10, SEASON_WINDOW,
+                                    clim, date(2026, 2, 1))
+    assert "%" not in text and "water content" not in text
+
+
+def test_water_fraction_quotes_a_real_percentage():
+    clim = _with_quality(_rising_climatology(), water_fraction=0.084)
+    text = tc.seasonal_pattern_text("x", "Alta, UT", 10, SEASON_WINDOW,
+                                    clim, date(2026, 2, 1))
+    assert "8%" in text and "water content" in text
+
+
+def test_high_preservation_uses_and_connector_low_uses_though():
+    base_clim = _rising_climatology()
+    good = _with_quality(base_clim, water_fraction=0.09, preservation=90.0)
+    poor = _with_quality(base_clim, water_fraction=0.09, preservation=20.0)
+    good_text = tc.seasonal_pattern_text("x", "Goodmtn, XX", 10, SEASON_WINDOW, good, date(2026, 2, 1))
+    poor_text = tc.seasonal_pattern_text("x", "Poormtn, XX", 10, SEASON_WINDOW, poor, date(2026, 2, 1))
+    assert ", and " in good_text
+    assert ", though " in poor_text
+
+
+def test_preservation_alone_forms_a_clean_standalone_sentence():
+    # No water_fraction (e.g. a station with no density read at all) but
+    # preservation IS known -- must read as its OWN capitalized sentence, not
+    # a mangled fragment (regression: an earlier lstrip("t") implementation
+    # corrupted "though..." clauses into "hough...").
+    clim = _with_quality(_rising_climatology(), preservation=25.0)
+    text = tc.seasonal_pattern_text("x", "Testmountain, XX", 10, SEASON_WINDOW,
+                                    clim, date(2026, 2, 1))
+    assert "hough" not in text  # the corrupted form the old bug produced
+    for sentence in text.split(". "):
+        assert sentence[:1].isupper() or not sentence  # every sentence starts capitalized
+
+
+def test_consistency_uses_mountain_short_name():
+    clim = _with_quality(_rising_climatology(), consistency=15.0)  # poor band
+    text = tc.seasonal_pattern_text("x", "Mammoth Mountain, CA", 10, SEASON_WINDOW,
+                                    clim, date(2026, 2, 1))
+    assert "Mammoth Mountain" in text
+    assert "boom-or-bust" in text or "swings" in text
+
+
+def test_off_season_never_gets_a_quality_paragraph():
+    # The off-season early-return must win outright -- no quality/character
+    # sentence should ever get appended to an "outside the season" line.
+    clim = _with_quality(_flat_climatology(base=1.0, fresh=0.5, season=2.0),
+                         water_fraction=0.08, preservation=90.0, consistency=90.0)
+    text = tc.seasonal_pattern_text("x", "Testmountain, XX", 10, SEASON_WINDOW,
+                                    clim, date(2026, 12, 1))
+    assert "%" not in text

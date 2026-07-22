@@ -11,12 +11,14 @@ from ski.comparable import (attach_global_score, attach_regional_score,
 
 
 def _row(key, region, in_season=True, base=None, fresh=None, season=None,
-         forecast=None, quality=None):
+         forecast=None, quality=None, vertical=None, acres=None, difficulty=None):
     return {
         "key": key, "region": region, "in_season": in_season,
         "abs_base_in": base, "abs_fresh_in": fresh,
         "abs_season_in": season, "abs_forecast_in": forecast,
         "abs_quality": quality,
+        "abs_vertical_ft": vertical, "abs_acres": acres,
+        "abs_pct_advanced_expert": difficulty,
     }
 
 
@@ -123,6 +125,36 @@ def test_quality_missing_drops_out_not_zeroed():
     assert scores["no_quality"] is not None and scores["has_quality"] is not None
     # deep-but-unrated still beats thin-but-rated on the strength of its inches
     assert scores["no_quality"] > scores["has_quality"]
+
+
+def test_bigger_mountain_wins_on_identical_conditions():
+    """Jackson Hole vs. its smaller neighbor Grand Targhee, IDENTICAL snow: the
+    bigger, more challenging mountain must rank higher purely on character (user's
+    explicit ask, 2026-07-22) -- vertical + acreage + difficulty all favor 'big'."""
+    rows = [
+        _row("big", "Wyoming", base=60, fresh=5, season=100, forecast=3, quality=70,
+             vertical=4139, acres=2500, difficulty=50),   # Jackson Hole's real stats
+        _row("small", "Wyoming", base=60, fresh=5, season=100, forecast=3, quality=70,
+             vertical=2270, acres=2602, difficulty=45),    # Grand Targhee's real stats
+    ]
+    scores = score_population(rows)
+    assert scores["big"] > scores["small"]
+
+
+def test_terrain_missing_drops_out_not_zeroed():
+    """A mountain with no published acreage/difficulty (e.g. a Nordic resort that
+    only publishes piste-km) still ranks on what it DOES have, rather than being
+    dragged down for the missing terrain fields."""
+    rows = [
+        _row("no_terrain_data", "Norway", base=60, fresh=8, season=150, forecast=3,
+             quality=80, vertical=None, acres=None, difficulty=None),
+        _row("small_but_rated", "Norway", base=10, fresh=1, season=20, forecast=1,
+             quality=20, vertical=1000, acres=500, difficulty=30),
+    ]
+    scores = score_population(rows)
+    assert scores["no_terrain_data"] is not None and scores["small_but_rated"] is not None
+    # deep-but-unrated still beats thin-but-rated on the strength of its conditions
+    assert scores["no_terrain_data"] > scores["small_but_rated"]
 
 
 # --- attach_global_score / attach_regional_score -----------------------------

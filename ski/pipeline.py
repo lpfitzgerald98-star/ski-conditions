@@ -18,7 +18,8 @@ from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, CRUST_MEMORY,
                     FORECAST_HORIZON_WEIGHTS,
                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
                     INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, POWDER_DECAY,
-                    SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, STORM_THRESHOLDS)
+                    SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, STORM_THRESHOLDS,
+                    TERRAIN_STATS)
 from ski import forecast_log
 from ski import score as score_mod
 from ski.db import max_observation_date, read_observations, upsert_observations
@@ -80,6 +81,14 @@ def mountain_station(m: dict) -> str:
     Each source uses its own id space (NRCS triplet, ACIS GHCN id, CDEC id, ECCC
     climate id), so keys never collide across sources."""
     return m[_source(m)["id_field"]]
+
+
+def mountain_terrain(key: str) -> dict:
+    """A mountain's static character facts (config.TERRAIN_STATS): vertical_
+    drop_ft, skiable_acres, pct_advanced_expert. {} for a key with no entry
+    (none currently, but callers use .get() so a future roster addition
+    without terrain data yet just drops out of that component, not an error)."""
+    return TERRAIN_STATS.get(key, {})
 
 
 def mountain_metric(m: dict) -> str:
@@ -255,6 +264,7 @@ def mountain_scorecard(
     obs = read_observations(db_path, mountain_station(m))
     metric = mountain_metric(m)
     wy_start = mountain_wy_start(m)
+    terrain = mountain_terrain(key)
     season = grade_season_to_date(obs, as_of=as_of, metric=metric,
                                   season_start_dowy=mountain_season_start(m),
                                   wy_start_month=wy_start)
@@ -462,6 +472,15 @@ def mountain_scorecard(
             # inches inputs). Not inches, but a comparable cross-mountain quantity.
             # None (no recent storm / off-network) simply drops out of the blend.
             "quality": snow_quality.value,
+            # Mountain character (config.TERRAIN_STATS): STATIC facts about the
+            # resort itself, not today's conditions -- present on every live row
+            # regardless of season/network, since a mountain's size and terrain
+            # mix don't depend on the weather. See config.GLOBAL_SCORE_WEIGHTS.
+            # .get() so a resort missing one field (e.g. no published acreage)
+            # simply carries None there -- drops out of that component's blend.
+            "vertical_drop_ft": terrain.get("vertical_drop_ft"),
+            "skiable_acres": terrain.get("skiable_acres"),
+            "pct_advanced_expert": terrain.get("pct_advanced_expert"),
         },
         "subscores": subscores, "season_progress": sp,
     }
