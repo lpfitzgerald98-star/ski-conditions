@@ -1980,6 +1980,166 @@ COVER_GATE = {
 SEASON_SWE_TO_SNOWFALL_RATIO = 10.0
 
 # ---------------------------------------------------------------------------
+# Station-siting calibration -- when the weather station isn't ON the mountain
+# ---------------------------------------------------------------------------
+# Many resorts' data stations are proxies: Jackson Hole reads Phillips Bench (a
+# lower bench site), Stowe a valley COOP in Jeffersonville, Killington a station
+# in Chittenden. A valley/bench site systematically under-catches what the ski
+# terrain actually receives, so those mountains rank as if they got less snow
+# than they do. Measured against each resort's published average annual snowfall
+# (2026-07-22 audit): well-sited stations read ~1.0x published (Grand Targhee
+# 1.00, Snowbird 1.04, Kirkwood 1.10) while proxies read far under (Jackson Hole
+# 1.57x, Big Sky 1.57x, Stowe 2.27x, Killington 3.13x under).
+#
+# The WORKAROUND: a per-mountain calibration factor = published annual snowfall
+# (SNOWFALL_NORMALS, researched independent-aggregator-first) / the station's own
+# measured median annual snowfall -- the same external-reference-corrects-known-
+# bias pattern as REGION_DENSITY_PRIOR. Guardrails, because resort marketing
+# numbers are known to inflate:
+#   trust    -- how far toward the published figure to correct (shrink toward
+#               1.0, like DENSITY_SOURCE_TRUST): factor = 1 + trust*(ratio - 1).
+#   clamp    -- hard bounds so neither a pathological published number nor a
+#               broken station read can swing a ranking more than ~2.5x.
+#   min_years -- station history needed before its measured annual mean is
+#               trusted enough to calibrate against at all.
+#
+# Applied ONLY to the cross-mountain RANKING quantity inputs (comparable abs_
+# base/fresh/season + the trip climatology's base/fresh/season) -- NEVER to the
+# absolute skiability headline, cover gate, or in-season gate: those answer "is
+# there actually snow at the station right now" and must stay the station's
+# honest, uncalibrated read. Quality/preservation/consistency are intensive or
+# scale-invariant signals and need no correction.
+SITING_CALIBRATION = {
+    "trust": 0.8,
+    "clamp_lo": 0.75,
+    "clamp_hi": 2.5,
+    "min_years": 5,
+}
+
+# Published average annual snowfall (inches) per resort -- the calibration
+# reference. Researched 2026-07-22, independent aggregators preferred over
+# resort marketing (ZRankings/OnTheSnow/bestsnow.net first). Filled by the
+# snowfall-normals research pass; a missing key -> factor 1.0 (no correction).
+SNOWFALL_NORMALS: dict[str, float] = {
+    "alpe_dhuez": 175,  # OnTheSnow 445cm
+    "alta": 517,  # ZRankings true snow
+    "alyeska": 488,  # ZRankings true snow (resort 650)
+    "arapahoe_basin": 314,  # ZRankings
+    "aspen": 283,  # OnTheSnow
+    "bachelor": 383,  # ZRankings true snow (resort 462)
+    "baker": 651,  # ZRankings true snow
+    "bansko": 62,  # PowderDays 158cm at 2560m
+    "baqueira_beret": 199,  # PowderDays 10yr 506cm
+    "big_sky": 286,  # ZRankings true snow (resort 400+)
+    "big_white": 231,  # OnTheSnow
+    "blue_mountain": 91,  # OnTheSnow
+    "bogus_basin": 250,  # resort figure only
+    "breckenridge": 282,  # ZRankings
+    "brian_head": 356,  # NWS mean 355.9
+    "bridger_bowl": 303,  # ZRankings true snow
+    "brighton": 504,  # ZRankings/aggregators
+    "cardrona": 114,  # Wikipedia 2.9m
+    "cerro_catedral": 186,  # SnowBrains 15yr mid-mtn
+    "cervinia": 208,  # OnTheSnow 529cm
+    "chamonix": 197,  # 500cm at altitude
+    "copper": 243,  # OnTheSnow
+    "coronet_peak": 78,  # OnTheSnow 197cm
+    "cortina": 117,  # OnTheSnow 297cm
+    "crystal_mtn": 413,  # ZRankings true snow
+    "davos": 160,  # OnTheSnow 406cm
+    "deer_valley": 275,  # ZRankings
+    "engelberg": 224,  # OnTheSnow 569cm
+    "falls_creek": 158,  # resort 4m only source
+    "fernie": 345,  # Wikipedia 875cm
+    "grand_targhee": 466,  # ZRankings true snow
+    "grandvalira": 171,  # PowderDays 435cm
+    "heavenly": 321,  # ZRankings true snow
+    "hood_meadows": 452,  # ZRankings true snow
+    "hunter": 120,  # Wikipedia/resort
+    "ischgl": 93,  # OnTheSnow 236cm, likely base-level
+    "jackson_hole": 368,  # ZRankings true snow (resort 459)
+    "jasna": 132,  # OnTheSnow 335cm
+    "june_mountain": 226,  # OnTheSnow
+    "kasprowy_wierch": 80,  # OnTheSnow 204cm
+    "keystone": 208,  # OnTheSnow
+    "kicking_horse": 253,  # ZRankings true snow
+    "killington": 240,  # ZRankings/bestsnow.net
+    "kirkwood": 459,  # ZRankings true snow
+    "kitzbuehel": 95,  # OnTheSnow 242cm
+    "la_plagne": 201,  # OnTheSnow 510cm
+    "lake_louise": 171,  # ZRankings true snow
+    "las_lenas": 247,  # long-term base-area avg
+    "mammoth": 354,  # ZRankings true snow
+    "marmot_basin": 122,  # OnTheSnow
+    "mont_sainte_anne": 187,  # resort 475cm
+    "mont_tremblant": 165,  # OnTheSnow
+    "mt_buller": 46,  # OnTheSnow
+    "mt_hotham": 118,  # resort 3m only source
+    "mt_hutt": 144,  # Wikipedia 3.67m
+    "mt_rose": 350,  # Wikipedia/resort
+    "nakiska": 95,  # OnTheSnow
+    "nevados_de_chillan": 272,  # SnowBrains 15yr mid-mtn
+    "norquay": 118,  # Wikipedia 300cm
+    "palisades_tahoe": 400,  # ZRankings true snow
+    "park_city": 288,  # ZRankings true snow (resort 355)
+    "perisher": 73,  # OnTheSnow
+    "portillo": 254,  # 1970-2007 avg
+    "powder_mtn": 350,  # ZRankings-cited
+    "red_mountain": 300,  # Wikipedia 750cm
+    "revelstoke": 410,  # Wikipedia 10.5m
+    "saint_lary": 149,  # OnTheSnow 377cm
+    "schweitzer": 284,  # ZRankings true snow
+    "sestriere": 93,  # OnTheSnow 237cm
+    "silver_star": 157,  # OnTheSnow
+    "snowbird": 500,  # ZRankings true snow
+    "soelden": 218,  # OnTheSnow 554cm
+    "solitude": 437,  # ZRankings true snow
+    "st_anton": 150,  # OnTheSnow 380cm
+    "st_moritz": 112,  # OnTheSnow Corviglia 285cm
+    "steamboat": 368,  # ZRankings
+    "stevens_pass": 460,  # resort figure only
+    "stowe": 305,  # ZRankings true snow
+    "stratton": 189,  # ZRankings true snow
+    "sugarbush": 267,  # ZRankings/bestsnow.net
+    "sugarloaf": 173,  # bestsnow.net true snow
+    "sun_peaks": 236,  # Wikipedia/resort 6m
+    "sun_valley": 196,  # ZRankings true snow
+    "sunday_river": 155,  # OnTheSnow
+    "sunshine_village": 258,  # ZRankings true snow
+    "taos": 254,  # ZRankings true snow
+    "telluride": 276,  # ZRankings
+    "the_remarkables": 144,  # OnTheSnow
+    "thredbo": 160,  # OnTheSnow upper mtn, generous
+    "treble_cone": 200,  # resort ~5m only source
+    "vail": 359,  # ZRankings
+    "val_disere": 229,  # OnTheSnow 581cm
+    "val_gardena": 111,  # OnTheSnow 282cm
+    "val_thorens": 253,  # OnTheSnow 643cm
+    "verbier": 185,  # OnTheSnow 469cm
+    "whakapapa": 68,  # OnTheSnow
+    "whistler_blackcomb": 419,  # ZRankings true snow
+    "whiteface": 168,  # OnTheSnow/resort midpoint
+    "wildcat": 200,  # resort figure only
+    "winter_park": 319,  # OnTheSnow
+    "wolf_creek": 430,  # OnTheSnow/consensus
+    "zermatt": 162,  # OnTheSnow 412cm
+    "zugspitze": 330,  # OnTheSnow 838cm glacier plateau
+}
+# Deliberately ABSENT from SNOWFALL_NORMALS (factor stays 1.0 -- no correction):
+# the research pass flagged these published figures as low-confidence, and
+# calibrating toward an unreliable reference would ADD bias rather than fix it.
+#   are                -- OnTheSnow figure likely substantial undercount
+#   cairngorm          -- sparse data, 22cm/yr implausible
+#   formigal           -- estimate from analogs, station figures unreliable
+#   hemsedal           -- Scandinavian OnTheSnow figures low-confidence
+#   kranjska_gora      -- sources vary 4-8m/season, low confidence
+#   levi               -- OnTheSnow figure likely substantial undercount
+#   poiana_brasov      -- sources vary widely, low confidence
+#   ruka               -- OnTheSnow figure likely substantial undercount
+#   trysil             -- Scandinavian OnTheSnow figures low-confidence
+#   valle_nevado       -- estimate borrowed from Cerro Catedral
+
+# ---------------------------------------------------------------------------
 # In-season gate -- is there enough snow to ski AT ALL?
 # ---------------------------------------------------------------------------
 # The cover gate caps a score; this decides whether a score means anything.

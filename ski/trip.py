@@ -93,7 +93,8 @@ def climatology(obs: pd.DataFrame, wy_start: int, season_start_dowy: int,
                 metric: str, window_days: int = TRIP_WINDOW_DAYS,
                 density_prior: float | None = None, density_trust: float = 1.0,
                 preservation_prior: float | None = None,
-                preservation_trust: float = 0.0) -> dict[int, dict]:
+                preservation_trust: float = 0.0,
+                siting_factor: float = 1.0) -> dict[int, dict]:
     """Per day-of-water-year (1..366): a mountain's typical conditions across all
     years, as the same absolute inputs ski.comparable ranks live.
 
@@ -157,6 +158,17 @@ def climatology(obs: pd.DataFrame, wy_start: int, season_start_dowy: int,
         # cumulative SWE -> fresh snowfall inches (see config), so SWE stations land
         # on the same "inches that fell" scale reported-snowfall stations already use.
         season_in = season_in * SEASON_SWE_TO_SNOWFALL_RATIO
+
+    # Station-siting calibration (config.SITING_CALIBRATION): a proxy/valley
+    # station under-catches what the ski terrain gets, so scale the QUANTITY
+    # series toward the resort's published annual snowfall. Quality/preservation/
+    # consistency below are intensive or scale-invariant and stay uncorrected
+    # (a CV is unchanged by a multiplier; density is a ratio; preservation is
+    # temperature-based).
+    if siting_factor != 1.0:
+        base_in = base_in * siting_factor
+        fresh_in = fresh_in * siting_factor
+        season_in = season_in * siting_factor
 
     # consistency: inter-year reliability of season-to-date (feast-or-famine penalty).
     # Coefficient of variation across years at each dowy; low CV = reliable, high = the

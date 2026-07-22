@@ -18,8 +18,8 @@ from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, CRUST_MEMORY,
                     FORECAST_HORIZON_WEIGHTS,
                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
                     INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, POWDER_DECAY,
-                    SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, STORM_THRESHOLDS,
-                    TERRAIN_STATS)
+                    SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, SITING_CALIBRATION,
+                    SNOWFALL_NORMALS, STORM_THRESHOLDS, TERRAIN_STATS)
 from ski import forecast_log
 from ski import score as score_mod
 from ski.db import max_observation_date, read_observations, upsert_observations
@@ -89,6 +89,49 @@ def mountain_terrain(key: str) -> dict:
     (none currently, but callers use .get() so a future roster addition
     without terrain data yet just drops out of that component, not an error)."""
     return TERRAIN_STATS.get(key, {})
+
+
+def station_annual_snowfall_in(obs: pd.DataFrame, wy_start: int,
+                               metric: str) -> tuple[float | None, int]:
+    """(median full-water-year fresh-snowfall total on the common inches scale,
+    number of usable years) for a station's whole record -- the number a
+    resort's published 'average annual snowfall' should roughly match if the
+    station actually sits on the mountain. The siting-calibration denominator."""
+    if obs is None or obs.empty:
+        return None, 0
+    from ski.grading import _daily_increment, _prepare
+    df = _prepare(obs, wy_start)
+    if df.empty:
+        return None, 0
+    inc = _daily_increment(df, metric).clip(lower=0)
+    by_wy = inc.groupby(df["wy"]).sum()
+    by_wy = by_wy[by_wy > 5]      # drop empty/partial shoulder years
+    if len(by_wy) < SITING_CALIBRATION["min_years"]:
+        return None, int(len(by_wy))
+    total = float(by_wy.median())
+    if metric == "swe_gain":
+        total *= SEASON_SWE_TO_SNOWFALL_RATIO
+    return total, int(len(by_wy))
+
+
+def siting_factor(key: str, obs: pd.DataFrame, wy_start: int, metric: str) -> float:
+    """The station-siting calibration multiplier for a mountain's RANKING
+    quantity inputs (see config.SITING_CALIBRATION for the full rationale).
+
+    factor = 1 + trust * (published_annual / station_measured_annual - 1),
+    clamped. 1.0 (no correction) whenever either side of the ratio is missing:
+    no published normal for this resort, or too little station history to
+    trust its own annual median."""
+    published = SNOWFALL_NORMALS.get(key)
+    if not published:
+        return 1.0
+    measured, _n = station_annual_snowfall_in(obs, wy_start, metric)
+    if not measured:
+        return 1.0
+    ratio = published / measured
+    factor = 1.0 + SITING_CALIBRATION["trust"] * (ratio - 1.0)
+    return max(SITING_CALIBRATION["clamp_lo"],
+               min(SITING_CALIBRATION["clamp_hi"], factor))
 
 
 def mountain_metric(m: dict) -> str:
@@ -265,6 +308,7 @@ def mountain_scorecard(
     metric = mountain_metric(m)
     wy_start = mountain_wy_start(m)
     terrain = mountain_terrain(key)
+    siting = siting_factor(key, obs, wy_start, metric)
     season = grade_season_to_date(obs, as_of=as_of, metric=metric,
                                   season_start_dowy=mountain_season_start(m),
                                   wy_start_month=wy_start)
@@ -462,10 +506,17 @@ def mountain_scorecard(
         # Absolute, cross-mountain-comparable inputs for ski.comparable's
         # global/regional score -- distinct from the self-relative percentiles
         # above (see config.GLOBAL_SCORE_WEIGHTS).
+        # Siting-calibrated RANKING inputs only (config.SITING_CALIBRATION): a
+        # proxy/valley station under-catches what the ski terrain gets, so the
+        # cross-mountain quantity comparison corrects toward the resort's
+        # published annual snowfall. The skiability headline, cover gate, and
+        # in-season gate above deliberately stay UNcalibrated -- they answer
+        # "is there snow at the station", not "how does it rank".
         "comparable_inputs": {
-            "base_in": eff_depth,
-            "fresh_in": fresh_72h,
-            "season_in": season_snow_equivalent_in(season),
+            "base_in": None if eff_depth is None else eff_depth * siting,
+            "fresh_in": None if fresh_72h is None else fresh_72h * siting,
+            "season_in": (None if (season_snow := season_snow_equivalent_in(season)) is None
+                          else season_snow * siting),
             "forecast_in": forecast_72h_in,
             # Phase 4: the 0-100 SnowQuality value joins the leaderboard blend as a
             # quality component (percentile-ranked across the population like the

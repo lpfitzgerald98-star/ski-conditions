@@ -329,7 +329,10 @@ def _trip_context() -> dict:
                     obs, pipeline.mountain_wy_start(m),
                     pipeline.mountain_season_start(m), pipeline.mountain_metric(m),
                     density_prior=d_prior, density_trust=d_trust,
-                    preservation_prior=p_prior, preservation_trust=p_trust)
+                    preservation_prior=p_prior, preservation_trust=p_trust,
+                    siting_factor=pipeline.siting_factor(
+                        key, obs, pipeline.mountain_wy_start(m),
+                        pipeline.mountain_metric(m)))
             except Exception:  # noqa: BLE001 -- one station, not the request
                 clim[station] = {}
     _TRIP_CACHE.update(built_on=today, clim=clim, meta=meta)

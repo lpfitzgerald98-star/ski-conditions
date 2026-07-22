@@ -288,7 +288,15 @@ def _build_climatology(keys: list[str]) -> tuple[dict[str, dict], dict[str, dict
                     obs, pipeline.mountain_wy_start(m),
                     pipeline.mountain_season_start(m), pipeline.mountain_metric(m),
                     density_prior=d_prior, density_trust=d_trust,
-                    preservation_prior=p_prior, preservation_trust=p_trust)
+                    preservation_prior=p_prior, preservation_trust=p_trust,
+                    # NOTE: the climatology cache is per STATION; resorts sharing
+                    # one (Alta/Snowbird, Keystone/A-Basin...) get the factor of
+                    # whichever mountain reaches the station first. Deterministic
+                    # (MOUNTAINS order), and sharing resorts are adjacent with
+                    # near-identical published normals, so the drift is a few %.
+                    siting_factor=pipeline.siting_factor(
+                        key, obs, pipeline.mountain_wy_start(m),
+                        pipeline.mountain_metric(m)))
             except Exception as exc:  # noqa: BLE001 -- one station, not the build
                 print(f"[trip] {key}: climatology failed ({exc})")
                 clim_by_station[station] = {}
