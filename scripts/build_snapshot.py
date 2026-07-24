@@ -373,12 +373,24 @@ def build_trip_patterns(keys: list[str], clim_by_station: dict[str, dict],
         clim = clim_by_station.get(mk["station"], {})
         name = MOUNTAINS[key]["name"]
         season_window = MOUNTAINS[key].get("season_window")
-        out: dict[str, str] = {}
+        out: dict[str, dict] = {}
         d = date(ref_year, 1, 1)
         end = date(ref_year, 12, 31)
         while d <= end:
-            out[d.strftime("%m-%d")] = trip_commentary.seasonal_pattern_text(
+            text = trip_commentary.seasonal_pattern_text(
                 key, name, mk["wy_start"], season_window, clim, d)
+            # Numeric quality signals for the card's visual meters (Phase 4.3):
+            # the same 0-100 climatological components the prose describes, so the
+            # picture and the words come from one source. Absent keys just omit
+            # that meter. `t` = prose text (unchanged content, new wrapper).
+            c = clim.get(trip.target_dowy(d, mk["wy_start"]), {})
+            entry = {"t": text}
+            for src, dst in (("quality", "d"), ("preservation", "p"),
+                             ("consistency", "c")):
+                v = c.get(src)
+                if v is not None:
+                    entry[dst] = round(float(v))
+            out[d.strftime("%m-%d")] = entry
             d += timedelta(days=1)
         (patterns_dir / f"{key}.json").write_text(
             json.dumps(out, separators=(",", ":")), encoding="utf-8")

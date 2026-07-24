@@ -343,7 +343,20 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .subrow .t { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
 .subrow .t .muted { color: var(--text-muted); }
 .bar { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
-.bar > i { display: block; height: 100%; border-radius: 3px; transition: width var(--dur) var(--ease); }
+.bar > i { display: block; height: 100%; border-radius: 3px; transition: width var(--dur) var(--ease);
+  background: var(--accent); }
+
+/* Trip card "Quality signals" meters (Phase 4.3): the climatological
+   density/preservation/consistency components the prose describes, shown as
+   0-100 bars so the picture matches the words. Reuses the .bar primitive. */
+.signals { margin: 12px 0 4px; }
+.signals .sig-hd { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.signals .sig-hd small { font-size: 10px; opacity: 0.8; }
+.sig { display: grid; grid-template-columns: 96px 1fr 28px; align-items: center;
+  gap: 8px; margin-bottom: 6px; }
+.sig-k { font-size: 12px; color: var(--text); }
+.sig-v { font-size: 12px; color: var(--text-muted); text-align: right;
+  font-variant-numeric: tabular-nums; }
 
 /* Incoming snow: its own emphasized box (not just a .sec list) -- the one
    forward-looking number on an otherwise backward-looking card. */

@@ -1677,9 +1677,39 @@ TRIP_WINDOW_DAYS = 7
 # combined, on par with quality/preservation/consistency together). base/season/fresh
 # trimmed slightly to make room; quality/preservation/consistency (already validated
 # against real climatology this session) are untouched.
-TRIP_BASELINE_WEIGHTS = {"base": 0.22, "season": 0.19, "fresh": 0.10,
-                         "quality": 0.20, "preservation": 0.10, "consistency": 0.08,
-                         "vertical": 0.05, "acreage": 0.04, "difficulty": 0.06}
+# Renormalized to sum exactly 1.0 (2026-07-22 validation Phase 0). PROPORTIONAL,
+# so ratios are preserved and comparable._blend renormalizes regardless. Verified
+# on the Feb-14 board: max score delta 0.009 / mean 0.003 (4-decimal rounding
+# only), ZERO rank changes, top-20 identical. Done so the numbers read as the
+# percentages people assume they are.
+# EMPIRICALLY REFIT 2026-07-22 (validation Phase 2B). Fitted on a point-in-time
+# backtest of 4 Februaries (2021-24) against a QUALITY-AWARE realised-conditions
+# outcome, held out on 2025-26: out-of-sample Spearman +0.689 vs +0.569 for the
+# previous hand-set weights (gain +0.121, in/out gap +0.082 -- not overfit).
+#
+# What the data changed, and the one real surprise: the model's best way to encode
+# snow QUALITY turned out to be `preservation` (0.096 -> 0.217), not the
+# density-based `quality` component (0.192 -> 0.007). Both are quality signals;
+# measured against how weeks actually skied, how well the pack HOLDS beat how
+# light the snow FELL. Ablation at these weights: base +0.082, preservation
+# +0.049, season +0.039 carry essentially all the skill.
+#
+# NOTHING WAS DELETED. The near-zero components are kept rather than pruned:
+# (a) numerically it makes no difference at these weights, (b) terrain character
+# (acreage/difficulty/vertical, still 0.116 combined) encodes an explicit product
+# requirement -- a bigger, more challenging mountain should outrank a small
+# neighbour on equal snow -- which a snow-derived outcome is structurally
+# incapable of evaluating either way, so pruning it on this evidence would be a
+# category error, and (c) keeping them preserves the option to re-weight.
+#
+# NOT refit: GLOBAL_SCORE_WEIGHTS (the live board) was never backtested here.
+TRIP_BASELINE_WEIGHTS = {
+    "base": 0.3387, "season": 0.3161,
+    "preservation": 0.217, "acreage": 0.08,
+    "difficulty": 0.0291, "vertical": 0.0073,
+    "quality": 0.0068, "fresh": 0.0037,
+    "consistency": 0.0013,
+}
 
 # Consistency (Phase: "what skiers want" #frequency/reliability) -- feast-or-famine.
 # Skiers value a place that RELIABLY delivers, not one that's epic one year and bare the
@@ -2331,9 +2361,12 @@ MEDIUM_RANGE = {
 # rides on coarse Open-Meteo wind, so we ramp it up only after validating the
 # reorderings it produces on the live roster (user decision, 2026-07-17). Weights
 # needn't sum to 1 -- ski.comparable._blend renormalizes over whatever's present.
-GLOBAL_SCORE_WEIGHTS = {"base": 0.24, "fresh": 0.21, "season": 0.12,
-                        "forecast": 0.19, "quality": 0.16,
-                        "vertical": 0.06, "acreage": 0.05, "difficulty": 0.07}
+# Renormalized to sum exactly 1.0 (2026-07-22 validation Phase 0) -- proportional,
+# so ratios are preserved (comparable._blend renormalizes regardless); deltas are
+# 4-decimal rounding only. The raw numbers now read as true percentages.
+GLOBAL_SCORE_WEIGHTS = {"base": 0.2182, "fresh": 0.1909, "season": 0.1091,
+                        "forecast": 0.1727, "quality": 0.1455,
+                        "vertical": 0.0545, "acreage": 0.0455, "difficulty": 0.0636}
 
 # ---------------------------------------------------------------------------
 # Mountain character -- "is this just a better MOUNTAIN, independent of the
@@ -2372,6 +2405,18 @@ GLOBAL_SCORE_WEIGHTS = {"base": 0.24, "fresh": 0.21, "season": 0.12,
 # `quality` (0.16) -- a MEANINGFUL edge, per user's explicit choice, not a
 # tiebreaker. base/fresh/season/forecast trimmed slightly to make room;
 # quality's own validated weight is untouched.
+# GOVERNING RULE (adopted 2026-07-22 validation Phase 1): `vertical_drop_ft` is
+# LIFT-SERVED vertical only -- the drop a skier can actually ride, top lift station
+# to bottom lift station. NOT summit prominence, NOT a cable-car span that lands
+# below the skiable terrain, NOT a marketing "total vertical". Zugspitze was the
+# case that forced the rule: it carried 4298 ft (the cable-car/massif span down to
+# the valley) against a glacier ski area that actually runs 2000-2720m = 2362 ft.
+# When a source quotes a vertical that implies terrain the lifts don't serve, take
+# the lift-station elevations and subtract.
+#
+# NOTE: a high vertical:acreage ratio is NOT by itself evidence of an error --
+# Kasprowy Wierch legitimately pairs ~3200 ft of lift-served vertical with ~41
+# acres of marked piste (verified: 908m cable car, minimal groomed terrain).
 TERRAIN_STATS = {
     "alpe_dhuez": {"vertical_drop_ft": 7297, "skiable_acres": None, "pct_advanced_expert": 20},  # 3-tier 20% difficult; no acreage published
     "alta": {"vertical_drop_ft": 2538, "skiable_acres": 2614, "pct_advanced_expert": 55},  # official site figures
@@ -2485,7 +2530,7 @@ TERRAIN_STATS = {
     "winter_park": {"vertical_drop_ft": 3060, "skiable_acres": 3081, "pct_advanced_expert": 55},  # 52% most-difficult+3% expert
     "wolf_creek": {"vertical_drop_ft": 1604, "skiable_acres": 1600, "pct_advanced_expert": 45},  # 25%+20%
     "zermatt": {"vertical_drop_ft": 7427, "skiable_acres": 2500, "pct_advanced_expert": 18},  # acres conv from 200km; combined Zermatt-Cervinia %
-    "zugspitze": {"vertical_drop_ft": 4298, "skiable_acres": 500, "pct_advanced_expert": 25},  # Garmisch-Classic only, excl. glacier field
+    "zugspitze": {"vertical_drop_ft": 2362, "skiable_acres": 500, "pct_advanced_expert": 25},  # CORRECTED 2026-07-22: glacier ski area 2000-2720m = 720m lift-served (zugspitze.de). Was 4298 = cable-car/massif span, not piste.
 }
 
 # Trailing window (days) for the comparable score's "fresh" input -- shorter

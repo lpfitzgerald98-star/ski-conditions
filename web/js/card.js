@@ -448,10 +448,14 @@ async function renderTripCard(row, key, token) {
       <div class="cell"><div class="k">History</div>
         <div class="v">${row.n_years || 0}<small>yrs${row.low_confidence ? " · low conf" : ""}</small></div></div>
     </div>
+    <div class="signals" hidden></div>
     <div class="note commentary trip-commentary">
-      <p class="trip-pattern">${row.pattern ? escapeHTML(row.pattern) : "Loading seasonal pattern…"}</p>
+      <p class="trip-pattern">${row.pattern ? escapeHTML(_patternText(row.pattern)) : "Loading seasonal pattern…"}</p>
       ${commentaryParts.slice(1).map(p => `<p>${escapeHTML(p)}</p>`).join("")}
     </div>`;
+  // Signals may already ride on the row in live mode; otherwise the lazy fetch
+  // below fills them in. Either way, render from whatever we have now.
+  _renderSignals(el.querySelector(".signals"), _patternSignals(row.pattern));
   el.querySelector(".close").addEventListener("click", close);
   focusSilently(el.querySelector(".close"));
   announce(`${row.name}. Trip prediction ${g}.`);
@@ -463,11 +467,40 @@ async function renderTripCard(row, key, token) {
   if (!row.pattern) {
     let mmdd = state.tripDate.slice(5);
     if (mmdd === "02-29") mmdd = "02-28";
-    const text = await loadTripPattern(key, mmdd);
+    const entry = await loadTripPattern(key, mmdd);
     if (token !== reqToken || state.tripDate == null) return;
     const slot = el.querySelector(".trip-pattern");
-    if (slot) slot.textContent = text || "No seasonal pattern available for this mountain.";
+    if (slot) slot.textContent = _patternText(entry) || "No seasonal pattern available for this mountain.";
+    _renderSignals(el.querySelector(".signals"), _patternSignals(entry));
   }
+}
+
+// A trip pattern entry is either a bare prose string (live mode embeds it on the
+// row) or {t: prose, d/p/c: 0-100 signals} (static per-mountain file). These two
+// helpers read either shape so the card doesn't care which it got.
+function _patternText(entry) {
+  if (entry == null) return "";
+  return typeof entry === "string" ? entry : (entry.t || "");
+}
+function _patternSignals(entry) {
+  if (!entry || typeof entry === "string") return null;
+  const sig = [];
+  if (entry.d != null) sig.push(["Snow quality", entry.d, "light, dry snow"]);
+  if (entry.p != null) sig.push(["Preservation", entry.p, "holds between storms"]);
+  if (entry.c != null) sig.push(["Consistency", entry.c, "reliable year to year"]);
+  return sig.length ? sig : null;
+}
+function _renderSignals(host, sig) {
+  if (!host) return;
+  if (!sig) { host.hidden = true; host.innerHTML = ""; return; }
+  host.hidden = false;
+  host.innerHTML = `<div class="sig-hd">Quality signals <small>climatological, 0–100</small></div>`
+    + sig.map(([label, v, hint]) => `
+      <div class="sig" title="${escapeHTML(hint)}">
+        <span class="sig-k">${label}</span>
+        <div class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>
+        <span class="sig-v">${v}</span>
+      </div>`).join("");
 }
 
 function escapeHTML(s) {
