@@ -9,7 +9,7 @@
 
 import {
   MAP_STYLE, MAP_START, MAP_MIN_ZOOM, MAP_MAX_ZOOM,
-  CLUSTER_PX, CLUSTER_MAX_ZOOM, MARKER_SIZE,
+  CLUSTER_PX, CLUSTER_MAX_ZOOM, MARKER_SIZE, SELECT_ZOOM,
 } from "./config.js";
 import { badgeSVG, shapeFor, colorFor, naColor } from "./grades.js";
 import { state, visibleScores, displayValue, setSelected, emit } from "./state.js";
@@ -358,7 +358,7 @@ export function markSelected(key) {
 export function flyToMountain(key) {
   const row = state.byKey[key];
   if (!row || row.latitude == null) return;
-  const zoom = Math.max(map.getZoom(), 4.5);
+  const zoom = Math.max(map.getZoom(), SELECT_ZOOM);
   // Baseline the card-dismiss zoom to where we're framing this mountain, so
   // zooming back out from here (not the earlier world view) is what closes it.
   cardFrameZoom = zoom;

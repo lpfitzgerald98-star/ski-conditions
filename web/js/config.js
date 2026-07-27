@@ -39,5 +39,11 @@ export const MAP_MAX_ZOOM = 12;
 export const CLUSTER_PX = 24;
 export const CLUSTER_MAX_ZOOM = 4.3;
 
+// Zoom the map frames a mountain at when you pick it (sidebar click / map select).
+// A floor, not an absolute: if you're already zoomed in tighter, selecting keeps
+// your closer view. Set well past CLUSTER_MAX_ZOOM so a pick always lands on the
+// single pin with its surrounding terrain in frame, not a still-clustered region.
+export const SELECT_ZOOM = 7;
+
 // Marker pixel size (the SVG badge is drawn in a viewBox of this many units).
 export const MARKER_SIZE = 28;
