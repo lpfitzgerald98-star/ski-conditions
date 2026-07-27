@@ -1703,12 +1703,45 @@ TRIP_WINDOW_DAYS = 7
 # category error, and (c) keeping them preserves the option to re-weight.
 #
 # NOT refit: GLOBAL_SCORE_WEIGHTS (the live board) was never backtested here.
+#
+# TERRAIN RESTORED + PROMOTED 2026-07-27 (product decision, validated for SAFETY).
+# The Phase 2B refit above collapsed vertical (0.048 -> 0.0073) and difficulty
+# (0.058 -> 0.0291) because it fit terrain against a SNOW-derived outcome that, by
+# its own admission (note (b) above), is structurally incapable of judging terrain
+# either way. That silently overrode the explicit product rule stated at
+# TERRAIN_STATS / GLOBAL_SCORE_WEIGHTS ("a legendary big mountain should outrank a
+# smaller neighbour on equal snow"). Terrain is restored here as a LARGE product
+# weight, deliberately EXEMPT from the snow backtest (user intent, 2026-07-27:
+# terrain is a large factor, not a tiebreak). GLOBAL_SCORE_WEIGHTS carries the same
+# 0.22 block so the live and trip boards agree.
+#   - snow signals keep their VALIDATED Phase-2B proportions exactly, scaled to 0.78.
+#     base/season/preservation each carry independent skill per the ablation, so they
+#     are NOT merged or gutted -- tested: actively de-duping base+season cost -0.010
+#     pooled rho, confirming season is not pure redundancy.
+#   - a 0.22 terrain block (vertical / difficulty / acreage = 0.077 / 0.077 / 0.066),
+#     re-weighted so vertical + steepness lead, not acreage.
+#
+# WHY 0.22 AND NOT HIGHER -- the REGIONAL cliff (the finding that set this number).
+# Swept terrain 0.16..0.30 (6x Feb-14, scripts/backtest_trip.py). Pooled rho barely
+# moves (+0.698 -> +0.687) and SNOW-ONLY rho (terrain zeroed) holds at +0.692 the
+# whole way -- but per-REGION rho falls off a cliff at ~0.28: Eastern Canada +0.679
+# -> -0.015 (within-region order goes RANDOM), Pacific Northwest and Tahoe roughly
+# halve, 2-3 regions drop below +0.10. Cause: in maritime, uniformly-small-hill
+# regions the mountains barely differ in terrain, so a heavy static terrain weight
+# just drowns the snow signal that actually separates them week to week -- and
+# regional_score is a live surface (the card's "#3 of 8 in <region> to ski right
+# now"). The Jackson-passes-Targhee flip ALSO first occurs at 0.28, i.e. you cannot
+# flip that pair without triggering the collapse. So 0.22 is the chosen ceiling:
+# terrain is a large ~quarter of the score, EVERY region stays predictive (Eastern
+# Canada +0.578), pooled +0.696. Effect: Jackson rises #13 -> #8 and Grand Targhee
+# holds #4 -- close, but Targhee's real ~30% snowfall edge (on-mountain station)
+# keeps it ahead, which is correct: overriding it would mean randomising 3 regions.
 TRIP_BASELINE_WEIGHTS = {
-    "base": 0.3387, "season": 0.3161,
-    "preservation": 0.217, "acreage": 0.08,
-    "difficulty": 0.0291, "vertical": 0.0073,
-    "quality": 0.0068, "fresh": 0.0037,
-    "consistency": 0.0013,
+    "base": 0.2990, "season": 0.2790,
+    "preservation": 0.1916,
+    "vertical": 0.077, "difficulty": 0.077, "acreage": 0.066,
+    "quality": 0.0060, "fresh": 0.0033,
+    "consistency": 0.0011,
 }
 
 # Consistency (Phase: "what skiers want" #frequency/reliability) -- feast-or-famine.
@@ -2364,9 +2397,21 @@ MEDIUM_RANGE = {
 # Renormalized to sum exactly 1.0 (2026-07-22 validation Phase 0) -- proportional,
 # so ratios are preserved (comparable._blend renormalizes regardless); deltas are
 # 4-decimal rounding only. The raw numbers now read as true percentages.
-GLOBAL_SCORE_WEIGHTS = {"base": 0.2182, "fresh": 0.1909, "season": 0.1091,
-                        "forecast": 0.1727, "quality": 0.1455,
-                        "vertical": 0.0545, "acreage": 0.0455, "difficulty": 0.0636}
+#
+# TERRAIN ALIGNED TO THE TRIP BOARD 2026-07-27 (user intent: "the live weights
+# should be similar to the trip weights"). The live board already respected terrain
+# (~0.164, vertical alive) so it never had the trip board's collapse -- but to keep
+# the two boards consistent, its terrain block is set to the SAME 0.22 as
+# TRIP_BASELINE_WEIGHTS (vertical / difficulty / acreage = 0.077 / 0.077 / 0.066; see
+# that block for why 0.22 and not higher -- the regional-predictiveness cliff at
+# ~0.28). The live snow signals (base / fresh / season / forecast / quality -- the
+# "right now" set, vs the trip board's climatological base / season / preservation)
+# keep their prior proportions exactly, scaled to 0.78. No backtest exists for the
+# live board (it ranks a single live day, not a frozen outcome window), so this is a
+# pure product-consistency choice, same terrain rationale as the trip board above.
+GLOBAL_SCORE_WEIGHTS = {"base": 0.2033, "fresh": 0.1780, "season": 0.1017,
+                        "forecast": 0.1613, "quality": 0.1357,
+                        "vertical": 0.077, "difficulty": 0.077, "acreage": 0.066}
 
 # ---------------------------------------------------------------------------
 # Mountain character -- "is this just a better MOUNTAIN, independent of the

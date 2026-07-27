@@ -303,11 +303,52 @@ function queueList() {
 }
 
 // -- legend ----------------------------------------------------------------
+// Two layers: the grade scale is always visible (the key to every pin), and a
+// collapsible "Why these rankings" panel explains what a grade actually measures
+// and the signals behind it -- the same signals the detail card surfaces, in
+// plain language, so the leaderboard order never reads as a black box.
 function buildLegend() {
   const el = $("legend");
-  el.innerHTML = LEGEND_GRADES.map(g =>
+  const grades = LEGEND_GRADES.map(g =>
     `<span class="lg">${badgeSVG(g, g, { size: 18 })}${g}</span>`).join("") +
     `<span class="lg">${badgeSVG("—", "—", { size: 18 })}off-season / no data</span>`;
+
+  // A representative signal bar, fill only (no number) -- the legend shows what a
+  // signal looks like; the card fills in each mountain's actual value.
+  const sigBar = (label, fill, hint) =>
+    `<div class="ls-row"><span class="ls-k">${label}</span>` +
+    `<span class="lg-bar"><i style="width:${fill}%"></i></span>` +
+    `<small>${hint}</small></div>`;
+
+  el.innerHTML = `
+    <div class="legend-grades" aria-label="Grade scale">${grades}</div>
+    <details class="legend-more">
+      <summary><span class="lm-lead">Why these rankings</span><span class="chev" aria-hidden="true">›</span></summary>
+      <div class="legend-body">
+        <p class="legend-lead">A grade is <b>how good the skiing is right now</b> — snow on the
+          ground and in the forecast, weighted by a mountain's own snow <em>quality</em>, not just
+          how deep it falls. The board shows the <em>best available</em>, so a region's #1 can still
+          be a modest grade on a lean day.</p>
+        <ul class="legend-facts">
+          <li><span class="lf-badge">${badgeSVG("A", "A", { size: 16 })}</span>
+            <span><b>Skiing right now</b> — the headline grade, and what colors the map pin. Absolute conditions, 0–100.</span></li>
+          <li><span class="lf-ico rank">#1</span>
+            <span><b>Rank</b> — placement <em>within its region</em> (and worldwide) to ski today — not a lifetime reputation.</span></li>
+          <li><span class="lf-ico alert" aria-hidden="true">◍</span>
+            <span><b>Storm ring</b> — a pulsing gold halo flags an incoming 24–72 h storm.</span></li>
+          <li><span class="lf-ico ok" aria-hidden="true">✓</span>
+            <span><b>Verified station</b> — depth from an on-mountain sensor; <span class="warn">⚠</span> means a nearby proxy, read with more caution.</span></li>
+        </ul>
+        <div class="legend-sig">
+          <div class="ls-hd">Quality signals <small>climatological · 0–100</small></div>
+          ${sigBar("Snow quality", 82, "light, dry snow")}
+          ${sigBar("Preservation", 60, "holds between storms")}
+          ${sigBar("Consistency", 74, "reliable year to year")}
+        </div>
+        <p class="legend-shape">Each grade is a color <em>and</em> a shape — A circle · B rounded ·
+          C hexagon · D diamond · F triangle — so it reads without relying on color.</p>
+      </div>
+    </details>`;
 }
 
 // -- theme -----------------------------------------------------------------

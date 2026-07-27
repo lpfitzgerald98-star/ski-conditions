@@ -103,9 +103,13 @@ def _blend(component_pcts: dict[str, float | None],
         return None
     # Same float-noise clamp as score.overall_score: weights summing to
     # "1.0" in config can land a hair off in binary float (e.g. 0.9999999999999999),
-    # nudging an exact 100 numerator to 100.00000000000001 on division.
+    # nudging an exact 100 numerator to 100.00000000000001 -- OR to 99.99999999999999
+    # -- on division. round(9) kills the sub-epsilon noise SYMMETRICALLY (a bare
+    # min(100.0) only caught the high side, so a top-on-every-component mountain could
+    # come back 99.999...9); the clamp then holds the [0, 100] range. 9 decimals is
+    # far finer than the 1-decimal scores ever shown, so no real precision is lost.
     val = sum(w * p for w, p in parts) / sum(w for w, _ in parts)
-    return max(0.0, min(100.0, val))
+    return max(0.0, min(100.0, round(val, 9)))
 
 
 def score_population(

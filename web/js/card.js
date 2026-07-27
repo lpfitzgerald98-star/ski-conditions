@@ -149,6 +149,60 @@ function subBar(label, v) {
     <div class="bar"><i style="width:${w}%;background:${v == null ? naColor() : "var(--accent)"}"></i></div></div>`;
 }
 
+// -- rank breakdown ---------------------------------------------------------
+// WHY this mountain sits where it does on the leaderboard. The comparable score
+// (ski.comparable) blends two axes: Snow conditions (the heavy majority of the
+// weight) and Mountain character (size + challenge -- a smaller, deliberate
+// vote, restored 2026-07-27 so a bigger/steeper mountain isn't buried by a
+// marginal snow edge). Each driver here is percentile-ranked across the same
+// in-season population the scorer uses, so the card delineates exactly what the
+// single headline number folds together. Drivers this mountain has no value for
+// drop out, same convention as the scorer.
+const RANK_DRIVERS = [
+  ["Snow", "conditions · most of the score", [
+    ["Base depth", "abs_base_in"],
+    ["Fresh snow", "abs_fresh_in"],
+    ["Season total", "abs_season_in"],
+    ["Snow quality", "abs_quality"],
+    ["Preservation", "abs_preservation"],
+  ]],
+  ["Mountain", "size & challenge · a smaller vote", [
+    ["Vertical", "abs_vertical_ft"],
+    ["Steepness", "abs_pct_advanced_expert"],
+    ["Acreage", "abs_acres"],
+  ]],
+];
+
+// Mirror grading.percentile_rank: percent of the in-season field STRICTLY below.
+function _pctRank(v, others) {
+  const xs = others.filter(x => x != null && !Number.isNaN(x));
+  if (!xs.length) return null;
+  return Math.round(100 * xs.filter(x => x < v).length / xs.length);
+}
+
+function rankBreakdown(key) {
+  const row = state.byKey[key];
+  if (!row) return "";
+  const pool = state.scores.filter(m => m.in_season === true && m.key !== key);
+  if (pool.length < 3) return "";
+  const groups = RANK_DRIVERS.map(([title, sub, defs]) => {
+    const bars = defs.map(([label, field]) => {
+      if (row[field] == null) return "";
+      const p = _pctRank(row[field], pool.map(m => m[field]));
+      if (p == null) return "";
+      return `<div class="rb-row"><span class="rb-k">${label}</span>
+        <div class="bar"><i style="width:${Math.max(2, p)}%"></i></div>
+        <span class="rb-v">${p}<small>th</small></span></div>`;
+    }).filter(Boolean).join("");
+    return bars
+      ? `<div class="rb-group"><div class="rb-hd">${title} <small>${sub}</small></div>${bars}</div>`
+      : "";
+  }).filter(Boolean).join("");
+  if (!groups) return "";
+  return `<div class="sec">What drives this rank <small class="rb-note">percentile vs. the in-season field</small></div>
+    <div class="rank-break">${groups}</div>`;
+}
+
 function render(card, key) {
   const prof = state.profile || card.default_profile;
   const o = card.overall[prof] || card.overall[card.default_profile] || {};
@@ -230,6 +284,8 @@ function render(card, key) {
     ${subBar("Last 30 days", card.subscores.in_season)}
     ${subBar("Conditions", card.subscores.conditions)}
     ${subBar("Incoming snow", card.subscores.forecast)}`;
+
+  html += rankBreakdown(key);
 
   if (card.sources) {
     const s = card.sources;

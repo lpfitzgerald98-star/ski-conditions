@@ -119,13 +119,66 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 
 /* ---- Legend ------------------------------------------------------------- */
 .legend {
-  display: flex; flex-wrap: wrap; gap: 6px 14px;
   padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--line-soft);
   font-size: 11px; color: var(--text-muted);
 }
+.legend-grades { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .legend .lg { display: inline-flex; align-items: center; gap: 5px; }
 .legend svg { display: block; }
+
+/* Collapsible "Why these rankings" explainer. */
+.legend-more { margin-top: var(--sp-2); }
+.legend-more > summary {
+  display: flex; align-items: center; gap: 4px;
+  list-style: none; cursor: pointer; width: fit-content;
+  color: var(--accent); font-weight: 600; font-size: 11.5px;
+  padding: 2px 0;
+}
+.legend-more > summary::-webkit-details-marker { display: none; }
+.legend-more > summary:hover { color: var(--accent-strong); }
+.legend-more > summary:focus-visible {
+  outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px;
+}
+.legend-more .chev {
+  transition: transform var(--dur-fast) var(--ease); font-size: 13px; line-height: 1;
+}
+.legend-more[open] .chev { transform: rotate(90deg); }
+
+.legend-body { margin-top: var(--sp-2); display: grid; gap: var(--sp-3); }
+.legend-lead { margin: 0; line-height: 1.5; color: var(--text-muted); }
+.legend-lead b { color: var(--text); }
+.legend-body em { font-style: normal; color: var(--accent); }
+
+.legend-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.legend-facts li { display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; }
+.legend-facts b { color: var(--text); font-weight: 600; }
+.lf-badge { flex: 0 0 auto; margin-top: 1px; }
+.lf-badge svg { display: block; }
+.lf-ico {
+  flex: 0 0 20px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 700; border-radius: 999px; margin-top: 1px;
+}
+.lf-ico.rank { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+.lf-ico.alert { color: var(--alert); font-size: 15px; }
+.lf-ico.ok { color: var(--accent); }
+.legend-facts .warn { color: var(--alert); font-weight: 700; }
+
+.legend-sig {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm); padding: var(--sp-3);
+}
+.ls-hd { color: var(--text); font-weight: 600; margin-bottom: var(--sp-2); }
+.ls-hd small { color: var(--text-faint); font-weight: 500; }
+.ls-row { display: grid; grid-template-columns: 78px 1fr auto; align-items: center; gap: 8px; margin-top: 6px; }
+.ls-row .ls-k { color: var(--text-muted); }
+.ls-row small { color: var(--text-faint); }
+.lg-bar {
+  height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden;
+}
+.lg-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+
+.legend-shape { margin: 0; line-height: 1.5; color: var(--text-faint); }
 
 /* ---- Leaderboard -------------------------------------------------------- */
 .list-head {
@@ -357,6 +410,22 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .sig-k { font-size: 12px; color: var(--text); }
 .sig-v { font-size: 12px; color: var(--text-muted); text-align: right;
   font-variant-numeric: tabular-nums; }
+
+/* "What drives this rank": the two axes (Snow / Mountain) the leaderboard blends,
+   each driver percentile-ranked vs the in-season field. Delineates the single
+   headline score into the parts a skier can reason about. Reuses .bar. */
+.sec .rb-note { text-transform: none; letter-spacing: 0; font-size: 10px; color: var(--text-faint); }
+.rank-break { display: grid; gap: var(--sp-3); }
+.rb-group { background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm); padding: var(--sp-3); }
+.rb-hd { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: var(--sp-2); }
+.rb-hd small { font-weight: 400; color: var(--text-faint); font-size: 10.5px; }
+.rb-row { display: grid; grid-template-columns: 92px 1fr 34px; align-items: center;
+  gap: 8px; margin-top: 6px; }
+.rb-k { font-size: 12px; color: var(--text-muted); }
+.rb-v { font-size: 12px; color: var(--text); text-align: right;
+  font-variant-numeric: tabular-nums; }
+.rb-v small { color: var(--text-faint); font-size: 9px; }
 
 /* Incoming snow: its own emphasized box (not just a .sec list) -- the one
    forward-looking number on an otherwise backward-looking card. */
