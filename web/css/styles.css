@@ -54,6 +54,53 @@ button { font-family: inherit; }
 /* Recolor the basemap tiles to match the theme (dark tint in dark mode, none in
    light). Only the tile canvas is filtered; DOM markers/controls sit above it. */
 #map .maplibregl-canvas { filter: var(--map-filter, none); transition: filter var(--dur) var(--ease); }
+/* Grade cloud: a 2D canvas inside the canvas-container (a sibling of the WebGL
+   tile canvas, so the dark-mode invert filter above never touches it). Sits over
+   the tiles, under the DOM markers, and ignores the pointer. */
+.grade-cloud { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
+
+/* ---- "Reading the map" guide (bottom-left map overlay) ------------------- */
+.map-guide {
+  position: absolute; left: var(--sp-3); bottom: var(--sp-3); z-index: 3;
+  width: min(320px, calc(100% - 2 * var(--sp-3)));
+  font-size: 12px; color: var(--text-muted);
+}
+.map-guide > details {
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow-pop); backdrop-filter: blur(9px);
+  overflow: hidden;
+}
+.map-guide > details > summary {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
+  padding: 10px 12px; font-weight: 600; color: var(--text); font-size: 12.5px;
+}
+.map-guide > details > summary::-webkit-details-marker { display: none; }
+.map-guide > details > summary:hover { background: var(--bg-elev); }
+.map-guide > details > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.map-guide .mg-spark { font-size: 14px; filter: saturate(1.2); }
+.map-guide .mg-chev { margin-left: auto; transition: transform var(--dur-fast) var(--ease); color: var(--text-faint); }
+.map-guide > details[open] .mg-chev { transform: rotate(90deg); }
+.mg-body { padding: 0 12px 12px; display: grid; gap: 9px; line-height: 1.5; }
+.mg-body p { margin: 0; }
+.mg-body b { color: var(--text); font-weight: 600; }
+.mg-body .mg-pop { color: var(--accent); font-weight: 600; font-style: normal; }
+.mg-swatch {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  vertical-align: baseline; margin: 0 1px;
+}
+.mg-ramp { display: flex; align-items: center; gap: 7px; }
+.mg-ramp .bar {
+  flex: 1; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--grade-f, #d1495b), var(--grade-c, #e6b800), var(--grade-a, #2e8b57));
+}
+.mg-ramp small { color: var(--text-faint); white-space: nowrap; }
+.mg-toggle {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  margin-top: 2px; padding-top: 9px; border-top: 1px solid var(--line-soft);
+  color: var(--text); font-weight: 500;
+}
+.mg-toggle input { accent-color: var(--accent); width: 15px; height: 15px; }
 
 /* ---- Header ------------------------------------------------------------- */
 .app-header {
@@ -126,59 +173,6 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .legend-grades { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .legend .lg { display: inline-flex; align-items: center; gap: 5px; }
 .legend svg { display: block; }
-
-/* Collapsible "Why these rankings" explainer. */
-.legend-more { margin-top: var(--sp-2); }
-.legend-more > summary {
-  display: flex; align-items: center; gap: 4px;
-  list-style: none; cursor: pointer; width: fit-content;
-  color: var(--accent); font-weight: 600; font-size: 11.5px;
-  padding: 2px 0;
-}
-.legend-more > summary::-webkit-details-marker { display: none; }
-.legend-more > summary:hover { color: var(--accent-strong); }
-.legend-more > summary:focus-visible {
-  outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px;
-}
-.legend-more .chev {
-  transition: transform var(--dur-fast) var(--ease); font-size: 13px; line-height: 1;
-}
-.legend-more[open] .chev { transform: rotate(90deg); }
-
-.legend-body { margin-top: var(--sp-2); display: grid; gap: var(--sp-3); }
-.legend-lead { margin: 0; line-height: 1.5; color: var(--text-muted); }
-.legend-lead b { color: var(--text); }
-.legend-body em { font-style: normal; color: var(--accent); }
-
-.legend-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
-.legend-facts li { display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; }
-.legend-facts b { color: var(--text); font-weight: 600; }
-.lf-badge { flex: 0 0 auto; margin-top: 1px; }
-.lf-badge svg { display: block; }
-.lf-ico {
-  flex: 0 0 20px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 10.5px; font-weight: 700; border-radius: 999px; margin-top: 1px;
-}
-.lf-ico.rank { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
-.lf-ico.alert { color: var(--alert); font-size: 15px; }
-.lf-ico.ok { color: var(--accent); }
-.legend-facts .warn { color: var(--alert); font-weight: 700; }
-
-.legend-sig {
-  background: var(--panel); border: 1px solid var(--line-soft);
-  border-radius: var(--radius-sm); padding: var(--sp-3);
-}
-.ls-hd { color: var(--text); font-weight: 600; margin-bottom: var(--sp-2); }
-.ls-hd small { color: var(--text-faint); font-weight: 500; }
-.ls-row { display: grid; grid-template-columns: 78px 1fr auto; align-items: center; gap: 8px; margin-top: 6px; }
-.ls-row .ls-k { color: var(--text-muted); }
-.ls-row small { color: var(--text-faint); }
-.lg-bar {
-  height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden;
-}
-.lg-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
-
-.legend-shape { margin: 0; line-height: 1.5; color: var(--text-faint); }
 
 /* ---- Leaderboard -------------------------------------------------------- */
 .list-head {

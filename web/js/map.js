@@ -27,6 +27,102 @@ let markers = {};      // key -> { marker, el }
 let tooltipEl = null;
 let cardFrameZoom = null;   // the zoom at which the open card's mountain was framed
 
+// -- regional grade "cloud" -------------------------------------------------
+// A soft macro layer: each in-season mountain paints a radial gradient in its
+// grade color, so ranges read as clouds -- green where the skiing's good, red
+// where it isn't -- that blend when zoomed out and step aside as you zoom in.
+// Drawn on a 2D canvas we insert into the map's canvas-container (a SIBLING of
+// the WebGL tile canvas, NOT the .maplibregl-canvas the dark-mode CSS filter
+// inverts), so grade colors stay true in both themes.
+let cloudCanvas = null, cloudCtx = null, cloudRaf = 0;
+let cloudOn = localStorage.getItem("ski-cloud") !== "off";
+const CLOUD_FADE_START = 5.0;   // full strength at/below this zoom (macro view)
+const CLOUD_FADE_END = 7.2;     // fully gone by here (detail view, uncluttered)
+
+function hexToRgba(hex, a) {
+  const c = hex.replace("#", "");
+  const n = c.length === 3 ? c.split("").map(x => x + x).join("") : c;
+  const i = parseInt(n, 16);
+  return `rgba(${(i >> 16) & 255},${(i >> 8) & 255},${i & 255},${a})`;
+}
+
+function ensureCloudCanvas() {
+  if (cloudCanvas || !map) return;
+  const c = document.createElement("canvas");
+  c.className = "grade-cloud";
+  c.setAttribute("aria-hidden", "true");
+  map.getCanvasContainer().appendChild(c);   // above tiles, below markers
+  cloudCanvas = c;
+  cloudCtx = c.getContext("2d");
+}
+
+// Fade the whole layer out as you zoom in: it's a macro overview, not clutter
+// over a single mountain you've flown into.
+function cloudZoomOpacity(z) {
+  if (z <= CLOUD_FADE_START) return 1;
+  if (z >= CLOUD_FADE_END) return 0;
+  return 1 - (z - CLOUD_FADE_START) / (CLOUD_FADE_END - CLOUD_FADE_START);
+}
+
+function drawCloud() {
+  cloudRaf = 0;
+  if (!map || !cloudCanvas) return;
+  // Size from the #map element: the canvas-container we append into is height:0
+  // (the WebGL canvas overflows it), so its clientHeight can't be trusted.
+  const box = map.getContainer();
+  const w = box.clientWidth, h = box.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  if (cloudCanvas.width !== Math.round(w * dpr) || cloudCanvas.height !== Math.round(h * dpr)) {
+    cloudCanvas.width = Math.round(w * dpr);
+    cloudCanvas.height = Math.round(h * dpr);
+    cloudCanvas.style.width = w + "px";
+    cloudCanvas.style.height = h + "px";
+  }
+  const ctx = cloudCtx;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const z = map.getZoom();
+  const alpha = cloudOn ? cloudZoomOpacity(z) : 0;
+  if (alpha <= 0.01) return;
+
+  // Dark map: ADDITIVE blend so overlapping grades glow like an aurora. Light
+  // map: normal blend (additive would just wash to white on a pale basemap).
+  const dark = document.documentElement.getAttribute("data-theme") !== "light";
+  ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
+  const radius = Math.max(55, 150 - (z - 2) * 22);   // wider clouds when zoomed out
+  const peak = (dark ? 0.5 : 0.42) * alpha;
+
+  for (const m of visibleScores()) {
+    if (m.in_season !== true || m.latitude == null || !m.grade) continue;
+    const col = colorFor(m.grade);
+    if (!col) continue;
+    const p = map.project([m.longitude, m.latitude]);
+    if (p.x < -radius || p.x > w + radius || p.y < -radius || p.y > h + radius) continue;
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+    g.addColorStop(0, hexToRgba(col, peak));
+    g.addColorStop(1, hexToRgba(col, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
+// One draw per animation frame no matter how many move/zoom events fire.
+function scheduleCloud() {
+  if (cloudRaf || !map) return;
+  cloudRaf = requestAnimationFrame(drawCloud);
+}
+
+export function setCloudVisible(on) {
+  cloudOn = !!on;
+  localStorage.setItem("ski-cloud", cloudOn ? "on" : "off");
+  drawCloud();
+}
+export function cloudVisible() { return cloudOn; }
+export function redrawCloud() { drawCloud(); }   // data / theme changed
+
 // How far the user must zoom OUT from a card's framing zoom before the card is
 // dismissed -- enough that a small scroll doesn't close it, but "zoom out to
 // survey the map again" does.
@@ -69,6 +165,14 @@ export function initMap(onSelect, onViewAll) {
   };
   map.on("zoom", applyMarkerScale);
   map.on("load", applyMarkerScale);
+
+  // Regional grade cloud: create its canvas and repaint it every frame the map
+  // moves/zooms/resizes (rAF-deduped inside scheduleCloud).
+  ensureCloudCanvas();
+  map.on("move", scheduleCloud);   // rAF-coalesced during a pan/zoom animation
+  map.on("moveend", drawCloud);    // guaranteed final frame (rAF-independent)
+  map.on("resize", drawCloud);
+  map.on("load", drawCloud);
 
   // Re-cluster after every pan/zoom settles. moveend (not move) fires once per
   // gesture, so markers pan smoothly during a drag and only regroup when it stops.
@@ -243,6 +347,7 @@ export function renderMarkers() {
       }
     });
   markSelected(state.selected);
+  drawCloud();   // roster/region changed -> repaint the grade cloud
 }
 
 function scheduleRecluster() {

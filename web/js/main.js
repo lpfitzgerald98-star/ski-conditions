@@ -3,7 +3,7 @@
 // from the daily snapshot; in live mode the SSE stream drives the same handlers.
 
 import { LIVE } from "./config.js";
-import { setScale, badgeSVG, LEGEND_GRADES, naColor, letterFor } from "./grades.js";
+import { setScale, badgeSVG, LEGEND_GRADES, naColor, letterFor, colorFor } from "./grades.js";
 import {
   loadGrades, loadMeta, loadScores, loadHistoryIndex, loadHistoryDate,
   loadTripBaseline, loadTripLive,
@@ -16,6 +16,7 @@ import { setRegionTree, optionsList } from "./regions.js";
 import * as sse from "./sse.js";
 import {
   initMap, renderMarkers, updateMarker, markSelected as mapMarkSelected, flyToMountain, fitAll, fitRegion,
+  setCloudVisible, cloudVisible, redrawCloud,
 } from "./map.js";
 import {
   initSidebar, renderList, markSelected as listMarkSelected, revealSelected,
@@ -302,53 +303,55 @@ function queueList() {
   requestAnimationFrame(() => { renderListQueued = false; renderList(); updateTagline(); });
 }
 
-// -- legend ----------------------------------------------------------------
-// Two layers: the grade scale is always visible (the key to every pin), and a
-// collapsible "Why these rankings" panel explains what a grade actually measures
-// and the signals behind it -- the same signals the detail card surfaces, in
-// plain language, so the leaderboard order never reads as a black box.
+// -- legend (sidebar) ------------------------------------------------------
+// Just the grade scale now -- the compact key for the leaderboard list. The
+// narrative "how to read this" moved onto the map itself (buildMapGuide).
 function buildLegend() {
   const el = $("legend");
-  const grades = LEGEND_GRADES.map(g =>
-    `<span class="lg">${badgeSVG(g, g, { size: 18 })}${g}</span>`).join("") +
-    `<span class="lg">${badgeSVG("—", "—", { size: 18 })}off-season / no data</span>`;
+  el.innerHTML =
+    `<div class="legend-grades" aria-label="Grade scale">` +
+    LEGEND_GRADES.map(g => `<span class="lg">${badgeSVG(g, g, { size: 18 })}${g}</span>`).join("") +
+    `<span class="lg">${badgeSVG("—", "—", { size: 18 })}off-season / no data</span></div>`;
+}
 
-  // A representative signal bar, fill only (no number) -- the legend shows what a
-  // signal looks like; the card fills in each mountain's actual value.
-  const sigBar = (label, fill, hint) =>
-    `<div class="ls-row"><span class="ls-k">${label}</span>` +
-    `<span class="lg-bar"><i style="width:${fill}%"></i></span>` +
-    `<small>${hint}</small></div>`;
+// -- "Reading the map" guide (bottom-left map overlay) ---------------------
+// The old "Why these rankings" panel, rewritten to be lively and to talk about
+// the map you're actually looking at: the grade cloud, the pins, the clusters,
+// and what a grade is really made of. Collapsible so it never fights the map.
+function buildMapGuide() {
+  const el = $("map-guide");
+  if (!el) return;   // overlay is optional; never let its absence abort boot
+  const dot = grade => `<span class="mg-swatch" style="background:${colorFor(grade)}"></span>`;
+  const rampBar =
+    `<span class="bar" style="background:linear-gradient(90deg,${colorFor("F")},${colorFor("C")},${colorFor("A")})"></span>`;
 
   el.innerHTML = `
-    <div class="legend-grades" aria-label="Grade scale">${grades}</div>
-    <details class="legend-more">
-      <summary><span class="lm-lead">Why these rankings</span><span class="chev" aria-hidden="true">›</span></summary>
-      <div class="legend-body">
-        <p class="legend-lead">A grade is <b>how good the skiing is right now</b> — snow on the
-          ground and in the forecast, weighted by a mountain's own snow <em>quality</em>, not just
-          how deep it falls. The board shows the <em>best available</em>, so a region's #1 can still
-          be a modest grade on a lean day.</p>
-        <ul class="legend-facts">
-          <li><span class="lf-badge">${badgeSVG("A", "A", { size: 16 })}</span>
-            <span><b>Skiing right now</b> — the headline grade, and what colors the map pin. Absolute conditions, 0–100.</span></li>
-          <li><span class="lf-ico rank">#1</span>
-            <span><b>Rank</b> — placement <em>within its region</em> (and worldwide) to ski today — not a lifetime reputation.</span></li>
-          <li><span class="lf-ico alert" aria-hidden="true">◍</span>
-            <span><b>Storm ring</b> — a pulsing gold halo flags an incoming 24–72 h storm.</span></li>
-          <li><span class="lf-ico ok" aria-hidden="true">✓</span>
-            <span><b>Verified station</b> — depth from an on-mountain sensor; <span class="warn">⚠</span> means a nearby proxy, read with more caution.</span></li>
-        </ul>
-        <div class="legend-sig">
-          <div class="ls-hd">Quality signals <small>climatological · 0–100</small></div>
-          ${sigBar("Snow quality", 82, "light, dry snow")}
-          ${sigBar("Preservation", 60, "holds between storms")}
-          ${sigBar("Consistency", 74, "reliable year to year")}
-        </div>
-        <p class="legend-shape">Each grade is a color <em>and</em> a shape — A circle · B rounded ·
-          C hexagon · D diamond · F triangle — so it reads without relying on color.</p>
+    <details open>
+      <summary><span class="mg-spark" aria-hidden="true">✨</span>Reading the map<span class="mg-chev" aria-hidden="true">›</span></summary>
+      <div class="mg-body">
+        <p>That drifting wash of color is the <b>mood of each range</b> — it glows
+          ${dot("A")}<span class="mg-pop">green where the skiing's good right now</span> and cools to
+          ${dot("F")}<span class="mg-pop">red where it isn't</span>. Pull back and watch whole regions
+          light up or fade against each other; zoom in and the haze bows out so you can read the detail.</p>
+        <div class="mg-ramp">${rampBar}<small>worse → better</small></div>
+        <p>Each pin is one mountain wearing today's grade as <b>a color <em>and</em> a shape</b>
+          (a circle for an A, a triangle for an F) — legible even if color's hard for you. A
+          <b>pulsing gold ring</b> means a storm's inbound.</p>
+        <p>Crowded pins gather into a numbered bubble — <b>click it, or just zoom, to spill them apart</b>.
+          Tap any mountain, on the map or in the list, to <b>fly in and open its scorecard</b>.</p>
+        <p>A grade is mostly <b>how good the snow is today</b> — depth, fresh, quality — with a real say
+          for the <b>mountain itself</b>: its vertical, its steepness, its size. Great snow on a giant
+          beats great snow on a bump.</p>
+        <label class="mg-toggle">
+          <input type="checkbox" id="cloud-toggle">
+          <span>Regional grade cloud</span>
+        </label>
       </div>
     </details>`;
+
+  const cb = $("cloud-toggle");
+  cb.checked = cloudVisible();
+  cb.addEventListener("change", () => setCloudVisible(cb.checked));
 }
 
 // -- theme -----------------------------------------------------------------
@@ -362,6 +365,7 @@ function initTheme() {
     document.documentElement.setAttribute("data-theme", now);
     localStorage.setItem("ski-theme", now);
     syncThemeButton();
+    redrawCloud();   // cloud blend/opacity differ by theme
   });
 }
 function syncThemeButton() {
@@ -476,6 +480,7 @@ async function boot() {
   state.meta = meta;
   setRegionTree(meta.region_tree);
   buildLegend();
+  buildMapGuide();
 
   const defaultProfile = initProfiles(meta);
 
