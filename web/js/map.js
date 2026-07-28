@@ -85,12 +85,12 @@ function drawCloud() {
   const alpha = cloudOn ? cloudZoomOpacity(z) : 0;
   if (alpha <= 0.01) return;
 
-  // Dark map: ADDITIVE blend so overlapping grades glow like an aurora. Light
-  // map: normal blend (additive would just wash to white on a pale basemap).
+  // Normal blend, deliberately faint: a soft regional tint you read at a glance,
+  // never a glare. (Additive/"lighter" was tried and blew overlaps out to white.)
   const dark = document.documentElement.getAttribute("data-theme") !== "light";
-  ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
-  const radius = Math.max(55, 150 - (z - 2) * 22);   // wider clouds when zoomed out
-  const peak = (dark ? 0.5 : 0.42) * alpha;
+  ctx.globalCompositeOperation = "source-over";
+  const radius = Math.max(42, 110 - (z - 2) * 18);   // wider clouds when zoomed out
+  const peak = (dark ? 0.16 : 0.14) * alpha;
 
   for (const m of visibleScores()) {
     if (m.in_season !== true || m.latitude == null || !m.grade) continue;

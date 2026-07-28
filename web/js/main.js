@@ -321,31 +321,24 @@ function buildLegend() {
 function buildMapGuide() {
   const el = $("map-guide");
   if (!el) return;   // overlay is optional; never let its absence abort boot
-  const dot = grade => `<span class="mg-swatch" style="background:${colorFor(grade)}"></span>`;
   const rampBar =
     `<span class="bar" style="background:linear-gradient(90deg,${colorFor("F")},${colorFor("C")},${colorFor("A")})"></span>`;
 
   el.innerHTML = `
-    <details open>
+    <label class="mg-cloud" title="Tint each range by its grade — green good, red poor">
+      <input type="checkbox" id="cloud-toggle">
+      <span>Grade cloud</span>
+      <span class="mg-ramp" aria-hidden="true">${rampBar}</span>
+    </label>
+    <details>
       <summary><span class="mg-spark" aria-hidden="true">✨</span>Reading the map<span class="mg-chev" aria-hidden="true">›</span></summary>
       <div class="mg-body">
-        <p>That drifting wash of color is the <b>mood of each range</b> — it glows
-          ${dot("A")}<span class="mg-pop">green where the skiing's good right now</span> and cools to
-          ${dot("F")}<span class="mg-pop">red where it isn't</span>. Pull back and watch whole regions
-          light up or fade against each other; zoom in and the haze bows out so you can read the detail.</p>
-        <div class="mg-ramp">${rampBar}<small>worse → better</small></div>
-        <p>Each pin is one mountain wearing today's grade as <b>a color <em>and</em> a shape</b>
-          (a circle for an A, a triangle for an F) — legible even if color's hard for you. A
-          <b>pulsing gold ring</b> means a storm's inbound.</p>
-        <p>Crowded pins gather into a numbered bubble — <b>click it, or just zoom, to spill them apart</b>.
-          Tap any mountain, on the map or in the list, to <b>fly in and open its scorecard</b>.</p>
-        <p>A grade is mostly <b>how good the snow is today</b> — depth, fresh, quality — with a real say
-          for the <b>mountain itself</b>: its vertical, its steepness, its size. Great snow on a giant
-          beats great snow on a bump.</p>
-        <label class="mg-toggle">
-          <input type="checkbox" id="cloud-toggle">
-          <span>Regional grade cloud</span>
-        </label>
+        <p><b>Pins</b> are mountains — each wears today's grade as a <b>color <em>and</em> a shape</b>
+          (circle = A, triangle = F). A <b>gold ring</b> means a storm's inbound.</p>
+        <p><b>Crowded pins</b> gather into a numbered bubble — click or zoom to split them.
+          Tap any mountain to fly in and open its scorecard.</p>
+        <p>A <b>grade</b> is mostly today's snow — depth, fresh, quality — plus a real say for the
+          mountain's own <b>size and steepness</b>.</p>
       </div>
     </details>`;
 
