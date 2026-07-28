@@ -36,8 +36,8 @@ let cardFrameZoom = null;   // the zoom at which the open card's mountain was fr
 // inverts), so grade colors stay true in both themes.
 let cloudCanvas = null, cloudCtx = null, cloudRaf = 0;
 let cloudOn = localStorage.getItem("ski-cloud") !== "off";
-const CLOUD_FADE_START = 5.0;   // full strength at/below this zoom (macro view)
-const CLOUD_FADE_END = 7.2;     // fully gone by here (detail view, uncluttered)
+const CLOUD_FADE_START = 7.0;   // full strength at/below this zoom (macro + regional)
+const CLOUD_FADE_END = 9.5;     // fully gone by here (close on a single mountain)
 
 function hexToRgba(hex, a) {
   const c = hex.replace("#", "");
