@@ -49,6 +49,9 @@ _STATE_REGION = {
     "BG": "Southern Europe",
     "NO": "Northern Europe", "SE": "Northern Europe", "FI": "Northern Europe",
     "GB": "Northern Europe",
+    # Japan: one leaf under a new Asia subtree (2026-08-24, first Asia entries --
+    # only 4 mountains, same one-leaf-per-continent-so-far pattern as South America).
+    "JP": "Japan",
 }
 
 
@@ -65,6 +68,7 @@ _STATE_COUNTRY = {
     "DE": "Germany", "SI": "Slovenia", "ES": "Spain", "AD": "Andorra",
     "NO": "Norway", "SE": "Sweden", "FI": "Finland", "RO": "Romania",
     "SK": "Slovakia", "PL": "Poland", "BG": "Bulgaria", "GB": "United Kingdom",
+    "JP": "Japan",
 }
 
 # ISO-ish short codes for the sidebar chip -- "USA" is already short, the rest
@@ -77,6 +81,7 @@ _COUNTRY_CODE = {
     "Norway": "NOR", "Sweden": "SWE", "Finland": "FIN", "Romania": "ROU",
     "Slovakia": "SVK", "Poland": "POL", "Bulgaria": "BGR",
     "United Kingdom": "GBR",
+    "Japan": "JPN",
 }
 
 
@@ -92,10 +97,15 @@ _PARENT: dict[str, str | None] = {
     "Western North America": "Northern Hemisphere",
     "East Coast (incl. Canada)": "Northern Hemisphere",
     "Europe": "Northern Hemisphere",
+    # Asia (2026-08-24): new subtree, added for the first Japan entries. Japan
+    # stays ONE leaf under it (same one-leaf-per-continent-so-far pattern as
+    # South America) -- 4 mountains isn't enough to justify a Hokkaido/Honshu split.
+    "Asia": "Northern Hemisphere",
     "South America": "Southern Hemisphere",   # now a LEAF (Chile+Argentina merged)
     "Oceania": "Southern Hemisphere",
     "Northern Europe": "Europe",
     "Southern Europe": "Europe",
+    "Japan": "Asia",
     "Utah": "Western North America",
     "Colorado": "Western North America",      # now includes the old Southwest
     "Tahoe & Sierra": "Western North America",

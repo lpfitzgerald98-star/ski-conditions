@@ -527,9 +527,18 @@ MOUNTAINS = {
     },
     "kicking_horse": {
         "name": "Kicking Horse, BC",
-        "data_source": "eccc",
-        "eccc_station": "1173210",
-        "station_name": "Golden A",
+        # Re-homed from ECCC "Golden A" (the Golden valley airport, ~785m --
+        # ~1100m below the ski terrain) to BC ASWS "Caribou Creek" (2A31P): an
+        # active alpine snow pillow at 2201m, a near-match to Kicking Horse's
+        # ~2450m alpine bowls, vs. the airport's near-total elevation mismatch.
+        # It's 24.5km away (not literally on-mountain, hence verified stays
+        # False) but in the same Purcell/Columbia Mountains storm-track region
+        # -- the same class of regional alpine proxy as Big White's Mission
+        # Creek (25.5km, also verified False). 10 water years of history
+        # (2015-2025) clear SITING_CALIBRATION's min_years=5.
+        "data_source": "bcsws",
+        "bcsws_station": "2A31P",
+        "station_name": "Caribou Creek",
         "latitude": 51.298,
         "longitude": -117.047,
         "verified": False,
@@ -1349,6 +1358,50 @@ MOUNTAINS = {
         "storm_floor_inches": {24: 2, 72: 4},
         "season_window": {"start": (12, 15), "end": (4, 15)},
     },
+    # Asia -- Japan (2026-08-24: roster had zero Japan entries despite it being one
+    # of the world's premier snow-quality destinations -- audit finding). New "Asia"
+    # region node added in ski/regions.py, "Japan" leaf under it (see region priors
+    # below). Coordinates/elevations from each resort's Wikipedia infobox.
+    "niseko": {
+        "name": "Niseko, JP",
+        "data_source": "openmeteo",
+        "openmeteo_id": "42.8635,140.6981",
+        "latitude": 42.8635,
+        "longitude": 140.6981,
+        "verified": True,
+        "storm_floor_inches": {24: 8, 72: 15},
+        "season_window": {"start": (11, 29), "end": (5, 6)},
+    },
+    "rusutsu": {
+        "name": "Rusutsu, JP",
+        "data_source": "openmeteo",
+        "openmeteo_id": "42.74968,140.90329",
+        "latitude": 42.74968,
+        "longitude": 140.90329,
+        "verified": True,
+        "storm_floor_inches": {24: 8, 72: 15},
+        "season_window": {"start": (11, 29), "end": (3, 31)},
+    },
+    "furano": {
+        "name": "Furano, JP",
+        "data_source": "openmeteo",
+        "openmeteo_id": "43.324,142.352",
+        "latitude": 43.324,
+        "longitude": 142.352,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 29), "end": (5, 6)},
+    },
+    "hakuba": {
+        "name": "Hakuba Happo-one, JP",
+        "data_source": "openmeteo",
+        "openmeteo_id": "36.702077,137.837133",
+        "latitude": 36.702077,
+        "longitude": 137.837133,
+        "verified": True,
+        "storm_floor_inches": {24: 6, 72: 12},
+        "season_window": {"start": (11, 30), "end": (5, 1)},
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -1771,9 +1824,22 @@ CONSISTENCY_MIN_YEARS = 8
 #     denser, Olympics heaviest (~250 kg/m3).  Steenburgh 2008: Alta ~8.4% water.
 #   International extrapolated from analogous climate + first-hand consensus (interior
 #   BC/Alberta "champagne", cold-dry Scandinavia; maritime NZ/Australia/coastal wet).
+#   Japan (added 2026-08-24 with the first Japan entries) is the same extrapolated-
+#   International case, not a Baxter-caliber peer-reviewed number: no BAMS-style SLR
+#   climatology for Japan was found. Multiple independent sources (Cambridge/Annals-
+#   of-Glaciology SNOWPACK-Hokkaido modeling; JMA-cited synoptic explainers of the
+#   Japan-Sea Polar air-mass Convergence Zone) converge on new-snow water content of
+#   roughly 4-8% for Hokkaido's Japan-Sea-facing resorts (Niseko/Rusutsu cited nearer
+#   6-8%, interior Furano nearer 4-5%) -- the mechanism is Siberian continental air,
+#   deeply subzero (-8 to -21C) even after crossing the Sea of Japan, so the moisture
+#   it picks up falls as small, dry crystals rather than the near-freezing maritime
+#   snow of a Pacific-coast climate. Set just below Colorado (the lightest literature-
+#   grounded prior) to reflect that first-hand/travel-press consensus without
+#   overriding an actual peer-reviewed number.
 # These are REGIONAL MEANS -- within-region detail comes from the measured read (that's
 # why good-data networks keep real trust), so two Utah resorts can still differ.
 REGION_DENSITY_PRIOR = {          # water fraction; lower = lighter/drier = better
+    "Japan":             0.065,
     "Colorado":          0.068,
     "Northern Rockies":  0.070,
     "Alberta":           0.072,
@@ -1818,12 +1884,24 @@ DENSITY_TRUST_DEFAULT = 0.5
 PRESERVATION_WARM_F = 32.0        # a day's mean temp above this = melt/rain exposure
 PRESERVATION_WARM_PENALTY = 1.3   # warm-day fraction -> score via 100*(1 - penalty*frac)
 PRESERVATION_FLOOR = 25.0
+# Japan (added 2026-08-24): the same Siberian-continental-cold-air mechanism that
+# keeps the snow dry (see REGION_DENSITY_PRIOR) also suppresses midwinter melt --
+# multiple sources describe December-February as "near-perfect reliability" with
+# consistent deep-subzero temps and few rain events, the opposite of a Pacific-
+# coast maritime pattern (PNW/NZ/Australia below). Set below the continental-
+# Rockies/Alberta tier because the moisture source is still maritime (Sea of
+# Japan) and brief midwinter warm spells are documented; Southern-Europe-ish
+# rather than best-in-class. First-hand/travel-press consensus, not a measured
+# per-mountain read (same "extrapolated" caveat as the density prior above) --
+# a single blended value across Hokkaido (Niseko/Rusutsu/Furano, very consistent)
+# and Honshu (Hakuba, further south/lower latitude, more variable) entries.
 REGION_PRESERVATION_PRIOR = {     # 0-100; continental/high/cold preserve, maritime melt
     "Colorado":          90,
     "Northern Rockies":  88,
     "Alberta":           88,
     "Utah":              85,
     "Northern Europe":   82,
+    "Japan":             78,
     "Southern Europe":   78,
     "British Columbia":  72,
     "South America":     72,
@@ -2113,8 +2191,10 @@ SNOWFALL_NORMALS: dict[str, float] = {
     "engelberg": 224,  # OnTheSnow 569cm
     "falls_creek": 158,  # resort 4m only source
     "fernie": 345,  # Wikipedia 875cm
+    "furano": 220,  # JapowDB JMA Furano stn 27yr avg (1999-2026), 5.6m; valley station, under-reads mountain
     "grand_targhee": 466,  # ZRankings true snow
     "grandvalira": 171,  # PowderDays 435cm
+    "hakuba": 234,  # JapowDB JMA Hakuba stn (703m, near base) 27yr avg, 5.9m
     "heavenly": 321,  # ZRankings true snow
     "hood_meadows": 452,  # ZRankings true snow
     "hunter": 120,  # Wikipedia/resort
@@ -2141,6 +2221,7 @@ SNOWFALL_NORMALS: dict[str, float] = {
     "mt_rose": 350,  # Wikipedia/resort
     "nakiska": 95,  # OnTheSnow
     "nevados_de_chillan": 272,  # SnowBrains 15yr mid-mtn
+    "niseko": 380,  # JapowDB JMA Kutchan stn 27yr avg (1999-2026), 9.7m; valley station -- resort marketing quotes 14-15m higher up the mountain, not used (same marketing-inflation guardrail as elsewhere in this table)
     "norquay": 118,  # Wikipedia 300cm
     "palisades_tahoe": 400,  # ZRankings true snow
     "park_city": 288,  # ZRankings true snow (resort 355)
@@ -2149,6 +2230,7 @@ SNOWFALL_NORMALS: dict[str, float] = {
     "powder_mtn": 350,  # ZRankings-cited
     "red_mountain": 300,  # Wikipedia 750cm
     "revelstoke": 410,  # Wikipedia 10.5m
+    "rusutsu": 313,  # JapowDB JMA Kimobetsu stn 27yr avg (1999-2026), 8.0m
     "saint_lary": 149,  # OnTheSnow 377cm
     "schweitzer": 284,  # ZRankings true snow
     "sestriere": 93,  # OnTheSnow 237cm
@@ -2458,6 +2540,13 @@ GLOBAL_SCORE_WEIGHTS = {"base": 0.2033, "fresh": 0.1780, "season": 0.1017,
 # When a source quotes a vertical that implies terrain the lifts don't serve, take
 # the lift-station elevations and subtract.
 #
+# CORRECTED 2026-08-24 (audit finding): `chamonix` carried 9186 ft, the Aiguille du
+# Midi cable car down to the Vallée Blanche off-piste glacier descent -- an
+# unguided, unpatrolled backcountry route, not lift-served piste, and the same
+# violation class as Zugspitze above. Chamonix's actual lift-served pod is Grands
+# Montets (Argentière): top station 2765m, base 1252m = 1513m (skiresort.com,
+# 2026-08-24) = 4964 ft. Corrected below.
+#
 # NOTE: a high vertical:acreage ratio is NOT by itself evidence of an error --
 # Kasprowy Wierch legitimately pairs ~3200 ft of lift-served vertical with ~41
 # acres of marked piste (verified: 908m cable car, minimal groomed terrain).
@@ -2484,7 +2573,7 @@ TERRAIN_STATS = {
     "cardrona": {"vertical_drop_ft": 1969, "skiable_acres": 1520, "pct_advanced_expert": 55},  # 30%+25%
     "cerro_catedral": {"vertical_drop_ft": 3510, "skiable_acres": 1483, "pct_advanced_expert": 25},  # 20%+5%; trail-count ratio gives ~53%, notable variance
     "cervinia": {"vertical_drop_ft": 4692, "skiable_acres": 1300, "pct_advanced_expert": 18},  # %adv borrowed from combined Matterhorn area, low confidence
-    "chamonix": {"vertical_drop_ft": 9186, "skiable_acres": None, "pct_advanced_expert": 68},  # 45.7% red+22.3% black; no acreage, only piste-km
+    "chamonix": {"vertical_drop_ft": 4964, "skiable_acres": None, "pct_advanced_expert": 68},  # Grands Montets lift-served (2765m-1252m); was 9186 (Vallee Blanche off-piste glacier descent, not lift-served -- see governing-rule note above); 45.7% red+22.3% black; no acreage, only piste-km
     "copper": {"vertical_drop_ft": 2738, "skiable_acres": 2507, "pct_advanced_expert": 54},  # aggregated adv+expert
     "coronet_peak": {"vertical_drop_ft": 1516, "skiable_acres": 691, "pct_advanced_expert": 43},  # 25%+18%, sources vary
     "cortina": {"vertical_drop_ft": 5627, "skiable_acres": 1500, "pct_advanced_expert": 16},  # direct published black%
@@ -2495,8 +2584,10 @@ TERRAIN_STATS = {
     "falls_creek": {"vertical_drop_ft": 1247, "skiable_acres": 1112, "pct_advanced_expert": 23},  # 450ha converted
     "fernie": {"vertical_drop_ft": 3550, "skiable_acres": 2500, "pct_advanced_expert": 30},  # acreage cited as '2500+'
     "formigal": {"vertical_drop_ft": 2428, "skiable_acres": 2200, "pct_advanced_expert": 39},  # run-count based %, moderate confidence
+    "furano": {"vertical_drop_ft": 3163, "skiable_acres": 470, "pct_advanced_expert": 18},  # Wikipedia infobox (964m/1.90km2); OnTheSnow 3-tier 44%/37%/18%, top bucket used
     "grand_targhee": {"vertical_drop_ft": 2270, "skiable_acres": 2602, "pct_advanced_expert": 45},  # 30%+15%
     "grandvalira": {"vertical_drop_ft": 3051, "skiable_acres": 2625, "pct_advanced_expert": 13},  # direct published black%
+    "hakuba": {"vertical_drop_ft": 3514, "skiable_acres": 494, "pct_advanced_expert": 20},  # Wikipedia infobox (1071m/200ha); 3-tier 30%/50%/20%, top bucket used
     "heavenly": {"vertical_drop_ft": 3500, "skiable_acres": 4800, "pct_advanced_expert": 35},  # 4-tier 20/45/25/10
     "hemsedal": {"vertical_drop_ft": 2658, "skiable_acres": 1300, "pct_advanced_expert": 27},  # 19%+8%
     "hood_meadows": {"vertical_drop_ft": 2777, "skiable_acres": 2150, "pct_advanced_expert": 45},  # 15%+30%
@@ -2526,6 +2617,7 @@ TERRAIN_STATS = {
     "mt_rose": {"vertical_drop_ft": 1800, "skiable_acres": 1200, "pct_advanced_expert": 50},  # 4-tier 20/30/40/10
     "nakiska": {"vertical_drop_ft": 2411, "skiable_acres": 1021, "pct_advanced_expert": 14},  # Wikipedia infobox, 10%+4% black+dbl-black
     "nevados_de_chillan": {"vertical_drop_ft": 2854, "skiable_acres": 2471, "pct_advanced_expert": 30},  # acreage sources vary widely (500-10000ha)
+    "niseko": {"vertical_drop_ft": 3084, "skiable_acres": 803, "pct_advanced_expert": 20},  # vertical/acreage are Grand Hirafu specifically (Wikipedia infobox, 940m/325ha); %adv is OnTheSnow's combined Niseko United (all 4 pods) 3-tier 34%/46%/20%, top bucket used -- moderate confidence, mixed-source like cervinia below
     "norquay": {"vertical_drop_ft": 1650, "skiable_acres": 190, "pct_advanced_expert": 44},  # small resort; 4-tier 28%+16%
     "palisades_tahoe": {"vertical_drop_ft": 2850, "skiable_acres": 6000, "pct_advanced_expert": 30},  # 3-tier (25/45/30)
     "park_city": {"vertical_drop_ft": 3226, "skiable_acres": 7300, "pct_advanced_expert": 44},  # largest US resort, combined PCMR+Canyons
@@ -2536,6 +2628,7 @@ TERRAIN_STATS = {
     "red_mountain": {"vertical_drop_ft": 2919, "skiable_acres": 2682, "pct_advanced_expert": 37},  # 3-tier top category is combined adv+expert
     "revelstoke": {"vertical_drop_ft": 5620, "skiable_acres": 3121, "pct_advanced_expert": 45},  # source gives combined directly
     "ruka": {"vertical_drop_ft": 659, "skiable_acres": None, "pct_advanced_expert": 16},  # no acreage published, only piste-km
+    "rusutsu": {"vertical_drop_ft": 1949, "skiable_acres": 524, "pct_advanced_expert": 41},  # Wikipedia infobox (594m/2.12km2); 4-tier 10 beg/12 int/11 adv/4 v.adv trails, adv+v.adv=15/37=41%
     "saint_lary": {"vertical_drop_ft": 3011, "skiable_acres": 1730, "pct_advanced_expert": 10},  # 918m vertical, 700ha
     "schweitzer": {"vertical_drop_ft": 2400, "skiable_acres": 2900, "pct_advanced_expert": 50},  # 35%+15%
     "sestriere": {"vertical_drop_ft": 4867, "skiable_acres": 5000, "pct_advanced_expert": 9},  # acres from whole Via Lattea, as marketed
