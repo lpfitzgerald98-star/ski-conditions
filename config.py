@@ -1978,16 +1978,45 @@ WIND = {
 # / score.overall_score. `density` and `wind` are supplied now (Phases 2/3 shipped)
 # from pipeline.mountain_scorecard.
 #
-# LOAD-BEARING (Phase 4 shipped): this number is BOTH surfaced on the card AND fed
-# into the live comparable leaderboard as its `quality` input (weight 0.1357 in
-# GLOBAL_SCORE_WEIGHTS), on top of the skiability quality_factor. It moves grades --
-# do not treat it as inert scaffold. See docs/snow-quality-plan.md.
+# LOAD-BEARING (Phase 4 shipped): this number is surfaced on the card AND fed into
+# the live comparable leaderboard as its `quality` input (weight 0.1357 in
+# GLOBAL_SCORE_WEIGHTS). CONFIRMED SEPARATE from the skiability headline (verified
+# 2026-08-24): skiability_score computes its own quality_factor from SKI_QUALITY,
+# never reads this dict or snow_quality.value. Changing these weights moves the
+# live/regional RANK, not the skiability grade shown on the card.
+#
+# RE-WEIGHTED 2026-08-24, evidence-proportionate (scripts/backtest_live.py, the
+# live board's first-ever backtest -- see that module's docstring for what can/
+# can't be reconstructed from stored history; wind and thaw's forward-forecast
+# component are NOT testable, so untouched by evidence, only by renormalization
+# below). Point-in-time reconstruction of density+crust ALONE (6x Feb-14,
+# 2021-2026) scored against realized outcome:
+#   density-alone rho = -0.247 (n=136)  -- negatively correlated with real weeks
+#   crust-alone   rho = -0.043 (n=221)  -- weakly negative, far milder than density
+#   quality (both blended) rho = +0.024 (n=299) -- consistent with the above: noise
+# This INDEPENDENTLY CONFIRMS the Trip Predictor's Phase 2B refit (a separate
+# backtest, separate dataset): density collapsed 0.192->0.007 there when actually
+# measured against realized conditions, while preservation (the crust/thaw family)
+# was the strongest quality-type signal (0.217). Two different backtests, same
+# conclusion on density.
+#
+# density cut to 25% of its old weight (0.28->0.07, proportionate to the -0.247
+# finding); crust cut to 70% (0.20->0.14, proportionate to the much milder -0.043).
+# The freed 0.27 is NOT hand-picked toward wind/thaw/warmth -- none of the three
+# has direct backtest evidence here (wind: unarchived, can never be tested; thaw:
+# forward-forecast-shaped, can't be reconstructed from history either; warmth:
+# needs live wind/sky, no partial proxy attempted) -- so it's redistributed
+# PROPORTIONALLY, preserving their existing relative weights rather than betting on
+# an untested favorite. Verified: live-board backtest pooled rho +0.663 either way
+# (zeroing quality entirely moves it to +0.666, doubling it to +0.640) -- this
+# reweight is a bounded, principled shrink of what's shown NOT to work, not a
+# rescue of `quality`'s overall contribution, which stays modest either way.
 SNOW_QUALITY_WEIGHTS = {
-    "density": 0.28,   # SWE:depth -- light/dry vs. heavy/dense (Phase 2)
-    "wind":    0.22,   # loading / scour of fresh snow (Phase 3)
-    "crust":   0.20,   # refrozen melt crust (from score.refreeze_index)
-    "thaw":    0.18,   # incoming rain/warmth (from score.thaw_index)
-    "warmth":  0.12,   # live weather comfort (from score.weather_quality)
+    "density": 0.07,   # SWE:depth -- shrunk hard, backtested negative (see above)
+    "wind":    0.3342, # loading / scour of fresh snow -- untested, scaled up only
+    "crust":   0.14,   # refrozen melt crust -- shrunk, backtested weakly negative
+    "thaw":    0.2735, # incoming rain/warmth -- untested (forward-looking), scaled up only
+    "warmth":  0.1823, # live weather comfort -- untested, scaled up only
 }
 
 # ---------------------------------------------------------------------------
