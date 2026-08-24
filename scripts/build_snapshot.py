@@ -127,6 +127,12 @@ def ingest_all(keys: list[str], pause: float = 2.0, full: bool = False) -> None:
     the rate-limited networks (Open-Meteo). The Action's runner IP is shared
     across many concurrent GitHub-hosted jobs, so it draws 429s harder than a
     local run does -- pacing here must be more patient than 0.5s ever was.
+
+    The pause is Open-Meteo-specific: SNOTEL/ACIS/CDEC/ECCC/BCSWS have never
+    shown 429s from this build (only Open-Meteo has), so pacing them the same
+    was pure wasted wall-clock -- ~40 of the roster's ~117 stations, ~80s/build
+    for nothing. Everything still gets the same failure handling; only the
+    THROTTLE is source-conditional.
     """
     for i, key in enumerate(keys, 1):
         for attempt in (1, 2, 3):
@@ -139,7 +145,9 @@ def ingest_all(keys: list[str], pause: float = 2.0, full: bool = False) -> None:
                     print(f"[ingest {i:>2}/{len(keys)}] {key}: FAILED ({exc})")
                 else:
                     time.sleep(attempt * 5)
-        time.sleep(pause)
+        m = MOUNTAINS.get(key, {})
+        if m.get("data_source", pipeline.DEFAULT_SOURCE) == "openmeteo":
+            time.sleep(pause)
 
 
 def build(keys: list[str], as_of: date, use_network: bool) -> dict:
