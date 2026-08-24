@@ -1897,17 +1897,16 @@ WIND = {
 # MUCH snow there is). Higher = better. Built from component sub-scores, each
 # 0-100, blended over whichever are AVAILABLE -- a missing component renormalizes
 # out rather than counting as zero, the same convention as score.conditions_score
-# / score.overall_score. `density` and `wind` are placeholders here: they always
-# read None until Phases 2/3 wire real data in, so they contribute nothing yet.
+# / score.overall_score. `density` and `wind` are supplied now (Phases 2/3 shipped)
+# from pipeline.mountain_scorecard.
 #
-# SCAFFOLD ONLY (Phase 0): this number is surfaced on the card for observation but
-# is weighted 0 in every consumer -- the skiability quality_factor and the
-# comparable leaderboard are unchanged -- so it moves no grade. It exists so we can
-# eyeball real values across the roster before making them load-bearing in Phase 4.
-# See docs/snow-quality-plan.md.
+# LOAD-BEARING (Phase 4 shipped): this number is BOTH surfaced on the card AND fed
+# into the live comparable leaderboard as its `quality` input (weight 0.1357 in
+# GLOBAL_SCORE_WEIGHTS), on top of the skiability quality_factor. It moves grades --
+# do not treat it as inert scaffold. See docs/snow-quality-plan.md.
 SNOW_QUALITY_WEIGHTS = {
     "density": 0.28,   # SWE:depth -- light/dry vs. heavy/dense (Phase 2)
-    "wind":    0.22,   # loading / scour of fresh snow (Phase 3; inert now)
+    "wind":    0.22,   # loading / scour of fresh snow (Phase 3)
     "crust":   0.20,   # refrozen melt crust (from score.refreeze_index)
     "thaw":    0.18,   # incoming rain/warmth (from score.thaw_index)
     "warmth":  0.12,   # live weather comfort (from score.weather_quality)

@@ -170,9 +170,11 @@ export function initMap(onSelect, onViewAll) {
   // moves/zooms/resizes (rAF-deduped inside scheduleCloud).
   ensureCloudCanvas();
   map.on("move", scheduleCloud);   // rAF-coalesced during a pan/zoom animation
-  map.on("moveend", drawCloud);    // guaranteed final frame (rAF-independent)
   map.on("resize", drawCloud);
   map.on("load", drawCloud);
+  // NB: the settled ("moveend") repaint is handled by scheduleRecluster below,
+  // which re-runs renderMarkers -> drawCloud -- so we do NOT also bind drawCloud to
+  // moveend, or the cloud would paint twice per gesture.
 
   // Re-cluster after every pan/zoom settles. moveend (not move) fires once per
   // gesture, so markers pan smoothly during a drag and only regroup when it stops.
@@ -455,8 +457,11 @@ export function updateMarker(row) {
 }
 
 export function markSelected(key) {
-  Object.entries(markers).forEach(([k, { el }]) =>
-    el.setAttribute("aria-pressed", String(k === key)));
+  // Only real mountain pins are toggle buttons; cluster bubbles (key "cluster-N")
+  // aren't, so don't stamp aria-pressed on them.
+  Object.entries(markers).forEach(([k, { el }]) => {
+    if (!k.startsWith("cluster-")) el.setAttribute("aria-pressed", String(k === key));
+  });
 }
 
 // Center on a mountain, offsetting left so the pin clears the detail card.

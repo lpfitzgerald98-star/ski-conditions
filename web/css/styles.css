@@ -374,7 +374,6 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .ranks .rank { font-size: 11px; color: var(--text-muted); background: var(--panel-2);
   border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px 10px; }
 .ranks .rank b { color: var(--accent); font-weight: 700; }
-.ranks .rank.muted { opacity: .7; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin: var(--sp-3) 0; }
 .cell { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 8px 10px; }

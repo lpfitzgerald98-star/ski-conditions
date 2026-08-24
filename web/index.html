@@ -8,6 +8,11 @@
 <meta name="description" content="Snow-condition scorecards and a within-region leaderboard for tracked ski mountains worldwide.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%9D%84%EF%B8%8F%3C/text%3E%3C/svg%3E">
 
+<!-- Warm up the two third-party origins first paint waits on (the MapLibre CDN and
+     the tile host), so their DNS+TLS handshakes overlap the rest of the load. -->
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+
 <!-- MapLibre GL: keyless vector maps. Pinned; loaded from CDN so the site stays
      build-step-free and hostable on GitHub Pages as static files. -->
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
@@ -74,7 +79,7 @@
 
   <main id="main" aria-label="Map">
     <div id="map"></div>
-    <div id="map-tooltip" class="map-tooltip" role="status" hidden></div>
+    <div id="map-tooltip" class="map-tooltip" hidden></div>
     <!-- Bottom-left "how to read the map" guide (populated by main.buildMapGuide):
          the eloquent explainer + the regional grade-cloud toggle. -->
     <div id="map-guide" class="map-guide"></div>

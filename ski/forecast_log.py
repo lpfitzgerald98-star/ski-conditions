@@ -75,6 +75,41 @@ def record(db_path: str | Path, mountain_key: str, as_of: date, horizon_hours: i
         conn.close()
 
 
+def record_many(db_path: str | Path, rows) -> bool:
+    """Log several horizons on ONE connection/commit, instead of `record`'s open+
+    close per horizon (which was ~5 SQLite connection opens per scorecard, ~565 per
+    daily build). `rows` is an iterable of
+    (mountain_key, as_of: date, horizon_hours, predicted_inches,
+     predicted_percentile, tmax_f); same ON CONFLICT DO NOTHING per row, same
+    best-effort (never raises) contract as `record`."""
+    rows = list(rows)
+    if not rows:
+        return True
+    try:
+        conn = connect(db_path)
+    except sqlite3.OperationalError:
+        return False
+    fetched_at = datetime.now(timezone.utc).isoformat()
+    try:
+        conn.executemany(
+            """
+            INSERT INTO forecast_log
+                (mountain_key, as_of, horizon_hours, predicted_inches,
+                 predicted_percentile, tmax_f, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(mountain_key, as_of, horizon_hours) DO NOTHING
+            """,
+            [(mk, ao.isoformat(), hh, pi, pp, tf, fetched_at)
+             for (mk, ao, hh, pi, pp, tf) in rows],
+        )
+        conn.commit()
+        return True
+    except sqlite3.OperationalError:
+        return False
+    finally:
+        conn.close()
+
+
 def read_log(db_path: str | Path, mountain_key: str | None = None) -> pd.DataFrame:
     """Every logged forecast, optionally filtered to one mountain."""
     conn = connect(db_path)

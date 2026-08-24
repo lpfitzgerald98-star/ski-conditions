@@ -3,7 +3,7 @@
 // own curves, then grades, sub-score bars, incoming storms, weather and warnings.
 
 import { loadCard, loadTripPattern } from "./api.js";
-import { colorFor, textOn, badgeSVG, naColor, letterFor } from "./grades.js";
+import { colorFor, badgeSVG, naColor, letterFor } from "./grades.js";
 import { state } from "./state.js";
 import { announce, focusSilently } from "./a11y.js";
 

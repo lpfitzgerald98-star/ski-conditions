@@ -383,14 +383,13 @@ def mountain_scorecard(
         # backtest (forecast_accuracy). A logging failure must never sink a
         # scorecard render.
         try:
-            for ph in per_horizon:
-                forecast_log.record(db_path, key, as_of or date.today(),
-                                    ph["horizon_hours"], ph["predicted_inches"],
-                                    ph["predicted_percentile"], ph["tmax_f"])
+            when = as_of or date.today()
+            log_rows = [(key, when, ph["horizon_hours"], ph["predicted_inches"],
+                         ph["predicted_percentile"], ph["tmax_f"]) for ph in per_horizon]
             if outlook.medium_range is not None:
-                forecast_log.record(db_path, key, as_of or date.today(),
-                                    outlook.medium_range.horizon_hours,
-                                    outlook.medium_range.mid_in, mr_pct, None)
+                log_rows.append((key, when, outlook.medium_range.horizon_hours,
+                                 outlook.medium_range.mid_in, mr_pct, None))
+            forecast_log.record_many(db_path, log_rows)   # one connection, not ~5
         except Exception:  # noqa: BLE001
             pass
     elif retro:

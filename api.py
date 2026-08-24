@@ -113,9 +113,10 @@ app.add_middleware(
 # shared across machines), so there's no separate host to hang a cron job off
 # of; this loop runs in-process instead, refetching every station's full
 # history once a day for as long as the machine stays up. `ingest_mountain`
-# always fetches the full period of record and upserts, so this also
-# self-heals any historical gap (a source outage, a missed day) without
-# needing separate backfill logic.
+# is INCREMENTAL by default (only the tail from last-stored - INGEST_OVERLAP_DAYS,
+# =14, forward), so this heals recent gaps and upstream revisions within that
+# window and self-heals a lost DB cache (no rows -> full pull) -- but it does NOT
+# re-pull decades-old gaps; a deep backfill still needs `--full-ingest`.
 INGEST_INTERVAL_S = 24 * 60 * 60
 _INGEST_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ski-ingest")
 

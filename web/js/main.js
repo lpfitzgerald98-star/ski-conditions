@@ -3,7 +3,7 @@
 // from the daily snapshot; in live mode the SSE stream drives the same handlers.
 
 import { LIVE } from "./config.js";
-import { setScale, badgeSVG, LEGEND_GRADES, naColor, letterFor, colorFor } from "./grades.js";
+import { setScale, badgeSVG, LEGEND_GRADES, letterFor, colorFor } from "./grades.js";
 import {
   loadGrades, loadMeta, loadScores, loadHistoryIndex, loadHistoryDate,
   loadTripBaseline, loadTripLive,

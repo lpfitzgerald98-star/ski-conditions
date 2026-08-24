@@ -211,6 +211,27 @@ def test_forecast_log_round_trip():
         os.remove(db_path)
 
 
+def test_forecast_log_record_many_batches_and_dedups():
+    db_path = _tmp_db()
+    try:
+        # One batched write of 3 horizons, then a second batch that collides on
+        # (key, as_of, 24h) -- first-of-day must still win, same as record().
+        forecast_log.record_many(db_path, [
+            ("alta", date(2026, 1, 10), 24, 8.0, 72.0, 15.0),
+            ("alta", date(2026, 1, 10), 48, 11.0, 65.0, 20.0),
+            ("alta", date(2026, 1, 10), 72, 15.0, 60.0, 25.0),
+        ])
+        forecast_log.record_many(db_path, [
+            ("alta", date(2026, 1, 10), 24, 99.0, 99.0, 99.0),  # dup -> ignored
+        ])
+        df = forecast_log.read_log(db_path, mountain_key="alta")
+        assert set(df["horizon_hours"]) == {24, 48, 72}
+        assert df[df["horizon_hours"] == 24].iloc[0]["predicted_inches"] == 8.0
+        assert forecast_log.record_many(db_path, []) is True   # empty is a no-op
+    finally:
+        os.remove(db_path)
+
+
 def test_forecast_log_first_of_day_wins():
     db_path = _tmp_db()
     try:

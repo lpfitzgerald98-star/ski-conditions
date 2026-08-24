@@ -5,6 +5,7 @@
 import { badgeSVG } from "./grades.js";
 import { isLeaf } from "./regions.js";
 import { state, visibleScores, displayValue } from "./state.js";
+import { prefersReducedMotion } from "./a11y.js";
 
 let listEl = null;
 let onSelect = () => {};
@@ -132,7 +133,8 @@ export function markSelected(key) {
 // Scroll a selected row into view (e.g. when selection came from the map).
 export function revealSelected(key) {
   const li = listEl?.querySelector(`.item[data-key="${CSS.escape(key)}"]`);
-  if (li) li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (li) li.scrollIntoView({ block: "nearest",
+    behavior: prefersReducedMotion() ? "auto" : "smooth" });
 }
 
 function onKeydown(e) {

@@ -368,9 +368,10 @@ class SnowQuality:
     rather than a black box; `weights_used` records which weights the blend
     actually normalized over. See config.SNOW_QUALITY_WEIGHTS.
 
-    Phase 0: OBSERVABILITY ONLY -- computed and surfaced on the card, but weighted
-    0 in every consumer, so it changes no grade. `density`/`wind` are always None
-    until Phases 2/3."""
+    LOAD-BEARING (Phases 2-4 shipped): this is the live board's `quality`
+    component -- weighted 0.1357 in config.GLOBAL_SCORE_WEIGHTS -- and is surfaced
+    on the card. `density` and `wind` ARE supplied now (pipeline.mountain_scorecard
+    passes density_quality/wind_quality). Do not treat this as inert scaffold."""
     value: float | None
     components: dict = field(default_factory=dict)   # name -> 0-100 (or None)
     weights_used: dict = field(default_factory=dict)
@@ -395,16 +396,16 @@ def snow_quality_score(
     """Explainable 0-100 snow-quality signal (higher = better surface).
 
     Aggregates the surface-quality signals into one named number: crust (from the
-    backward refreeze index), thaw (from the forward incoming-thaw index), and
-    warmth (from live weather quality). `density` and `wind` are accepted as
-    0-100 sub-scores but are always None until Phases 2/3 supply them.
+    backward refreeze index), thaw (from the forward incoming-thaw index), warmth
+    (from live weather quality), plus `density` and `wind` -- all now supplied by
+    pipeline.mountain_scorecard (Phases 2/3 shipped).
 
     Blends over whatever is available, renormalizing the weights -- a missing
     component drops out rather than counting as zero (same convention as
     conditions_score). All-missing -> value None (nothing to judge).
 
-    SCAFFOLD (Phase 0): surfaced for observation, weighted 0 in every consumer;
-    the skiability quality_factor still governs the headline grade. See
+    LOAD-BEARING: `value` feeds the live board's `quality` input (weight 0.1357 in
+    config.GLOBAL_SCORE_WEIGHTS) AND the skiability quality_factor. See
     config.SNOW_QUALITY_WEIGHTS and docs/snow-quality-plan.md."""
     components = {
         "density": None if density is None else max(0.0, min(100.0, density)),
