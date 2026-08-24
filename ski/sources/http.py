@@ -37,6 +37,9 @@ def _build_session() -> requests.Session:
     s = requests.Session()
     retry = Retry(
         total=2,                       # 3 attempts, then give up: one mountain, not the stream
+        connect=1,                     # but an unreachable host retries the CONNECT only once
+                                       # (2 x CONNECT_TIMEOUT), so a dead source fails in ~20s,
+                                       # not 3 x 10s -- it won't come back within seconds anyway.
         backoff_factor=0.4,            # 0.0s, 0.4s, 0.8s
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset(["GET", "POST"]),
@@ -57,9 +60,33 @@ def _build_session() -> requests.Session:
 SESSION = _build_session()
 
 
+# Fail FAST on an unreachable host. A dead/slow source (e.g. BC's env.gov.bc.ca
+# has timed out from the CI runner) must not stall the daily build: a scalar
+# `timeout` sets both connect AND read, so a station whose host won't answer used
+# to burn the full read budget (120s) x retries x stations -- that turned one flaky
+# source into a 1-hour run (2026-08-23) and once a 6-hour hang that GitHub cancelled
+# (2026-07-31, no deploy that day). Splitting the timeout caps the CONNECT phase
+# hard (the common failure) while keeping a generous READ for big archive CSVs.
+#
+# A caller's bare int is treated as the READ budget and paired with this connect
+# cap; an explicit (connect, read) tuple is passed through untouched; a missing
+# timeout gets a sane default instead of blocking forever.
+CONNECT_TIMEOUT = 10          # seconds to establish TCP+TLS before giving up
+DEFAULT_READ_TIMEOUT = 90     # seconds to wait for the response body
+
+
+def _cap_connect(kwargs: dict) -> dict:
+    t = kwargs.get("timeout")
+    if t is None:
+        kwargs["timeout"] = (CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT)
+    elif isinstance(t, (int, float)):
+        kwargs["timeout"] = (CONNECT_TIMEOUT, t)
+    return kwargs
+
+
 def get(url: str, **kwargs) -> requests.Response:
-    return SESSION.get(url, **kwargs)
+    return SESSION.get(url, **_cap_connect(kwargs))
 
 
 def post(url: str, **kwargs) -> requests.Response:
-    return SESSION.post(url, **kwargs)
+    return SESSION.post(url, **_cap_connect(kwargs))

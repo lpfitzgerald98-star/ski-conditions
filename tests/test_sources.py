@@ -387,6 +387,31 @@ def test_nws_medium_range_none_when_forecast_too_short():
     assert o.medium_range is None
 
 
+# --- http connect-timeout cap ----------------------------------------------
+# A dead/slow host must fail on CONNECT fast, not burn the whole read budget x
+# retries x stations (which once hung the daily build for 6h). http.get/post
+# split a caller's scalar timeout into (connect_cap, read).
+def test_http_scalar_timeout_gets_connect_cap():
+    from ski.sources import http
+    assert http._cap_connect({"timeout": 120})["timeout"] == (http.CONNECT_TIMEOUT, 120)
+    assert http._cap_connect({"timeout": 90})["timeout"] == (http.CONNECT_TIMEOUT, 90)
+
+
+def test_http_missing_timeout_gets_default_tuple():
+    from ski.sources import http
+    assert http._cap_connect({})["timeout"] == (http.CONNECT_TIMEOUT, http.DEFAULT_READ_TIMEOUT)
+
+
+def test_http_explicit_tuple_passes_through():
+    from ski.sources import http
+    assert http._cap_connect({"timeout": (3, 200)})["timeout"] == (3, 200)
+
+
+def test_http_connect_cap_is_short():
+    from ski.sources import http
+    assert http.CONNECT_TIMEOUT <= 15   # fail fast on an unreachable host
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
