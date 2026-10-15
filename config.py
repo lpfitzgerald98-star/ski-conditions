@@ -2579,9 +2579,25 @@ MEDIUM_RANGE = {
 # keep their prior proportions exactly, scaled to 0.78. No backtest exists for the
 # live board (it ranks a single live day, not a frozen outcome window), so this is a
 # pure product-consistency choice, same terrain rationale as the trip board above.
-GLOBAL_SCORE_WEIGHTS = {"base": 0.2033, "fresh": 0.1780, "season": 0.1017,
-                        "forecast": 0.1613, "quality": 0.1357,
+#
+# FORECAST 0.1613 -> 0.12 (2026-10-15, user-approved; first evidence-based change
+# to this weight). scripts/backtest_forecast.py-style sweep, 30 Feb dates 2024-26,
+# rank vs realised next-7-day skiability, with the 72h forecast replaced by
+# (a) the snow that actually fell (perfect), (b) that plus realistic error, and
+# (c) days 8-10 snow (no information about the graded week). The optimum is a
+# plateau at 0.06-0.12 and >=0.20 is significantly worse; 0.12 beats 0.1613 in
+# ALL THREE cases, so it wins whatever the real forecast skill turns out to be
+# (the gain is noise-sized for a good forecast, clear for a bad one -- see
+# docs/tuning.md for the numbers). Terrain held at exactly 0.22 (decision above);
+# the freed 0.0413 went proportionally to base/fresh/season/quality only.
+# Re-check against REAL logged forecasts in the Dec 15 forecast-check report.
+GLOBAL_SCORE_WEIGHTS = {"base": 0.2168, "fresh": 0.1899, "season": 0.1085,
+                        "forecast": 0.1200, "quality": 0.1448,
                         "vertical": 0.077, "difficulty": 0.077, "acreage": 0.066}
+# The pre-2026-10-15 set, kept so the forecast-check report can keep comparing.
+GLOBAL_SCORE_WEIGHTS_PRE_2026_10 = {"base": 0.2033, "fresh": 0.1780, "season": 0.1017,
+                                    "forecast": 0.1613, "quality": 0.1357,
+                                    "vertical": 0.077, "difficulty": 0.077, "acreage": 0.066}
 
 # ---------------------------------------------------------------------------
 # Mountain character -- "is this just a better MOUNTAIN, independent of the

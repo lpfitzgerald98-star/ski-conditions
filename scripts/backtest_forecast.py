@@ -116,14 +116,16 @@ def _corr(x: pd.Series, y: pd.Series, method: str):
 
 # --- 2 + 3. rank value on the live board --------------------------------------
 # name -> (forecast on?, live-only quality parts on, forecast weight override, compared vs)
-# The B@w rows sweep the forecast's share of GLOBAL_SCORE_WEIGHTS (the other
-# components rescaled to fill the rest), so the report suggests a weight rather
-# than only a yes/no on today's 0.1613.
+# The B@w rows sweep the forecast's share of GLOBAL_SCORE_WEIGHTS (the other snow
+# components rescaled to fill the rest, terrain held fixed), so the report
+# suggests a weight rather than only a yes/no on the current one. B@w=0.1613 is
+# the pre-2026-10-15 production weight: it's the "was the cut to 0.12 right?" row.
 VARIANTS = {
     "A_no_forecast":           (False, set(), None, None),
     "B_forecast":              (True, set(), None, "A_no_forecast"),
     "B@w=0.04":                (True, set(), 0.04, "A_no_forecast"),
     "B@w=0.08":                (True, set(), 0.08, "A_no_forecast"),
+    "B@w=0.1613":              (True, set(), 0.1613, "B_forecast"),
     "B@w=0.24":                (True, set(), 0.24, "A_no_forecast"),
     "C_forecast_full_quality": (True, {"wind", "thaw", "warmth"}, None, "B_forecast"),
     "B+wind":                  (True, {"wind"}, None, "B_forecast"),
@@ -132,12 +134,18 @@ VARIANTS = {
 }
 
 
+TERRAIN = ("vertical", "difficulty", "acreage")
+
+
 def weights_with_forecast(w: float) -> dict[str, float]:
-    """GLOBAL_SCORE_WEIGHTS with forecast set to `w` and the rest rescaled
-    proportionally so the total stays 1."""
-    rest = {k: v for k, v in GLOBAL_SCORE_WEIGHTS.items() if k != "forecast"}
-    scale = (1.0 - w) / sum(rest.values())
-    return {**{k: v * scale for k, v in rest.items()}, "forecast": w}
+    """GLOBAL_SCORE_WEIGHTS with forecast set to `w`, terrain held at its fixed
+    share (the 0.22 user decision, config.GLOBAL_SCORE_WEIGHTS), and the other
+    snow components rescaled proportionally so the total stays 1."""
+    g = GLOBAL_SCORE_WEIGHTS
+    terrain = {k: g[k] for k in TERRAIN}
+    snow = {k: v for k, v in g.items() if k not in TERRAIN and k != "forecast"}
+    scale = (1.0 - w - sum(terrain.values())) / sum(snow.values())
+    return {**{k: v * scale for k, v in snow.items()}, **terrain, "forecast": w}
 
 
 def _logs(db_path):
@@ -288,7 +296,8 @@ def to_markdown(skill: dict, value: dict, since: date, until: date) -> str:
                      f"{s['dates_better']} / {s['dates_worse']} | {s['verdict']} |")
         L.append("")
     L += ["_A = today's backtest-validated board (no forecast). B = + logged 72h forecast "
-          "at today's weight (0.1613); B@w = the same at forecast weight w (others rescaled). "
+          "at the current weight (0.12 since 2026-10-15); B@w = the same at forecast weight w "
+          "(other snow components rescaled, terrain fixed); B@w=0.1613 is the old weight. "
           "C = B + logged wind/thaw/warmth in `quality`; B+x adds one at a time. "
           f"Verdict needs >= {MIN_DATES} dates and a mean delta of at least {DECISION_MARGIN}._"]
     return "\n".join(L) + "\n"
