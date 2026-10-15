@@ -1,0 +1,52 @@
+# Pre-season alarm for the AU/NZ rain/snow-split bug (issue #5).
+#
+# Runs daily. Before 2027-05-01 it's a no-op. From 2027-05-01 on, if issue #5
+# is still OPEN, it comments on the issue (pinging the repo owner) and FAILS the
+# run -- a failed scheduled workflow emails the owner -- every day until the fix
+# ships and the issue closes, ahead of the June 2027 Southern Hemisphere opening.
+# Once the issue is closed this does nothing; delete the file after the season.
+# Manual test: Actions tab -> this workflow -> "Run workflow" with force=true.
+
+name: SH season pre-flight alert
+
+on:
+  schedule:
+    - cron: "17 14 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignore the date gate (to test the alert)"
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to Ubuntu 26 on 2026-10-19
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE: "5"
+      ALERT_FROM: "2027-05-01"
+      SEASON_OPENS: "June 2027"
+    steps:
+      - name: Alert if the AU/NZ fix is still open
+        run: |
+          set -euo pipefail
+          today="$(date -u +%F)"
+          if [ "${{ github.event.inputs.force || 'false' }}" != "true" ] && [[ "$today" < "$ALERT_FROM" ]]; then
+            echo "Before $ALERT_FROM -- nothing to do."
+            exit 0
+          fi
+          state="$(gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json state --jq .state)"
+          title="$(gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json title --jq .title)"
+          echo "Issue #$ISSUE ($title): $state"
+          if [ "$state" != "OPEN" ]; then
+            echo "Fixed -- no alert."
+            exit 0
+          fi
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body \
+            "@${GITHUB_REPOSITORY_OWNER} :rotating_light: **Pre-season alert ($today):** this AU/NZ rain/snow-split bug is still open, and the Southern Hemisphere season opens in ${SEASON_OPENS}. Merge and deploy the fix (see the linked PR), then close this issue to silence the alert. ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))"
+          echo "::error title=AU/NZ fix still open::Issue #$ISSUE is still open on $today -- fix before the ${SEASON_OPENS} SH opening."
+          exit 1
