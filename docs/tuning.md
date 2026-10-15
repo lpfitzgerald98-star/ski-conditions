@@ -219,3 +219,21 @@ continuous powder recency decay (Phase 5a), and buried rain/melt crust (Phase 5b
   72h snowfall as the "forecast", Feb 2024-26, 30 dates) put the best forecast
   weight near 0.08 vs today's 0.1613 -- a ceiling for a real forecast, so expect
   the real answer to be at or below that.
+
+## Live-board forecast weight 0.1613 -> 0.12 (2026-10-15)
+
+30 Feb dates 2024-26, rank vs realised next-7-day skiability, 72h forecast replaced
+by: the snow that actually fell (perfect), that plus realistic error (noisy), or
+days 8-10 snow (control, no information about the graded week). Terrain held at
+0.22; the freed 0.0413 went proportionally to base/fresh/season/quality.
+
+| forecast case | old (0.1613) | new (0.12) | delta [95% CI] | dates better/worse |
+|---|---|---|---|---|
+| perfect | 0.698 | 0.704 | +0.006 [-0.003, +0.016] | 17/13 |
+| noisy   | 0.700 | 0.703 | +0.003 [-0.005, +0.011] | 18/12 |
+| control | 0.629 | 0.655 | +0.026 [+0.018, +0.033] | 27/3 |
+
+No-forecast live backtest (Feb-14 x6): 0.6715 -> 0.6716, regions within +-0.012.
+The case for 0.12 is that it beats 0.1613 at every forecast-skill level tested, so
+it doesn't depend on how good real forecasts turn out to be. Re-check: the Dec 15
+forecast-check report's `B@w=0.1613` row (real logged forecasts, old vs new).
