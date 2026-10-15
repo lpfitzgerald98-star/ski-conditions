@@ -19,10 +19,11 @@ from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, CRUST_MEMORY,
                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
                     INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, POWDER_DECAY,
                     SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, SITING_CALIBRATION,
-                    SNOWFALL_NORMALS, STORM_THRESHOLDS, TERRAIN_STATS)
-from ski import forecast_log
+                    SNOW_MODEL, SNOWFALL_NORMALS, STORM_THRESHOLDS, TERRAIN_STATS)
+from ski import forecast_log, quality_log
 from ski import score as score_mod
-from ski.db import max_observation_date, read_observations, upsert_observations
+from ski.db import (get_station_meta, max_observation_date, read_observations,
+                    set_station_meta, upsert_observations)
 from ski.watercalendar import month_day_to_dowy, season_progress, water_year
 from ski.grading import (
     BaseGrade,
@@ -175,13 +176,29 @@ def ingest_mountain(key: str, db_path: str = DB_PATH, full: bool = False) -> int
     escape hatch)."""
     m = get_mountain(key)
     station = mountain_station(m)
+    sm = m.get("snow_model")
+    model_version = str(SNOW_MODEL["version"])
+    if sm is not None and get_station_meta(db_path, station, "snow_model_version") != model_version:
+        full = True   # history was computed on another model (or raw reanalysis): redo all of it
     since = None
     if not full:
         last = max_observation_date(db_path, station)
         if last is not None:
             since = last - timedelta(days=INGEST_OVERLAP_DAYS)
-    df = _source(m)["fetch"](station, since=since)
-    return upsert_observations(db_path, station, df)
+    if sm is None:
+        df = _source(m)["fetch"](station, since=since)
+        return upsert_observations(db_path, station, df)
+    # Own snowpack model (config.SNOW_MODEL): it's stateful, so an incremental
+    # fetch starts at the water-year boundary where the model resets, not at the
+    # overlap date -- one call either way, just a longer tail.
+    wy = mountain_wy_start(m)
+    if since is not None:
+        since = date(since.year if since.month >= wy else since.year - 1, wy, 1)
+    df = openmeteo.fetch_station_daily(station, since=since,
+                                       snow_model={**sm, "reset_month": wy})
+    n = upsert_observations(db_path, station, df)
+    set_station_meta(db_path, station, "snow_model_version", model_version)
+    return n
 
 
 def grade_mountain(key: str, db_path: str = DB_PATH, as_of: date | None = None) -> SeasonGrade:
@@ -472,6 +489,35 @@ def mountain_scorecard(
         thaw=thaw if outlook is not None else None,
         density=density_quality,
         wind=wind_quality)
+    # Best-effort log of the live-only quality inputs (wind/thaw/warmth have no
+    # stored history, so this is the only way they can ever be backtested -- see
+    # ski/quality_log.py). Live path only; a logging failure never sinks a card.
+    if outlook is not None:
+        try:
+            rec = outlook.recent
+            cur = outlook.current
+            quality_log.record(db_path, key, as_of or date.today(), outlook.provider, {
+                "wind_sustained_72h_mph": wind_mph,
+                "wind_quality": wind_quality,
+                "wind_scour": wind_scour,
+                "thaw_index": thaw,
+                "refreeze_index": refreeze,
+                "weather_quality": weather_q,
+                "current_temp_f": cur.temperature_f if cur else None,
+                "current_wind_mph": cur.wind_mph if cur else None,
+                "sky_cover_pct": cur.sky_cover_pct if cur else None,
+                "rain_72h_in": outlook.rain_72h_in,
+                "tmax_72h_f": outlook.tmax_72h_f,
+                "recent_rain_72h_in": rec.rain_72h_in if rec else None,
+                "recent_tmax_72h_f": rec.tmax_72h_f if rec else None,
+                "recent_tmin_24h_f": rec.tmin_24h_f if rec else None,
+                "recent_snowfall_72h_in": rec.snowfall_72h_in if rec else None,
+                "recent_snow_temp_72h_f": rec.snow_temp_72h_f if rec else None,
+                "density_ratio": density_ratio,
+                "snow_quality": snow_quality.value if snow_quality else None,
+            })
+        except Exception:  # noqa: BLE001
+            pass
     subscores = {
         "season": season.percentile,
         "in_season": month.percentile,

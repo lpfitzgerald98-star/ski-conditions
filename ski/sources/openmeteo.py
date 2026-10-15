@@ -35,7 +35,8 @@ CM_TO_IN = 1.0 / 2.54
 M_TO_IN = 39.3701
 
 
-def fetch_station_daily(loc: str, timeout: int = 90, since=None) -> pd.DataFrame:
+def fetch_station_daily(loc: str, timeout: int = 90, since=None,
+                        snow_model: dict | None = None) -> pd.DataFrame:
     """Daily snow history for a 'lat,lon' location string, as the canonical obs
     frame (snowfall -> new_snow_24hr, depth -> snow_depth_inches, swe NaN).
 
@@ -43,6 +44,13 @@ def fetch_station_daily(loc: str, timeout: int = 90, since=None) -> pd.DataFrame
     instead of back to 1980. This is the biggest single lever on Action time:
     54 of the roster's stations are Open-Meteo, and a full 1980-> pull for each
     is what draws the archive API's 429s. The tail is a handful of days.
+
+    `snow_model` (a MOUNTAINS entry's `snow_model` dict plus `reset_month`):
+    replace the reanalysis depth + snowfall with our own degree-day snowpack
+    (see snowpack_model / config.SNOW_MODEL). Also pulls precipitation_sum, and
+    samples at `elevation_m` when given (Open-Meteo downscales temperature to it).
+    The caller must start `since` on a water-year boundary (the model's state
+    resets there) -- pipeline.ingest_mountain does.
     """
     lat, lon = (float(x) for x in loc.split(","))
     start_date = since.isoformat() if since is not None else START_DATE
@@ -54,10 +62,81 @@ def fetch_station_daily(loc: str, timeout: int = 90, since=None) -> pd.DataFrame
         "temperature_unit": "fahrenheit",   # else the archive defaults to Celsius
         "timezone": "auto",
     }
+    if snow_model is not None:
+        params["daily"] += ",precipitation_sum"
+        if snow_model.get("elevation_m") is not None:
+            params["elevation"] = snow_model["elevation_m"]
     resp = http.get(ARCHIVE, params=params,
                         headers={"User-Agent": USER_AGENT}, timeout=timeout)
     resp.raise_for_status()
-    return parse_archive(resp.json())
+    df = parse_archive(resp.json())
+    if snow_model is not None:
+        df = apply_snow_model(df, resp.json(), snow_model)
+    return df
+
+
+def snowpack_model(precip_mm, temp_c, dates, precip_multiplier: float = 1.0,
+                   reset_month: int | None = None, params: dict | None = None):
+    """Daily degree-day snowpack: (depth_cm, new_snow_cm) arrays.
+
+    Per day: split precip into snow/rain on the mean temp (all snow <= t_snow_c,
+    all rain >= t_rain_c, linear between); settle the existing pack's bulk density
+    toward rho_max, mix the new snow in at rho_new; melt ddf mm per degC above
+    t_melt_c plus a rain-on-snow term; depth = SWE / density. State resets to zero
+    on day 1 of `reset_month` (the water-year start), so a fetch beginning on that
+    boundary reproduces a full-history run exactly. Missing precip counts as dry;
+    a missing temp keeps the day's snow but melts nothing. See config.SNOW_MODEL.
+    """
+    from config import SNOW_MODEL
+    p = {**SNOW_MODEL, **(params or {})}
+    P = np.nan_to_num(np.asarray(precip_mm, dtype=float), nan=0.0) * precip_multiplier
+    T = np.asarray(temp_c, dtype=float)
+    dates = pd.to_datetime(pd.Series(dates))
+    resets = ((dates.dt.month == reset_month) & (dates.dt.day == 1)).to_numpy()         if reset_month else np.zeros(len(P), dtype=bool)
+    span = p["t_rain_c"] - p["t_snow_c"]
+    depth = np.zeros(len(P))
+    new_snow = np.zeros(len(P))
+    swe, rho = 0.0, p["rho_new"]
+    for i in range(len(P)):
+        if resets[i]:
+            swe, rho = 0.0, p["rho_new"]
+        t = T[i]
+        known = not np.isnan(t)
+        frac = 1.0 if not known or t <= p["t_snow_c"] else             0.0 if t >= p["t_rain_c"] else (p["t_rain_c"] - t) / span
+        snow, rain = P[i] * frac, P[i] * (1.0 - frac)
+        if swe > 0:
+            rho += (p["rho_max"] - rho) * p["settle_per_day"]
+        if snow > 0:
+            rho = (swe * rho + snow * p["rho_new"]) / (swe + snow)
+            swe += snow
+        if known:
+            melt = max(0.0, t - p["t_melt_c"]) * p["ddf_mm_per_c_day"]                 + rain * max(t, 0.0) * p["rain_melt_mm_per_mm_c"]
+            swe = max(0.0, swe - melt)
+        if swe == 0.0:
+            rho = p["rho_new"]
+        depth[i] = swe / rho * 100.0          # mm water / (kg/m3) -> m * 1000 / 10 -> cm
+        new_snow[i] = snow * p["snow_cm_per_mm"]
+    return depth, new_snow
+
+
+def apply_snow_model(df: pd.DataFrame, payload: dict, snow_model: dict) -> pd.DataFrame:
+    """Swap the reanalysis depth/snowfall columns of a parsed archive frame for
+    snowpack_model's. `payload` is the raw response (for precipitation_sum)."""
+    daily = payload.get("daily", {})
+    raw = pd.DataFrame({
+        "date": pd.to_datetime(pd.Series(daily.get("time", [])), errors="coerce"),
+        "precip_mm": pd.to_numeric(pd.Series(daily.get("precipitation_sum", []),
+                                             dtype="object"), errors="coerce"),
+    }).dropna(subset=["date"])
+    df = df.merge(raw, on="date", how="left")
+    temp_c = (df["mean_temp_f"] - 32.0) * 5.0 / 9.0
+    depth_cm, snow_cm = snowpack_model(
+        df["precip_mm"], temp_c, df["date"],
+        precip_multiplier=snow_model.get("precip_multiplier", 1.0),
+        reset_month=snow_model.get("reset_month"))
+    df["snow_depth_inches"] = depth_cm * CM_TO_IN
+    df["new_snow_24hr"] = snow_cm * CM_TO_IN
+    return df.drop(columns="precip_mm")
 
 
 def parse_archive(payload: dict) -> pd.DataFrame:

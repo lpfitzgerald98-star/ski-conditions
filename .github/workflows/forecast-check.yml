@@ -1,0 +1,82 @@
+# Mid-season check: does the live board's forecast (16% of GLOBAL_SCORE_WEIGHTS)
+# and do the live-only quality inputs (wind/thaw/warmth) actually earn their
+# weight? Those are the parts scripts/backtest_live.py can't test from stored
+# history; forecast_log + quality_log now record them daily (the snapshot
+# workflow commits them under logs/), and scripts/backtest_forecast.py replays
+# them against the realised next-7-day skiability.
+#
+# Runs on the 15th, Dec-Mar, and posts the report as a GitHub ISSUE (so it lands
+# in notifications), plus the job summary. Read-only against the data: restores
+# the snapshot's DB cache but never saves it. Manual run: Actions tab -> this
+# workflow -> "Run workflow" (optionally with a start date).
+
+name: Forecast + quality mid-season check
+
+on:
+  schedule:
+    - cron: "23 15 15 12,1,2,3 *"
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Window start (YYYY-MM-DD); blank = Nov 1 of this season"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pandas numpy requests
+
+      # Same newest-ski-db-* restore the snapshot job uses; restore only. The key
+      # never matches exactly, so the prefix restore-key picks the latest cache.
+      - name: Restore observation DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ski-db-forecast-check-${{ github.run_id }}
+          restore-keys: |
+            ski-db-
+
+      - name: Restore prediction logs from the repo
+        run: python scripts/sync_logs.py import
+
+      - name: Run the forecast / quality backtest
+        run: |
+          args=""
+          if [ -n "${{ github.event.inputs.since }}" ]; then args="--since ${{ github.event.inputs.since }}"; fi
+          python scripts/backtest_forecast.py $args --md report.md --json forecast_backtest_results.json
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open the report as an issue
+        run: |
+          title="[GladeGrade] Mid-season forecast + quality check -- $(date -u +%Y-%m-%d)"
+          {
+            cat report.md
+            echo
+            echo "---"
+            echo "Automated by \`.github/workflows/forecast-check.yml\` ([run log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})). Weights live in \`config.GLOBAL_SCORE_WEIGHTS\` / \`config.SNOW_QUALITY_WEIGHTS\`; act on a verdict only when it holds across two consecutive monthly reports."
+          } > body.md
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forecast-backtest
+          path: |
+            report.md
+            forecast_backtest_results.json

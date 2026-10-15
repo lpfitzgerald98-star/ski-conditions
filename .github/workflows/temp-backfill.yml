@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   backfill:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to Ubuntu 26 on 2026-10-19
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4

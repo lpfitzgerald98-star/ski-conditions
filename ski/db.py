@@ -118,6 +118,41 @@ def upsert_observations(db_path: str | Path, station_id: str, df: pd.DataFrame) 
     return len(rows)
 
 
+_META_SCHEMA = """
+CREATE TABLE IF NOT EXISTS station_meta (
+    station_id TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    value      TEXT,
+    PRIMARY KEY (station_id, key)
+);
+"""
+
+
+def get_station_meta(db_path: str | Path, station_id: str, key: str) -> str | None:
+    """A per-station ingest marker (e.g. which snow-model version its stored
+    history was computed with), or None if never set."""
+    conn = connect(db_path)
+    try:
+        conn.execute(_META_SCHEMA)
+        row = conn.execute("SELECT value FROM station_meta WHERE station_id = ? AND key = ?",
+                           (station_id, key)).fetchone()
+    finally:
+        conn.close()
+    return None if row is None else row[0]
+
+
+def set_station_meta(db_path: str | Path, station_id: str, key: str, value: str) -> None:
+    conn = connect(db_path)
+    try:
+        conn.execute(_META_SCHEMA)
+        conn.execute("INSERT INTO station_meta (station_id, key, value) VALUES (?, ?, ?) "
+                     "ON CONFLICT(station_id, key) DO UPDATE SET value = excluded.value",
+                     (station_id, key, value))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def max_observation_date(db_path: str | Path, station_id: str) -> "date | None":
     """The most recent stored date for a station (as a `date`), or None if the
     station has no rows yet. Drives incremental ingest: fetch only the tail

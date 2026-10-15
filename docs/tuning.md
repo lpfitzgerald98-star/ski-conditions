@@ -198,3 +198,24 @@ continuous powder recency decay (Phase 5a), and buried rain/melt crust (Phase 5b
   `POWDER_DECAY`, `WIND`, or `CRUST_MEMORY` shifts the skiability distribution —
   re-run the offline backtest above and, once live quality data has accumulated,
   the live one before trusting the letters.
+
+## Oceania snowpack model + live-only signal logging (2026-10-14)
+
+- **Own snowpack for NZ/Australia (`config.SNOW_MODEL`, `openmeteo.snowpack_model`).**
+  Open-Meteo's grid snow depth read ~0 at every NZ/AU field from mid-Sep 2026
+  while the resorts reported 70-190cm. The fix re-partitions precipitation at the
+  elevation-downscaled temperature and runs a daily degree-day pack. Physics is
+  shared; each mountain's `snow_model.precip_multiplier` absorbs the reanalysis'
+  local precip bias (Snowy Mountains 1.5, Mt Hutt 1.0, Southern Lakes/Ruapehu
+  0.35-0.79). Calibration and its evidence are documented at `SNOW_MODEL`.
+  Regression: live-board backtest 0.670 -> 0.672, trip backtest 0.701 flat.
+- **Re-tune trigger:** any change to `SNOW_MODEL` or a `snow_model` entry -> bump
+  `SNOW_MODEL["version"]` so the stored history is re-pulled on the same model.
+- **Logs for the untested weights.** `quality_log` (wind/thaw/warmth/crust inputs
+  per card per day) joins `forecast_log`; both are mirrored to `logs/*.csv` by
+  `scripts/sync_logs.py` so a cache eviction can't lose them.
+  `scripts/backtest_forecast.py` replays them and `.github/workflows/forecast-check.yml`
+  posts the report as an issue on the 15th, Dec-Mar. An oracle dry run (true
+  72h snowfall as the "forecast", Feb 2024-26, 30 dates) put the best forecast
+  weight near 0.08 vs today's 0.1613 -- a ceiling for a real forecast, so expect
+  the real answer to be at or below that.

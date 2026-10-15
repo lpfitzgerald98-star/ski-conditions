@@ -36,7 +36,7 @@ permissions:
 jobs:
   # ---------------------------------------------------------------------------
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to Ubuntu 26 on 2026-10-19
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -92,7 +92,7 @@ jobs:
   # ---------------------------------------------------------------------------
   backfill:
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to Ubuntu 26 on 2026-10-19
     timeout-minutes: 350        # each ~1-year chunk is ~1.5-2.5h; under the 6h cap
     strategy:
       fail-fast: false          # one bad year must not cancel the others
@@ -167,7 +167,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish:
     needs: backfill
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to Ubuntu 26 on 2026-10-19
     concurrency:
       group: ski-pages          # coordinate with the daily snapshot's Pages deploy
       cancel-in-progress: false

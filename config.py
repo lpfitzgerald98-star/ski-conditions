@@ -851,6 +851,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
         "season_window": {"start": (6, 1), "end": (10, 5)},
+        "snow_model": {"precip_multiplier": 1.5, "elevation_m": 1830},  # Spencers Creek snow course height (calibration site); grid point is 1722m
     },
     "thredbo": {
         "name": "Thredbo, AU",
@@ -861,6 +862,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
         "season_window": {"start": (6, 1), "end": (10, 5)},
+        "snow_model": {"precip_multiplier": 1.5, "elevation_m": 1700},  # mid-mountain (1365-2037m); grid point 1481m is the valley
     },
     "falls_creek": {
         "name": "Falls Creek, AU",
@@ -871,6 +873,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
         "season_window": {"start": (6, 1), "end": (10, 1)},
+        "snow_model": {"precip_multiplier": 1.5},  # see config.SNOW_MODEL
     },
     "mt_buller": {
         "name": "Mt Buller, AU",
@@ -881,6 +884,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
         "season_window": {"start": (6, 1), "end": (9, 25)},
+        "snow_model": {"precip_multiplier": 1.5},  # see config.SNOW_MODEL
     },
     "mt_hotham": {
         "name": "Mt Hotham, AU",
@@ -891,6 +895,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
         "season_window": {"start": (6, 1), "end": (10, 1)},
+        "snow_model": {"precip_multiplier": 1.5},  # see config.SNOW_MODEL
     },
     "coronet_peak": {
         "name": "Coronet Peak, NZ",
@@ -901,6 +906,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
         "season_window": {"start": (6, 10), "end": (10, 5)},
+        "snow_model": {"precip_multiplier": 0.51},  # fit to 90cm top, 2026-09-27 (snow-forecast)
     },
     "the_remarkables": {
         "name": "The Remarkables, NZ",
@@ -911,6 +917,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
         "season_window": {"start": (6, 10), "end": (10, 10)},
+        "snow_model": {"precip_multiplier": 0.65},  # no dated report: mean of Coronet + Cardrona (same basin)
     },
     "cardrona": {
         "name": "Cardrona, NZ",
@@ -921,6 +928,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
         "season_window": {"start": (6, 10), "end": (10, 10)},
+        "snow_model": {"precip_multiplier": 0.79},  # fit to 112cm upper, 2026-09-26 (snow-forecast)
     },
     "treble_cone": {
         "name": "Treble Cone, NZ",
@@ -931,6 +939,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
         "season_window": {"start": (6, 15), "end": (10, 1)},
+        "snow_model": {"precip_multiplier": 0.49, "elevation_m": 1580},  # mid-mountain (1200-1960m; grid point 1270m is the base); mult fit to 150cm upper, 2026-09-22
     },
     "mt_hutt": {
         "name": "Mt Hutt, NZ",
@@ -941,6 +950,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
         "season_window": {"start": (6, 10), "end": (10, 10)},
+        "snow_model": {"precip_multiplier": 1.0},  # fit to 5 reports at 2 elevations, Sep-Oct 2026 (log-RMSE 0.11)
     },
     "whakapapa": {
         "name": "Whakapapa, NZ",
@@ -951,6 +961,7 @@ MOUNTAINS = {
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
         "season_window": {"start": (6, 20), "end": (10, 20)},
+        "snow_model": {"precip_multiplier": 0.35},  # fit to 69cm upper, 2026-09-19 (skiresort.com)
     },
     "valle_nevado": {
         "name": "Valle Nevado, CL",
@@ -2398,6 +2409,55 @@ STALE_UNKNOWN_COVER_CAP = 20.0   # cap the overall (~C) when stale AND cover unk
 # immutable and never re-fetched. An empty station still does a full-history
 # pull, so first run and any cache loss self-heal.
 INGEST_OVERLAP_DAYS = 14
+
+# ---------------------------------------------------------------------------
+# Own snowpack model for Open-Meteo mountains whose reanalysis depth is unusable
+# ---------------------------------------------------------------------------
+# WHY: Open-Meteo's `snow_depth_max` comes from the coarse model grid, not the
+# resort. For NZ + Australia it read ~0 all spring 2026 (Mt Hutt 0" from Sep 15
+# while the resort reported 190cm upper / 129cm lower on Sep 17; Spencers Creek
+# raw peaks 8-38cm vs real 116-232cm). The point temperature IS downscaled to the
+# resort's elevation, but the grid partitions precip into rain at the warmer grid
+# height (Mt Hutt Aug 2026: mean Tmax -1.8C, yet 91 of 162mm logged as "rain").
+#
+# FIX: a mountain with a `snow_model` entry gets depth + new snow from a daily
+# degree-day model instead (openmeteo.snowpack_model): re-partition
+# precipitation_sum at the downscaled mean temp, accumulate SWE, melt it at
+# `ddf` mm per degC-day above `t_melt_c` (+ rain-on-snow heat), settle the pack's
+# bulk density toward `rho_max`, depth = SWE / density. State resets to zero at
+# each water-year start, so an incremental tail fetched from that date reproduces
+# a full pull exactly.
+#
+# CALIBRATION (2026-10-14, physics shared across regions, only the per-mountain
+# precip_multiplier differs -- it absorbs the reanalysis' local precip bias, which
+# swings both ways: Snowy Mountains under-catch, Southern Lakes/Ruapehu over-catch):
+# Mt Hutt 2026 at 2000m/1600m vs MetService/snow-
+# forecast reports -> log-RMSE 0.11 at multiplier 1.0 (172/183/155cm vs reported
+# 189/190/182 upper; 136/92 vs 129/81 lower). Spencers Creek (1830m, Snowy Hydro
+# snow course) peaks 2022/2023/2024/2025 = 232/131/116/220cm -> model 228/116/
+# 131/230 at multiplier 1.5 (reanalysis under-catches Snowy Mountains precip).
+# Known weak spot: the 2006 record-low year reads 48 vs 85cm. The other Australian
+# fields share Perisher's 1.5 (same reanalysis bias, no clean per-field depth
+# record). NZ fields other than Mt Hutt are fit to ONE late-Sep-2026 report each
+# (see their entries) -- thin evidence; re-fit when more seasons of reports exist.
+# Published annual-snowfall normals (SNOWFALL_NORMALS) were tried as an
+# independent calibration and rejected: they disagree with each other (Perisher
+# 73" vs neighbouring Thredbo 160") and would break both validated sites.
+# `version`: bump on any change here, and every snow_model station re-pulls its
+# full history on the next ingest (pipeline.ingest_mountain), so the history its
+# percentiles compare against is always on the same model.
+SNOW_MODEL = {
+    "version": 1,
+    "t_snow_c": 1.0,          # all snow at/below this daily mean temp
+    "t_rain_c": 3.0,          # all rain at/above; linear mix between
+    "ddf_mm_per_c_day": 3.0,  # degree-day melt factor
+    "t_melt_c": 0.0,
+    "rain_melt_mm_per_mm_c": 0.0125,   # rain-on-snow: mm melt per mm rain per degC
+    "rho_new": 120.0,         # kg/m3, fresh snow
+    "rho_max": 420.0,         # kg/m3, settled pack ceiling
+    "settle_per_day": 0.03,   # fraction of the gap to rho_max closed per day
+    "snow_cm_per_mm": 0.7,    # new-snow depth per mm of snow water (Open-Meteo's own ratio)
+}
 
 # ---------------------------------------------------------------------------
 # Per-mountain base offset -- the valley-station under-read correction (opt-in)
