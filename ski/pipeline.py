@@ -282,16 +282,20 @@ def fetch_outlook_for_mountain(key: str):
     """
     m = get_mountain(key)
     lat, lon = m.get("latitude"), m.get("longitude")
+    # Mountains on our own snowpack model (config.SNOW_MODEL -- NZ/AU) also get
+    # their forecast sampled at the model elevation with the rain/snow split
+    # redone there (openmeteo.resplit_precip_phase).
+    sm = m.get("snow_model")
     if has_nws(m):
         outlook = nws.fetch_outlook(m["nws_office"], *m["nws_grid"])
         if lat is not None and lon is not None:
             try:
-                outlook.recent = openmeteo.fetch_recent_conditions(lat, lon)
+                outlook.recent = openmeteo.fetch_recent_conditions(lat, lon, snow_model=sm)
             except Exception:  # noqa: BLE001 -- crust signal is best-effort
                 pass
         return outlook
     if lat is not None and lon is not None:
-        return openmeteo.fetch_forecast_outlook(lat, lon)
+        return openmeteo.fetch_forecast_outlook(lat, lon, snow_model=sm)
     return None
 
 

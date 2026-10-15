@@ -177,7 +177,8 @@ _FORECAST_PARAMS = {
 
 def fetch_forecast_outlook(lat: float, lon: float, timeout: int = 30,
                            windows_hours=(24, 48, 72), past_days: int = 3,
-                           forecast_days: int = 11) -> Outlook:
+                           forecast_days: int = 11,
+                           snow_model: dict | None = None) -> Outlook:
     """Provider-neutral Outlook (incoming snow, thaw signals, current weather,
     trailing actuals for the recent-refreeze crust signal, and the 4-10 day
     medium-range band) anywhere on Earth. `past_days` pulls recent actuals in
@@ -187,25 +188,83 @@ def fetch_forecast_outlook(lat: float, lon: float, timeout: int = 30,
     band has a full MEDIUM_RANGE['horizon_hours'] (10 days) of hourly data to
     sum -- the near-term 24/48/72h windows only need 3, but fetching once at
     the wider horizon avoids a second call.
+
+    `snow_model` (a MOUNTAINS entry's `snow_model`): sample at its
+    `elevation_m` and re-split precipitation at that temperature -- see
+    resplit_precip_phase.
     """
-    params = {"latitude": lat, "longitude": lon, "forecast_days": forecast_days,
-              "past_days": past_days, **_FORECAST_PARAMS}
+    params = _forecast_params(lat, lon, forecast_days, past_days, snow_model)
     resp = http.get(FORECAST, params=params,
                         headers={"User-Agent": USER_AGENT}, timeout=timeout)
     resp.raise_for_status()
-    return parse_forecast_outlook(resp.json(), windows_hours=windows_hours)
+    payload = resplit_precip_phase(resp.json()) if snow_model is not None else resp.json()
+    return parse_forecast_outlook(payload, windows_hours=windows_hours)
 
 
-def fetch_recent_conditions(lat: float, lon: float, timeout: int = 30) -> Recent:
+def fetch_recent_conditions(lat: float, lon: float, timeout: int = 30,
+                            snow_model: dict | None = None) -> Recent:
     """Trailing-72h actuals only (rain, warmth, refreeze) -- the recent-crust
     signal for mountains whose forward forecast comes from another provider
-    (NWS), so every mountain gets it from one cheap global endpoint."""
-    params = {"latitude": lat, "longitude": lon, "forecast_days": 1,
-              "past_days": 3, **_FORECAST_PARAMS}
+    (NWS), so every mountain gets it from one cheap global endpoint.
+    `snow_model` as in fetch_forecast_outlook."""
+    params = _forecast_params(lat, lon, 1, 3, snow_model)
     resp = http.get(FORECAST, params=params,
                         headers={"User-Agent": USER_AGENT}, timeout=timeout)
     resp.raise_for_status()
-    return parse_recent(resp.json())
+    payload = resplit_precip_phase(resp.json()) if snow_model is not None else resp.json()
+    return parse_recent(payload)
+
+
+def _forecast_params(lat, lon, forecast_days, past_days, snow_model) -> dict:
+    params = {"latitude": lat, "longitude": lon, "forecast_days": forecast_days,
+              "past_days": past_days, **_FORECAST_PARAMS}
+    if snow_model is not None:
+        # precipitation is needed to re-split the phase ourselves.
+        params["hourly"] = params["hourly"] + ",precipitation"
+        if snow_model.get("elevation_m") is not None:
+            params["elevation"] = snow_model["elevation_m"]   # metres, like the archive
+    return params
+
+
+def resplit_precip_phase(payload: dict) -> dict:
+    """Replace the forecast's own hourly snowfall/rain split with one made at
+    the requested point's (elevation-downscaled) temperature.
+
+    WHY: Open-Meteo downscales temperature_2m to the requested elevation but
+    splits precipitation into rain/snow at the forecast model's GRID height. For
+    the narrow NZ/AU ranges that grid sits far below the ski terrain: Mt Hutt,
+    14 days to 2026-10-15, 81mm fell in hours at <=0.5C at 1928m and 40mm of it
+    was labelled rain (model freezing level 1390m). score.phase_adjusted_snow_in
+    only DERATES snow when warm, so snow the grid called rain was never
+    recovered, and that phantom rain inflated the thaw and crust penalties.
+
+    Same thresholds as the history model (config.SNOW_MODEL t_snow_c/t_rain_c,
+    linear between) and the same water->snow ratio (snow_cm_per_mm, i.e. 7:1).
+    Units match _FORECAST_PARAMS: precipitation/rain/snowfall in inches,
+    temperature_2m in F. Hours missing precip or temp keep the provider's split.
+    Returns a new payload; the input is not modified."""
+    from config import SNOW_MODEL
+    hourly = dict(payload.get("hourly", {}))
+    precip = hourly.get("precipitation")
+    temp = hourly.get("temperature_2m")
+    if precip is None or temp is None:
+        return payload
+    t_snow, t_rain = SNOW_MODEL["t_snow_c"], SNOW_MODEL["t_rain_c"]
+    ratio = SNOW_MODEL["snow_cm_per_mm"] * 10.0      # cm per mm == in snow per in water
+    old_snow = list(hourly.get("snowfall", [None] * len(precip)))
+    old_rain = list(hourly.get("rain", [None] * len(precip)))
+    snow, rain = [], []
+    for i, (p, t) in enumerate(zip(precip, temp)):
+        if p is None or t is None:
+            snow.append(old_snow[i] if i < len(old_snow) else None)
+            rain.append(old_rain[i] if i < len(old_rain) else None)
+            continue
+        c = (float(t) - 32.0) * 5.0 / 9.0
+        frac = 1.0 if c <= t_snow else 0.0 if c >= t_rain else (t_rain - c) / (t_rain - t_snow)
+        snow.append(float(p) * frac * ratio)
+        rain.append(float(p) * (1.0 - frac))
+    hourly["snowfall"], hourly["rain"] = snow, rain
+    return {**payload, "hourly": hourly}
 
 
 def _hourly_frame(payload: dict, now: pd.Timestamp | None):
