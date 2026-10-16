@@ -2594,6 +2594,25 @@ MEDIUM_RANGE = {
 GLOBAL_SCORE_WEIGHTS = {"base": 0.2168, "fresh": 0.1899, "season": 0.1085,
                         "forecast": 0.1200, "quality": 0.1448,
                         "vertical": 0.077, "difficulty": 0.077, "acreage": 0.066}
+# Seasonal forecast weight (built 2026-10-15, OFF until real-forecast evidence).
+# A storm matters more on thin early-season bases than on a settled midwinter
+# pack. Season-wide backtest, 115 dates Nov 15-Apr 15 over 2023-24..2025-26,
+# best forecast weight by month (good forecasts): Nov 0.16, Dec 0.12, Jan-Apr
+# 0.04-0.08. Two-step 0.12 -> 0.08 at New Year beat flat 0.12 for perfect (+0.005,
+# CI>0), noisy (+0.002) and no-information (+0.014) forecasts. Raising November
+# was NOT adopted (12 dates; a bad forecast costs most there).
+# Keyed on each mountain's OWN season_progress (its season_window), not the
+# calendar, so the SH switches mid-July: 0.25 is the median NH progress on Jan 1
+# (range 0.14-0.37). Applies to the live board's global/regional ranks only
+# (comparable.attach_*); trip board + backtests unaffected.
+# Enable after the Dec 15 forecast-check report agrees on real logged forecasts.
+FORECAST_WEIGHT_SCHEDULE = {
+    "enabled": False,
+    "early_weight": 0.12,          # == GLOBAL_SCORE_WEIGHTS["forecast"]
+    "late_weight": 0.08,
+    "late_from_progress": 0.25,
+}
+
 # The pre-2026-10-15 set, kept so the forecast-check report can keep comparing.
 GLOBAL_SCORE_WEIGHTS_PRE_2026_10 = {"base": 0.2033, "fresh": 0.1780, "season": 0.1017,
                                     "forecast": 0.1613, "quality": 0.1357,

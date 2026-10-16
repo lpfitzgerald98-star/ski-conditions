@@ -47,7 +47,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))              # sibling import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))       # project root
 
-from config import GLOBAL_SCORE_WEIGHTS, MOUNTAINS  # noqa: E402
+from config import FORECAST_WEIGHT_SCHEDULE, GLOBAL_SCORE_WEIGHTS, MOUNTAINS  # noqa: E402
+from ski.watercalendar import season_progress  # noqa: E402
 from ski import comparable, forecast_log, pipeline, quality_log  # noqa: E402
 from ski import score as score_mod  # noqa: E402
 from ski.backtest import obs_asof  # noqa: E402
@@ -127,6 +128,9 @@ VARIANTS = {
     "B@w=0.08":                (True, set(), 0.08, "A_no_forecast"),
     "B@w=0.1613":              (True, set(), 0.1613, "B_forecast"),
     "B@w=0.24":                (True, set(), 0.24, "A_no_forecast"),
+    # The seasonal schedule (config.FORECAST_WEIGHT_SCHEDULE, per-mountain
+    # season_progress) vs flat B -- the row that decides whether to enable it.
+    "B_schedule":              (True, set(), "schedule", "B_forecast"),
     "C_forecast_full_quality": (True, {"wind", "thaw", "warmth"}, None, "B_forecast"),
     "B+wind":                  (True, {"wind"}, None, "B_forecast"),
     "B+thaw":                  (True, {"thaw"}, None, "B_forecast"),
@@ -134,18 +138,10 @@ VARIANTS = {
 }
 
 
-TERRAIN = ("vertical", "difficulty", "acreage")
-
-
 def weights_with_forecast(w: float) -> dict[str, float]:
-    """GLOBAL_SCORE_WEIGHTS with forecast set to `w`, terrain held at its fixed
-    share (the 0.22 user decision, config.GLOBAL_SCORE_WEIGHTS), and the other
-    snow components rescaled proportionally so the total stays 1."""
-    g = GLOBAL_SCORE_WEIGHTS
-    terrain = {k: g[k] for k in TERRAIN}
-    snow = {k: v for k, v in g.items() if k not in TERRAIN and k != "forecast"}
-    scale = (1.0 - w - sum(terrain.values())) / sum(snow.values())
-    return {**{k: v * scale for k, v in snow.items()}, **terrain, "forecast": w}
+    """GLOBAL_SCORE_WEIGHTS with forecast set to `w` (terrain fixed, other snow
+    components rescaled) -- comparable.with_forecast_weight."""
+    return comparable.with_forecast_weight(GLOBAL_SCORE_WEIGHTS, w)
 
 
 def _logs(db_path):
@@ -188,6 +184,11 @@ def _quality(row_key: str, D: date, logged: dict | None, use: set[str]) -> float
     ).value
 
 
+def _season_progress(key: str, D: date) -> float | None:
+    w = MOUNTAINS[key].get("season_window")
+    return season_progress(D, w["start"], w["end"]) if w else None
+
+
 def _ok(v) -> bool:
     return v is not None and not (isinstance(v, float) and math.isnan(v))
 
@@ -214,9 +215,16 @@ def rank_value(db_path, since: date, until: date) -> dict:
                 if use_q:
                     r["abs_quality"] = _quality(key, D, q.get((key, D)), use_q)
                 rows.append(r)
-            weights = GLOBAL_SCORE_WEIGHTS if fc_w is None else weights_with_forecast(fc_w)
-            pred = {k: s for k, s in comparable.score_population(rows, weights).items()
-                    if s is not None}
+            row_weights = None
+            if fc_w == "schedule":
+                weights = GLOBAL_SCORE_WEIGHTS
+                sched = {**FORECAST_WEIGHT_SCHEDULE, "enabled": True}   # test it even while off
+                row_weights = lambda r, sched=sched, D=D: comparable.scheduled_weights(  # noqa: E731
+                    _season_progress(r["key"], D), GLOBAL_SCORE_WEIGHTS, sched)
+            else:
+                weights = GLOBAL_SCORE_WEIGHTS if fc_w is None else weights_with_forecast(fc_w)
+            pred = {k: s for k, s in comparable.score_population(
+                rows, weights, row_weights=row_weights).items() if s is not None}
             if len(set(pred) & set(act)) < MIN_POOL:
                 res = None
                 break
@@ -298,7 +306,9 @@ def to_markdown(skill: dict, value: dict, since: date, until: date) -> str:
     L += ["_A = today's backtest-validated board (no forecast). B = + logged 72h forecast "
           "at the current weight (0.12 since 2026-10-15); B@w = the same at forecast weight w "
           "(other snow components rescaled, terrain fixed); B@w=0.1613 is the old weight. "
-          "C = B + logged wind/thaw/warmth in `quality`; B+x adds one at a time. "
+          "B_schedule = the seasonal forecast weight (config.FORECAST_WEIGHT_SCHEDULE, "
+          "0.12 -> 0.08 at 25% through each mountain's season) vs flat B -- enable it on a "
+          "HELPS here. C = B + logged wind/thaw/warmth in `quality`; B+x adds one at a time. "
           f"Verdict needs >= {MIN_DATES} dates and a mean delta of at least {DECISION_MARGIN}._"]
     return "\n".join(L) + "\n"
 

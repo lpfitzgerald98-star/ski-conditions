@@ -237,3 +237,26 @@ No-forecast live backtest (Feb-14 x6): 0.6715 -> 0.6716, regions within +-0.012.
 The case for 0.12 is that it beats 0.1613 at every forecast-skill level tested, so
 it doesn't depend on how good real forecasts turn out to be. Re-check: the Dec 15
 forecast-check report's `B@w=0.1613` row (real logged forecasts, old vs new).
+
+## Seasonal forecast weight -- built, OFF (2026-10-15)
+
+`config.FORECAST_WEIGHT_SCHEDULE`: live-board forecast weight 0.12 until a mountain
+is 25% through its OWN `season_window`, 0.08 after (terrain fixed, other snow
+components rescaled). Hemisphere-correct: NH switches ~New Year, NZ/AU ~mid-July.
+
+Backtest: 115 dates (every 4 days, Nov 15-Apr 15, 2023-24..2025-26), same three
+forecast cases, vs flat 0.12:
+
+| forecast case | progress@0.25 | 95% CI | better/worse dates |
+|---|---|---|---|
+| perfect | +0.005 | [+0.002, +0.009] | 64/50 |
+| noisy   | +0.004 | [+0.002, +0.007] | 68/46 |
+| control | +0.014 | [+0.010, +0.017] | 86/29 |
+
+Switch point 0.20/0.25/0.30 within 0.001 of each other (not tuned on this data:
+0.25 is the median NH progress on Jan 1). Per season the noisy gain was -0.002 /
++0.006 / +0.009 -- not uniform, so it stays off until the forecast-check report's
+`B_schedule` row agrees on real logged forecasts (most informative from the Feb 15
+run, when most of the NH roster is past the switch). Raising November to 0.16
+(its per-month optimum) was not adopted: 12 dates, and a bad forecast costs most
+there. To enable: set `FORECAST_WEIGHT_SCHEDULE["enabled"] = True`.

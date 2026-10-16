@@ -30,7 +30,7 @@ either; both are flagged for a future pass, not this one.
 
 from __future__ import annotations
 
-from config import GLOBAL_SCORE_WEIGHTS
+from config import FORECAST_WEIGHT_SCHEDULE, GLOBAL_SCORE_WEIGHTS
 from ski.grading import percentile_rank
 
 # Which absolute input feeds which named weight in config.GLOBAL_SCORE_WEIGHTS.
@@ -112,8 +112,35 @@ def _blend(component_pcts: dict[str, float | None],
     return max(0.0, min(100.0, round(val, 9)))
 
 
+TERRAIN_COMPONENTS = ("vertical", "difficulty", "acreage")
+
+
+def with_forecast_weight(weights: dict[str, float], w: float) -> dict[str, float]:
+    """`weights` with forecast set to `w`, terrain held at its fixed share (the
+    0.22 decision, config.GLOBAL_SCORE_WEIGHTS) and the other snow components
+    rescaled proportionally so the total is unchanged."""
+    terrain = {k: weights[k] for k in TERRAIN_COMPONENTS if k in weights}
+    snow = {k: v for k, v in weights.items() if k not in terrain and k != "forecast"}
+    total = sum(weights.values())
+    scale = (total - w - sum(terrain.values())) / sum(snow.values())
+    return {**{k: v * scale for k, v in snow.items()}, **terrain, "forecast": w}
+
+
+def scheduled_weights(season_progress: float | None,
+                      weights: dict[str, float] = GLOBAL_SCORE_WEIGHTS,
+                      schedule: dict = FORECAST_WEIGHT_SCHEDULE) -> dict[str, float]:
+    """The live-board weights for a mountain at `season_progress` (0..1 through
+    its OWN season_window, so hemisphere-correct): forecast at `early_weight`
+    until `late_from_progress`, `late_weight` after. Unknown progress -> the
+    early (default) weight. See config.FORECAST_WEIGHT_SCHEDULE."""
+    late = season_progress is not None and season_progress >= schedule["late_from_progress"]
+    return with_forecast_weight(
+        weights, schedule["late_weight"] if late else schedule["early_weight"])
+
+
 def score_population(
     rows: list[dict], weights: dict[str, float] = GLOBAL_SCORE_WEIGHTS,
+    row_weights=None,
 ) -> dict[str, float | None]:
     """The comparable score for EXACTLY this population of mountains.
 
@@ -123,6 +150,11 @@ def score_population(
     True` rows are eligible (ranked, and counted in each other's pools);
     everyone else maps to None.
 
+    `row_weights` (row -> weights dict), when given, overrides `weights` per
+    mountain -- the component percentiles are still ranked across the whole
+    population, only each mountain's blend of them differs (the forecast-weight
+    schedule, via `live_row_weights`).
+
     Returns {row['key']: score_0_100_or_None}.
     """
     eligible = [r for r in rows if r.get("in_season") is True]
@@ -131,8 +163,18 @@ def score_population(
     for r in eligible:
         key = r["key"]
         pcts = {c: comp_pcts[c].get(key) for c in COMPONENTS}
-        out[key] = _blend(pcts, weights)
+        out[key] = _blend(pcts, row_weights(r) if row_weights else weights)
     return out
+
+
+def live_row_weights(weights: dict[str, float], schedule: dict = FORECAST_WEIGHT_SCHEDULE):
+    """The per-row weight function for the LIVE board: the forecast-weight
+    schedule when it's enabled, else None (every row uses `weights`). Only the
+    live board's attach_* use it; the trip board and the backtests call
+    score_population directly and are unaffected."""
+    if not schedule.get("enabled"):
+        return None
+    return lambda r: scheduled_weights(r.get("season_progress"), weights, schedule)
 
 
 def attach_global_score(
@@ -141,7 +183,7 @@ def attach_global_score(
 ) -> list[dict]:
     """Attach `field` (default `global_score`) to every row IN PLACE, ranked
     against the WHOLE `rows` population -- the leaderboard's default sort key."""
-    scores = score_population(rows, weights)
+    scores = score_population(rows, weights, row_weights=live_row_weights(weights))
     for r in rows:
         v = scores.get(r["key"])
         r[field] = None if v is None else round(v, 1)
@@ -161,7 +203,7 @@ def attach_regional_score(
     for r in rows:
         by_region.setdefault(r.get("region"), []).append(r)
     for pool in by_region.values():
-        scores = score_population(pool, weights)
+        scores = score_population(pool, weights, row_weights=live_row_weights(weights))
         for r in pool:
             v = scores.get(r["key"])
             r[field] = None if v is None else round(v, 1)
