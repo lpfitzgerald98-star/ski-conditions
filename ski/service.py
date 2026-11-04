@@ -139,6 +139,7 @@ def score_mountain(
         preseason_score=(card.get("preseason") or {}).get("score"),
         preseason_grade=(card.get("preseason") or {}).get("grade"),
         preseason_opens=(card.get("preseason") or {}).get("opens"),
+        season_over_since=(card.get("season_over") or {}).get("ended"),
         in_season=card.get("in_season"),
         cover_depth=card.get("cover_depth"),
         season_grade=season.get("grade"),
@@ -213,8 +214,7 @@ def rank_within_regions(rows: list[dict]) -> list[dict]:
 
     for r in rows:
         peers = by_region.get(r["region"], [])
-        if (r.get("score") is None or r.get("in_season") is not True
-                or r.get("preseason_grade")):
+        if r.get("score") is None or not comparable.rankable(r):
             r["region_score"] = r["region_grade"] = None
             continue
         # Rank against the OTHERS: drop one instance of this mountain's own score
@@ -264,7 +264,8 @@ def score_card(key: str, as_of: date, use_network: bool = True,
     # Same gate the roster path applies (rank_within_regions), for the same reason:
     # a rank needs positive evidence of cover, so off-season AND unknown are both
     # suppressed. Only `is True` ranks.
-    if card.get("in_season") is not True or card.get("preseason"):
+    if (card.get("in_season") is not True or card.get("preseason")
+            or card.get("season_over")):
         pct = grade = None
     card["region"] = {
         "name": region,

@@ -4,7 +4,7 @@
 
 import { badgeSVG, colorFor } from "./grades.js";
 import { isLeaf } from "./regions.js";
-import { state, visibleScores, displayValue } from "./state.js";
+import { state, visibleScores, displayValue, skiableNow } from "./state.js";
 import { prefersReducedMotion } from "./a11y.js";
 
 let listEl = null;
@@ -25,9 +25,9 @@ export function initSidebar(selectHandler) {
 // off-season, so without this a dead-station July mountain sorts above ones we know
 // are skiing.
 function tier(m) {
+  if (skiableNow(m)) return 0;
   if (m.preseason_grade) return 1;
-  if (m.in_season === true) return 0;
-  return m.in_season == null ? 2 : 3;
+  return m.in_season == null && !m.season_over_since ? 2 : 3;
 }
 
 function sortRows(rows) {
@@ -64,6 +64,7 @@ function sortRows(rows) {
 }
 
 function subtitle(m) {
+  if (m.season_over_since) return `season over${m.cover_depth != null ? ` · ${m.cover_depth}" base` : ""}`;
   if (m.preseason_grade) return `usually opens ~${m.preseason_opens} · ${m.cover_depth}" base`;
   if (m.in_season === false) return `off-season${m.cover_depth != null ? ` · ${m.cover_depth}" base` : ""}`;
   if (m.in_season == null) return "no recent station data";
@@ -75,7 +76,7 @@ function itemHTML(m, rank) {
   const d = displayValue(m);
   const st = d.status !== "live" ? "stale"
     : d.preseason ? "pre"
-    : m.in_season === false ? "off"
+    : m.in_season === false || m.season_over_since ? "off"
     : m.in_season == null ? "unknown" : "live";
   const face = st === "off" ? { l: "—", g: "—" }
     : st === "unknown" ? { l: "?", g: "?" }

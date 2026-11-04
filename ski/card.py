@@ -199,6 +199,11 @@ def scorecard(
                        "grade": card["preseason"].grade,
                        "opens": month_day_label(m["season_window"]["start"])}
                       if card.get("preseason") else None),
+        # The month and day this mountain's season ended (see config.POST_SEASON).
+        # Null during the season and around its start.
+        "season_over": ({"ended": month_day_label((card["season_ended"].month,
+                                                   card["season_ended"].day))}
+                        if card.get("season_ended") else None),
         # Explainable "how good is the surface" signal (Phase 0 SCAFFOLD): a
         # single named 0-100 number with its component breakdown, surfaced for
         # observation only -- weighted 0 in every consumer, so it governs no grade

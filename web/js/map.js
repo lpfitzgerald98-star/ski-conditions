@@ -12,7 +12,7 @@ import {
   CLUSTER_PX, CLUSTER_MAX_ZOOM, MARKER_SIZE, SELECT_ZOOM,
 } from "./config.js";
 import { badgeSVG, shapeFor, colorFor, naColor } from "./grades.js";
-import { state, visibleScores, displayValue, setSelected, emit } from "./state.js";
+import { state, visibleScores, displayValue, setSelected, emit, skiableNow } from "./state.js";
 import { leafSetOf } from "./regions.js";
 import { prefersReducedMotion } from "./a11y.js";
 
@@ -93,7 +93,7 @@ function drawCloud() {
   const peak = (dark ? 0.16 : 0.14) * alpha;
 
   for (const m of visibleScores()) {
-    if (m.in_season !== true || m.preseason_grade || m.latitude == null || !m.grade) continue;
+    if (!skiableNow(m) || m.latitude == null || !m.grade) continue;
     const col = colorFor(m.grade);
     if (!col) continue;
     const p = map.project([m.longitude, m.latitude]);
@@ -219,7 +219,7 @@ class FitAllControl {
 function markerState(row, d) {
   if (d.status !== "live") return "stale";
   if (d.preseason) return "pre";
-  if (row.in_season === false) return "off";
+  if (row.in_season === false || row.season_over_since) return "off";
   if (row.in_season == null) return "unknown";
   return "live";
 }
@@ -231,7 +231,8 @@ function markerFace(row, d, st) {
 }
 
 function ariaFor(row, d, st, face) {
-  const where = st === "off" ? "off-season"
+  const where = row.season_over_since ? "season over"
+    : st === "off" ? "off-season"
     : st === "pre" ? `not open yet, early-season snow grade ${face.grade}`
     : st === "unknown" ? "no recent data"
     : st === "stale" ? `${face.grade}, updating`
@@ -431,7 +432,7 @@ function makeClusterEl(g) {
   const size = Math.round(30 + Math.min(n, 24) * 0.8);
   el.style.width = el.style.height = `${size}px`;
   // A slice ring hints how many are in-season (skiable) vs not, without color-coding.
-  const skiable = g.members.filter(m => m.in_season === true && !m.preseason_grade).length;
+  const skiable = g.members.filter(skiableNow).length;
   el.style.setProperty("--skiable", (n ? skiable / n : 0).toFixed(3));
   el.innerHTML = `<span class="cluster-face"><span class="cnt">${n}</span></span>`;
   const regions = [...new Set(g.members.map(m => m.region))];
@@ -547,7 +548,7 @@ function showTooltip(row, d) {
   const st = markerState(row, d);
   const note = st === "stale" ? "<br><small>cached — updating…</small>"
     : st === "pre" ? `<br><small>not open yet · usually opens ~${row.preseason_opens}</small>`
-    : st === "off" ? `<br><small>off-season${row.cover_depth != null ? ` · ${row.cover_depth}" base` : ""}</small>`
+    : st === "off" ? `<br><small>${row.season_over_since ? "season over" : "off-season"}${row.cover_depth != null ? ` · ${row.cover_depth}" base` : ""}</small>`
     : st === "unknown" ? "<br><small>no recent station data</small>"
     : d.rel && row.region_score != null ? `<br><small>${row.region_score}th percentile in ${row.region}</small>` : "";
   const grade = st === "off" || st === "unknown" ? ""

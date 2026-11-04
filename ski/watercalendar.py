@@ -97,6 +97,25 @@ def days_from_season_start(as_of: date, start_md: tuple[int, int]) -> int:
     return min(((as_of - s).days for s in starts), key=abs)
 
 
+def season_ended_on(as_of: date, start_md: tuple[int, int], end_md: tuple[int, int],
+                    grace_days: int, lead_days: int,
+                    end_override: date | None = None) -> date | None:
+    """The date this mountain's season ended, or None if it isn't over as of `as_of`.
+
+    Over means past the end plus `grace_days`, and more than `lead_days` before the
+    next start. An override inside the current cycle replaces the end, with no grace.
+    """
+    years = range(as_of.year - 1, as_of.year + 2)
+    last_start = max(s for s in (date(y, *start_md) for y in years) if s <= as_of)
+    next_start = min(s for s in (date(y, *start_md) for y in years) if s > as_of)
+    end = min(e for e in (date(y, *end_md) for y in years) if e > last_start)
+    if end_override is not None and last_start <= end_override < next_start:
+        end, grace_days = end_override, 0
+    if (as_of - end).days <= grace_days or (next_start - as_of).days <= lead_days:
+        return None
+    return end
+
+
 def month_day_label(md: tuple[int, int]) -> str:
     """(12, 1) -> "Dec 1"."""
     return f"{date(2023, *md):%b} {md[1]}"

@@ -442,7 +442,7 @@ def _snapshot_rows(as_of: date, profile: str) -> list[dict]:
                                                 "base_grade", "base_depth", "fresh_7d",
                                                 "season_progress", "incoming_inches",
                                                 "preseason_score", "preseason_grade",
-                                                "preseason_opens",
+                                                "preseason_opens", "season_over_since",
                                                 "alert", "fetched_at", "cached_as_of")})
             row["status"] = "stale"
         else:
