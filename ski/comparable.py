@@ -157,7 +157,8 @@ def score_population(
 
     Returns {row['key']: score_0_100_or_None}.
     """
-    eligible = [r for r in rows if r.get("in_season") is True]
+    eligible = [r for r in rows
+                if r.get("in_season") is True and not r.get("preseason_grade")]
     comp_pcts = _component_percentiles(eligible)
     out: dict[str, float | None] = {r["key"]: None for r in rows}
     for r in eligible:

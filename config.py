@@ -2383,6 +2383,26 @@ OFF_SEASON = {
     "overall_cap": 12.0,
 }
 
+# Pre-season grade: "how much of a head start does this mountain have", shown instead
+# of a skiing grade for a mountain that has snow but can't be skied yet. Graded on an
+# early-season scale, so 4" reads as a modest start rather than the F it is against
+# midwinter skiing. A mountain with this grade gets no live rank.
+#
+# "Can't be skied yet" means before its hand-curated season_window start, however
+# deep the snow, or within `grace_days` after it while still under IN_SEASON_GATE (a
+# late-starting year). We have no lift-status feed, so a resort that opens ahead of
+# its window reads as not open until the window starts. Measured snow comes from the
+# same uncalibrated cover and fresh figures as the skiability headline.
+PRESEASON = {
+    "lead_days": 60,           # how long before the season start grading begins
+    "grace_days": 30,          # ...and how long after, while it's still unskiable
+    "min_snow_in": 2.0,        # base or 7-day snow below this is a dusting: no grade
+    "weights": {"base": 0.70, "fresh": 0.20, "forecast": 0.10},
+    "base_curve": [(0, 0), (3, 22), (6, 38), (12, 58), (24, 82), (36, 100)],
+    "fresh_curve": [(0, 0), (3, 30), (6, 55), (12, 80), (24, 100)],
+    "forecast_curve": [(0, 0), (3, 40), (6, 65), (12, 100)],
+}
+
 # ---------------------------------------------------------------------------
 # Staleness -- a live grade needs a station that is still reporting
 # ---------------------------------------------------------------------------

@@ -93,7 +93,7 @@ function drawCloud() {
   const peak = (dark ? 0.16 : 0.14) * alpha;
 
   for (const m of visibleScores()) {
-    if (m.in_season !== true || m.latitude == null || !m.grade) continue;
+    if (m.in_season !== true || m.preseason_grade || m.latitude == null || !m.grade) continue;
     const col = colorFor(m.grade);
     if (!col) continue;
     const p = map.project([m.longitude, m.latitude]);
@@ -213,10 +213,12 @@ class FitAllControl {
   onRemove() { this._c.remove(); }
 }
 
-// One marker's classification: stale (cached, awaiting live) / off (off-season) /
-// unknown (no cover evidence) / live. Off and unknown never show a colored letter.
+// One marker's classification: stale (cached, awaiting live) / pre (pre-season
+// grade) / off (off-season) / unknown (no cover evidence) / live. Off and unknown
+// never show a colored letter.
 function markerState(row, d) {
   if (d.status !== "live") return "stale";
+  if (d.preseason) return "pre";
   if (row.in_season === false) return "off";
   if (row.in_season == null) return "unknown";
   return "live";
@@ -230,6 +232,7 @@ function markerFace(row, d, st) {
 
 function ariaFor(row, d, st, face) {
   const where = st === "off" ? "off-season"
+    : st === "pre" ? `not open yet, early-season snow grade ${face.grade}`
     : st === "unknown" ? "no recent data"
     : st === "stale" ? `${face.grade}, updating`
     : `grade ${face.grade}`;
@@ -274,6 +277,8 @@ function paint(el, row, d, st, face) {
     el.dataset.shape = shape;
   }
   el.classList.toggle("is-stale", st === "stale");
+  el.classList.toggle("is-preseason", st === "pre");
+  el.style.setProperty("--grade-color", colorFor(face.grade));
   // The pulse should fire when an alert NEWLY appears -- first paint with
   // alert=true counts (that's "the alert appearing" from the user's view on
   // page load) -- but not on every later repaint while it's already showing,
@@ -426,7 +431,7 @@ function makeClusterEl(g) {
   const size = Math.round(30 + Math.min(n, 24) * 0.8);
   el.style.width = el.style.height = `${size}px`;
   // A slice ring hints how many are in-season (skiable) vs not, without color-coding.
-  const skiable = g.members.filter(m => m.in_season === true).length;
+  const skiable = g.members.filter(m => m.in_season === true && !m.preseason_grade).length;
   el.style.setProperty("--skiable", (n ? skiable / n : 0).toFixed(3));
   el.innerHTML = `<span class="cluster-face"><span class="cnt">${n}</span></span>`;
   const regions = [...new Set(g.members.map(m => m.region))];
@@ -541,10 +546,13 @@ function showTooltip(row, d) {
   if (!tooltipEl) return;
   const st = markerState(row, d);
   const note = st === "stale" ? "<br><small>cached — updating…</small>"
+    : st === "pre" ? `<br><small>not open yet · usually opens ~${row.preseason_opens}</small>`
     : st === "off" ? `<br><small>off-season${row.cover_depth != null ? ` · ${row.cover_depth}" base` : ""}</small>`
     : st === "unknown" ? "<br><small>no recent station data</small>"
     : d.rel && row.region_score != null ? `<br><small>${row.region_score}th percentile in ${row.region}</small>` : "";
-  const grade = st === "off" || st === "unknown" ? "" : `${d.grade}${d.rel ? " (in region)" : ""}`;
+  const grade = st === "off" || st === "unknown" ? ""
+    : st === "pre" ? `${d.grade} early-season snow · ${row.cover_depth}" base`
+    : `${d.grade}${d.rel ? " (in region)" : ""}`;
   tooltipEl.innerHTML = `<b>${row.name}</b>${grade ? "<br>" + grade : ""}${row.alert ? " · ⚠ storm" : ""}${note}`;
   const p = map.project([row.longitude, row.latitude]);
   tooltipEl.style.left = `${p.x}px`;

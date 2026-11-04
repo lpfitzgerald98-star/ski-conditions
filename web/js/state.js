@@ -79,7 +79,7 @@ function recomputeSelectionRanks() {
   const rows = visibleScores();
   const scored = rows.filter(r => r.score != null).map(r => r.score);
   rows.forEach(r => {
-    if (r.score == null || r.in_season !== true) return;
+    if (r.score == null || r.in_season !== true || r.preseason_grade) return;
     const others = scored.slice();
     others.splice(others.indexOf(r.score), 1);   // never in its own denominator
     if (!others.length) return;
@@ -93,6 +93,17 @@ function recomputeSelectionRanks() {
 // within-selection percentile for a parent region.
 export function displayValue(row) {
   const rel = state.region !== "All";
+  // Not open yet but has snow: the pre-season grade is the only number that means
+  // anything, in any region view. It's never a rank within the region.
+  if (row.preseason_grade) {
+    return {
+      rel: false,
+      value: row.preseason_score ?? null,
+      grade: row.preseason_grade,
+      status: row.status || "live",
+      preseason: true,
+    };
+  }
   let value, grade;
   if (!rel) {
     value = row.score; grade = row.grade;

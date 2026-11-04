@@ -24,7 +24,8 @@ from ski import forecast_log, quality_log
 from ski import score as score_mod
 from ski.db import (get_station_meta, max_observation_date, read_observations,
                     set_station_meta, upsert_observations)
-from ski.watercalendar import month_day_to_dowy, season_progress, water_year
+from ski.watercalendar import (days_from_season_start, month_day_to_dowy,
+                               season_progress, water_year)
 from ski.grading import (
     BaseGrade,
     MonthGrade,
@@ -480,6 +481,12 @@ def mountain_scorecard(
         eff_depth, decayed_powder, decayed_powder, forecast_72h_in,
         weather_q=weather_q, refreeze=effective_crust, thaw=thaw,
         recent_density_factor=density_factor, wind_scour=wind_scour)
+    # Early-season head start (config.PRESEASON): replaces the skiing grade and the
+    # live rank. A quiet station gets none rather than a grade off old snow.
+    preseason = None
+    if window and not stale and score_mod.in_preseason_window(
+            days_from_season_start(as_of or date.today(), window["start"]), in_season):
+        preseason = score_mod.preseason_score(eff_depth, fresh, forecast_72h_in)
     # Explainable "how good is the surface" signal (Phase 0 scaffold): one named,
     # debuggable number built from the surface-quality signals already computed
     # here. crust/thaw are only meaningful with a forecast, so they read None
@@ -534,6 +541,7 @@ def mountain_scorecard(
         "fresh_7d": fresh, "cover_factor": cover, "effective_depth": eff_depth,
         "in_season": in_season, "data_age_days": age, "stale": stale,
         "skiability": skiability, "snow_quality": snow_quality,
+        "preseason": preseason,
         # New-snow water fraction (Phase 2), for the card + commentary. None when
         # there was no meaningful recent snow to judge.
         "new_snow_density": density_ratio,

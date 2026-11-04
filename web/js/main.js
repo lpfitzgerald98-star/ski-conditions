@@ -166,6 +166,7 @@ function asTripRow(base, { trip_score, historical_baseline, current_score,
     region_score: trip_score, region_grade: g,
     global_score: trip_score, regional_score: trip_score,
     in_season: in_season ?? (trip_score != null),
+    preseason_score: null, preseason_grade: null, preseason_opens: null,   // today's snow, not the trip date's
     status: "live",
     alert: leadDays <= TRIP_ALERT_HORIZON_DAYS ? !!base.alert : false,
     trip_score, historical_baseline, current_score,
@@ -311,6 +312,7 @@ function buildLegend() {
   el.innerHTML =
     `<div class="legend-grades" aria-label="Grade scale">` +
     LEGEND_GRADES.map(g => `<span class="lg">${badgeSVG(g, g, { size: 18 })}${g}</span>`).join("") +
+    `<span class="lg is-preseason" style="--grade-color:${colorFor("B")}">${badgeSVG("B", "B", { size: 18 })}hollow: not open yet</span>` +
     `<span class="lg">${badgeSVG("—", "—", { size: 18 })}off-season / no data</span></div>`;
 }
 
@@ -337,6 +339,8 @@ function buildMapGuide() {
           (circle = A, triangle = F). A <b>gold ring</b> means a storm's inbound.</p>
         <p><b>Crowded pins</b> gather into a numbered bubble — click or zoom to split them.
           Tap any mountain to fly in and open its scorecard.</p>
+        <p>A <b>hollow pin</b> is a mountain that isn't open yet. Its letter grades the snow so far
+          on an early-season scale, not the skiing, and it stays out of the rankings until opening.</p>
         <p>A <b>grade</b> is mostly today's snow — depth, fresh, quality — plus a real say for the
           mountain's own <b>size and steepness</b>.</p>
       </div>

@@ -245,6 +245,17 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 .marker:focus-visible { outline: none; }
 .marker:focus-visible svg .ring { opacity: 1; }
 .marker.is-stale { opacity: .45; }
+/* Filled = you can ski it. Hollow = not open yet: the same letter scale and shape,
+   but it grades the snow so far, so it's marked as different everywhere it appears
+   (pin, list row, card and legend). */
+.is-preseason .badge-fill {
+  fill: var(--panel-2); stroke: var(--grade-color); stroke-width: 2.5;
+}
+.is-preseason svg text { fill: var(--text); }
+.list-group {
+  list-style: none; padding: 10px 12px 4px; font-size: 11px; font-weight: 600;
+  letter-spacing: .03em; color: var(--text-muted);
+}
 .marker.is-alert svg .alert-ring { opacity: 1; }
 /* When an alert first appears (map.js toggles .alert-pulsing on the false->true
    transition only, not on every repaint), the ring bursts outward 4 times over

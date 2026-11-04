@@ -114,6 +114,19 @@ function duo(card, key) {
     <div class="of">absolute conditions${q != null && q < 0.85 ? ` · quality ×${q}` : ""}</div>
   </div>`;
 
+  // Not open yet but has snow: nobody can ski it, so "skiing right now" doesn't
+  // apply. Show the head start with the inches behind it, not a score out of 100
+  // that would read like a skiing grade.
+  const pre = card.preseason;
+  const preTile = pre ? `<div class="side hero">
+    <div class="lbl">Early-season snow</div>
+    <div class="score-row">
+      <span class="badge is-preseason" style="--grade-color:${colorFor(pre.grade)}">${badgeSVG(pre.grade, pre.grade, { size: 46 })}</span>
+      <span class="num">${card.cover_depth}"<span> base</span></span>
+    </div>
+    <div class="of">not a skiing grade</div>
+  </div>` : "";
+
   const relTile = scoreTile("Historical context",
     "vs this mountain's own normal", rel.grade,
     rel.score != null ? Math.round(rel.score) : null, " / 100");
@@ -123,7 +136,9 @@ function duo(card, key) {
   // own emphasized banner rather than sitting in the small pill row. Worldwide
   // rank stays as a secondary pill underneath; off-season falls back to a muted
   // pill when there's no regional rank to show instead.
-  const regionRank = gRegion
+  const regionRank = pre
+    ? `<div class="rank-hero muted"><b>Not open yet.</b> Usually opens around ${pre.opens}, though some resorts open early, so check with the resort.</div>`
+    : gRegion
     ? `<div class="rank-hero"><b>#${gRegion.rank}</b> of ${gRegion.total} in ${escapeHTML(r.name)} to ski right now</div>`
     : card.in_season === false
       ? `<div class="rank-hero muted">off-season</div>`
@@ -133,7 +148,7 @@ function duo(card, key) {
   if (gGlobal) bits.push(`<span class="rank"><b>#${gGlobal.rank}</b> of ${gGlobal.total} worldwide</span>`);
   const ranks = bits.length ? `<div class="ranks">${bits.join("")}</div>` : "";
 
-  return `<div class="duo">${skiTile}${relTile}</div>${regionRank}${ranks}`;
+  return `<div class="duo">${preTile || skiTile}${relTile}</div>${regionRank}${ranks}`;
 }
 
 function gradeCell(k, g) {
@@ -183,7 +198,7 @@ function _pctRank(v, others) {
 function rankBreakdown(key) {
   const row = state.byKey[key];
   if (!row) return "";
-  const pool = state.scores.filter(m => m.in_season === true && m.key !== key);
+  const pool = state.scores.filter(m => m.in_season === true && !m.preseason_grade && m.key !== key);
   if (pool.length < 3) return "";
   const groups = RANK_DRIVERS.map(([title, sub, defs]) => {
     const bars = defs.map(([label, field]) => {
@@ -296,7 +311,9 @@ function render(card, key) {
   el.querySelector(".close").addEventListener("click", close);
   focusSilently(el.querySelector(".close"));
   const skg = (card.skiability || {}).grade;
-  announce(`${card.mountain.name}. Skiing right now ${skg || "not scored"}.`);
+  announce(card.preseason
+    ? `${card.mountain.name}. Not open yet, early-season snow ${card.preseason.grade}.`
+    : `${card.mountain.name}. Skiing right now ${skg || "not scored"}.`);
 }
 
 // A compact card for a historical date, built from the roster row (no per-date
@@ -319,12 +336,17 @@ function renderHistCard(row, key) {
     <h2 id="detail-title">${escapeHTML(row.name)}</h2>
     <div class="sub">as of ${state.histDate} · historical (snow-based)</div>
     <div class="duo">
-      <div class="side hero">
+      ${row.preseason_grade ? `<div class="side hero">
+        <div class="lbl">Early-season snow</div>
+        <div class="score-row"><span class="badge is-preseason" style="--grade-color:${colorFor(row.preseason_grade)}">${badgeSVG(row.preseason_grade, row.preseason_grade, { size: 34 })}</span>
+          <span class="num">${row.cover_depth}"<span> base</span></span></div>
+        <div class="of">not open yet · usually opens ~${row.preseason_opens}</div>
+      </div>` : `<div class="side hero">
         <div class="lbl">Skiing that day</div>
         <div class="score-row"><span class="badge">${badgeSVG(row.grade || "—", row.grade || "—", { size: 34 })}</span>
           <span class="num">${row.score != null ? Math.round(row.score) : "—"}<span> / 100</span></span></div>
         <div class="of">absolute conditions</div>
-      </div>
+      </div>`}
       ${rTile}
     </div>
     <div class="grid2">
