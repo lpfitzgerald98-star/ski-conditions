@@ -32,6 +32,7 @@ from config import (
     OVERALL_GRADE_THRESHOLDS,
     POWDER_SCORE_CURVE,
     PRECIP_PHASE,
+    PRESEASON,
     STALE_UNKNOWN_COVER_CAP,
     REFREEZE,
     SCORE_BLEND_EXPONENT,
@@ -168,6 +169,44 @@ def apply_off_season_cap(value: float | None, in_season: bool | None) -> float |
     if value is None or in_season is not False:
         return value
     return min(value, OFF_SEASON["overall_cap"])
+
+
+@dataclass
+class PreseasonGrade:
+    value: float              # 0-100 on the early-season scale (config.PRESEASON)
+    grade: str                # letter from SKIABILITY_GRADE_THRESHOLDS
+
+
+def in_preseason_window(days_from_start: int, in_season: bool | None) -> bool:
+    """Is this mountain not open yet? See config.PRESEASON."""
+    if -PRESEASON["lead_days"] <= days_from_start < 0:
+        return True
+    return 0 <= days_from_start <= PRESEASON["grace_days"] and in_season is not True
+
+
+def preseason_score(cover_depth_inches: float | None,
+                    fresh_7d_inches: float | None,
+                    forecast_72h_in: float | None) -> PreseasonGrade | None:
+    """Grade the snow a mountain has before its season, or None if it has too little.
+
+    Fresh and forecast drop out when unknown and the weights renormalize over what's
+    left. An unknown base gives no grade: a storm total alone can't say what's on the
+    ground, and the base carries most of the weight.
+    """
+    if cover_depth_inches is None:
+        return None
+    if max(cover_depth_inches, fresh_7d_inches or 0.0) < PRESEASON["min_snow_in"]:
+        return None
+    weights = PRESEASON["weights"]
+    parts = [(weights["base"], piecewise(cover_depth_inches, PRESEASON["base_curve"]))]
+    if fresh_7d_inches is not None:
+        parts.append((weights["fresh"],
+                      piecewise(max(0.0, fresh_7d_inches), PRESEASON["fresh_curve"])))
+    if forecast_72h_in is not None:
+        parts.append((weights["forecast"],
+                      piecewise(max(0.0, forecast_72h_in), PRESEASON["forecast_curve"])))
+    value = sum(w * v for w, v in parts) / sum(w for w, _ in parts)
+    return PreseasonGrade(value, letter_grade(value, SKIABILITY_GRADE_THRESHOLDS))
 
 
 def apply_stale_cap(value: float | None, stale: bool,

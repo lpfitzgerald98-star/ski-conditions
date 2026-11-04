@@ -89,3 +89,14 @@ def season_progress(as_of: date, start_md: tuple[int, int], end_md: tuple[int, i
     if as_of >= end:
         return 1.0
     return (as_of - start).days / (end - start).days
+
+
+def days_from_season_start(as_of: date, start_md: tuple[int, int]) -> int:
+    """Signed days from the nearest season start: negative before it, positive after."""
+    starts = (date(as_of.year + y, *start_md) for y in (-1, 0, 1))
+    return min(((as_of - s).days for s in starts), key=abs)
+
+
+def month_day_label(md: tuple[int, int]) -> str:
+    """(12, 1) -> "Dec 1"."""
+    return f"{date(2023, *md):%b} {md[1]}"

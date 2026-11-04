@@ -20,6 +20,7 @@ from config import (DEFAULT_PROFILE, MOUNTAINS, OVERALL_GRADE_THRESHOLDS,
 from ski import pipeline, stability
 from ski.grading import letter_grade
 from ski.score import apply_off_season_cap, apply_stale_cap, overall_score
+from ski.watercalendar import month_day_label
 
 
 def _round(v, ndigits: int = 1):
@@ -192,6 +193,12 @@ def scorecard(
             # null off pillow. Distinguishes an old buried crust from a fresh thaw.
             "buried_crust": _round(card.get("buried_crust_index"), 2),
         },
+        # Early-season head start (see config.PRESEASON). Null once the mountain can
+        # be skied, or with only a dusting on the ground.
+        "preseason": ({"score": _round(card["preseason"].value),
+                       "grade": card["preseason"].grade,
+                       "opens": month_day_label(m["season_window"]["start"])}
+                      if card.get("preseason") else None),
         # Explainable "how good is the surface" signal (Phase 0 SCAFFOLD): a
         # single named 0-100 number with its component breakdown, surfaced for
         # observation only -- weighted 0 in every consumer, so it governs no grade

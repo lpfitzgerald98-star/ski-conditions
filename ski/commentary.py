@@ -91,7 +91,7 @@ def facts_from_card(card: dict) -> dict | None:
     and the card's headline tile. Explaining the self-relative `overall`
     grade instead would let the prose's tone disagree with the number the
     reader is looking at."""
-    if card.get("in_season") is not True:
+    if card.get("in_season") is not True or card.get("preseason"):
         return None
     skiability = card.get("skiability") or {}
     if skiability.get("score") is None:

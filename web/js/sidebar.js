@@ -2,7 +2,7 @@
 // Keyboard-navigable as a roving-tabindex listbox (Up/Down/Home/End move, Enter or
 // Space selects), which is what makes the whole roster reachable without a mouse.
 
-import { badgeSVG } from "./grades.js";
+import { badgeSVG, colorFor } from "./grades.js";
 import { isLeaf } from "./regions.js";
 import { state, visibleScores, displayValue } from "./state.js";
 import { prefersReducedMotion } from "./a11y.js";
@@ -20,10 +20,15 @@ export function initSidebar(selectHandler) {
   listEl.addEventListener("keydown", onKeydown);
 }
 
-// Tier before score: an in-season mountain outranks an unknown one, which outranks
-// a known-bare one. A percentile can't see that a whole region is off-season, so
-// without this a dead-station July mountain sorts above ones we know are skiing.
-function tier(m) { return m.in_season === true ? 0 : (m.in_season == null ? 1 : 2); }
+// Tier before score: an in-season mountain outranks one that isn't open yet, then an
+// unknown one, then a known-bare one. A percentile can't see that a whole region is
+// off-season, so without this a dead-station July mountain sorts above ones we know
+// are skiing.
+function tier(m) {
+  if (m.preseason_grade) return 1;
+  if (m.in_season === true) return 0;
+  return m.in_season == null ? 2 : 3;
+}
 
 function sortRows(rows) {
   const disp = {};
@@ -59,6 +64,7 @@ function sortRows(rows) {
 }
 
 function subtitle(m) {
+  if (m.preseason_grade) return `usually opens ~${m.preseason_opens} · ${m.cover_depth}" base`;
   if (m.in_season === false) return `off-season${m.cover_depth != null ? ` · ${m.cover_depth}" base` : ""}`;
   if (m.in_season == null) return "no recent station data";
   return (m.season_grade ? "season " + m.season_grade : "no data")
@@ -68,15 +74,18 @@ function subtitle(m) {
 function itemHTML(m, rank) {
   const d = displayValue(m);
   const st = d.status !== "live" ? "stale"
+    : d.preseason ? "pre"
     : m.in_season === false ? "off"
     : m.in_season == null ? "unknown" : "live";
   const face = st === "off" ? { l: "—", g: "—" }
     : st === "unknown" ? { l: "?", g: "?" }
     : d.grade === "—" || d.value == null ? { l: "·", g: "—" }
     : { l: d.grade, g: d.grade };
-  const dim = st === "off" || st === "unknown" ? " is-dim" : "";
-  const rankLabel = d.value == null ? "–" : rank;
-  return `<li class="item${dim}" role="option" data-key="${m.key}" tabindex="-1"
+  const dim = st === "off" || st === "unknown" ? " is-dim"
+    : st === "pre" ? " is-preseason" : "";
+  const rankLabel = d.value == null || tier(m) !== 0 ? "–" : rank;
+  const gradeColor = d.preseason ? ` style="--grade-color:${colorFor(d.grade)}"` : "";
+  return `<li class="item${dim}"${gradeColor} role="option" data-key="${m.key}" tabindex="-1"
       aria-selected="${state.selected === m.key}">
     <span class="rank" aria-hidden="true">${rankLabel}</span>
     <span class="badge">${badgeSVG(face.l, face.g, { size: 30 })}</span>
@@ -111,7 +120,12 @@ export function renderList() {
 
   listEl.setAttribute("role", "listbox");
   listEl.innerHTML = rows.length
-    ? rows.map((m, i) => itemHTML(m, i + 1)).join("")
+    ? rows.map((m, i) => {
+        const startsGroup = tier(m) === 1 && (i === 0 || tier(rows[i - 1]) !== 1);
+        return (startsGroup
+          ? `<li class="list-group" role="presentation">Not open yet · snow so far</li>` : "")
+          + itemHTML(m, i + 1);
+      }).join("")
     : `<li class="placeholder">No mountains ${state.inViewKeys ? "in view — zoom out or drag the map" : "in this region"}.</li>`;
 
   // Roving tabindex: exactly one item is Tab-reachable; arrows move focus among them.
