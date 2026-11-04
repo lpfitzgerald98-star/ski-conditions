@@ -16,7 +16,6 @@ import { setRegionTree, optionsList } from "./regions.js";
 import * as sse from "./sse.js";
 import {
   initMap, renderMarkers, updateMarker, markSelected as mapMarkSelected, flyToMountain, fitAll, fitRegion,
-  setCloudVisible, cloudVisible, redrawCloud,
 } from "./map.js";
 import {
   initSidebar, renderList, markSelected as listMarkSelected, revealSelected,
@@ -319,26 +318,19 @@ function buildLegend() {
 
 // -- "Reading the map" guide (bottom-left map overlay) ---------------------
 // The old "Why these rankings" panel, rewritten to be lively and to talk about
-// the map you're actually looking at: the grade cloud, the pins, the clusters,
+// the map you're actually looking at: the pins, the clusters,
 // and what a grade is really made of. Collapsible so it never fights the map.
 function buildMapGuide() {
   const el = $("map-guide");
   if (!el) return;   // overlay is optional; never let its absence abort boot
-  const rampBar =
-    `<span class="bar" style="background:linear-gradient(90deg,${colorFor("F")},${colorFor("C")},${colorFor("A")})"></span>`;
-
   el.innerHTML = `
-    <label class="mg-cloud" title="Tint each range by its grade — green good, red poor">
-      <input type="checkbox" id="cloud-toggle">
-      <span>Grade cloud</span>
-      <span class="mg-ramp" aria-hidden="true">${rampBar}</span>
-    </label>
     <details>
       <summary><span class="mg-spark" aria-hidden="true">✨</span>Reading the map<span class="mg-chev" aria-hidden="true">›</span></summary>
       <div class="mg-body">
         <p><b>Pins</b> are mountains — each wears today's grade as a <b>color <em>and</em> a shape</b>
           (circle = A, triangle = F). A <b>gold ring</b> means a storm's inbound.</p>
         <p><b>Crowded pins</b> gather into a numbered bubble — click or zoom to split them.
+          Its <b>ring</b> shows the average grade, and how far it goes round shows how many have one.
           Tap any mountain to fly in and open its scorecard.</p>
         <p>A <b>hollow pin</b> is a mountain that isn't open yet. Its letter grades the snow so far
           on an early-season scale, not the skiing, and it stays out of the rankings until opening.
@@ -347,10 +339,6 @@ function buildMapGuide() {
           mountain's own <b>size and steepness</b>.</p>
       </div>
     </details>`;
-
-  const cb = $("cloud-toggle");
-  cb.checked = cloudVisible();
-  cb.addEventListener("change", () => setCloudVisible(cb.checked));
 }
 
 // -- theme -----------------------------------------------------------------
@@ -364,7 +352,6 @@ function initTheme() {
     document.documentElement.setAttribute("data-theme", now);
     localStorage.setItem("ski-theme", now);
     syncThemeButton();
-    redrawCloud();   // cloud blend/opacity differ by theme
   });
 }
 function syncThemeButton() {

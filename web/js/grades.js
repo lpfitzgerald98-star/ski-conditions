@@ -121,3 +121,7 @@ export function badgeSVG(label, grade, { size = MARKER_SIZE, alert = false } = {
 
 // The letters worth showing in the legend (anchor grades; the full 11 crowd it).
 export const LEGEND_GRADES = ["A+", "A", "B", "C", "D", "F"];
+
+// Every letter, best first. Lets grades be averaged by their place on the scale,
+// so a skiing grade and an early-season grade can share one summary.
+export const GRADE_ORDER = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F"];
