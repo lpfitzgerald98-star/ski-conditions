@@ -1,6 +1,6 @@
 // Bump this string any time index.html, css, or js changes.
 // Without a bump, installed instances keep serving the OLD cached shell.
-const CACHE_VERSION = "gladegrade-v2";
+const CACHE_VERSION = "gladegrade-v3";
 
 const SHELL_ASSETS = [
   "./",

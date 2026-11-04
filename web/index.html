@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0b1220">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -31,6 +31,10 @@
 
 <div id="app">
   <aside id="sidebar" aria-label="Controls and leaderboard">
+    <!-- On a phone these two wrappers become the filters panel and the draggable
+         leaderboard sheet. On desktop they're display:contents, so the sidebar lays
+         out their children directly. -->
+    <div id="filters-panel" class="filters-panel">
     <header class="app-header">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">❄</span>
@@ -39,10 +43,16 @@
           <p id="tagline" class="tagline">Loading roster…</p>
         </div>
       </div>
-      <button id="theme-toggle" class="icon-btn" type="button"
-              aria-label="Switch to light theme" title="Toggle light / dark">
-        <span aria-hidden="true">◐</span>
-      </button>
+      <div class="header-actions">
+        <button id="theme-toggle" class="icon-btn" type="button"
+                aria-label="Switch to light theme" title="Toggle light / dark">
+          <span aria-hidden="true">◐</span>
+        </button>
+        <button id="filters-close" class="icon-btn filters-close" type="button"
+                aria-label="Close filters">
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
     </header>
 
     <form class="controls" aria-label="Scoring options" onsubmit="return false">
@@ -72,7 +82,10 @@
     </form>
 
     <div class="legend" id="legend" aria-label="Grade legend"></div>
+    </div>
 
+    <div id="sheet" class="sheet">
+    <button id="sheet-grip" class="sheet-grip" type="button" aria-label="Resize leaderboard"></button>
     <div class="list-head">
       <h2 id="list-title">Leaderboard</h2>
       <p id="rank-note" class="rank-note"></p>
@@ -81,10 +94,16 @@
         aria-label="Mountains ranked by score" aria-describedby="rank-note">
       <li class="placeholder">Loading…</li>
     </ol>
+    </div>
   </aside>
 
   <main id="main" aria-label="Map">
     <div id="map"></div>
+    <button id="filters-toggle" class="filters-toggle" type="button"
+            aria-expanded="false" aria-controls="filters-panel">
+      <span class="brand-mark" aria-hidden="true">❄</span> Filters
+    </button>
+    <div id="filters-backdrop" class="filters-backdrop" hidden></div>
     <div id="map-tooltip" class="map-tooltip" hidden></div>
     <!-- Bottom-left "how to read the map" guide (populated by main.buildMapGuide):
          the eloquent explainer. -->
@@ -97,7 +116,10 @@
 
 <!-- Detail card: a modal-less dialog that slides in over the map. -->
 <section id="detail" class="detail" role="dialog" aria-labelledby="detail-title"
-         aria-modal="false" hidden></section>
+         aria-modal="false" hidden>
+  <button id="detail-grip" class="sheet-grip" type="button" aria-label="Resize details"></button>
+  <div id="detail-body"></div>
+</section>
 
 <!-- Screen-reader announcements for stream / selection changes. Visually hidden,
      polite so it never interrupts. -->
