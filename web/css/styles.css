@@ -54,10 +54,6 @@ button { font-family: inherit; }
 /* Recolor the basemap tiles to match the theme (dark tint in dark mode, none in
    light). Only the tile canvas is filtered; DOM markers/controls sit above it. */
 #map .maplibregl-canvas { filter: var(--map-filter, none); transition: filter var(--dur) var(--ease); }
-/* Grade cloud: a 2D canvas inside the canvas-container (a sibling of the WebGL
-   tile canvas, so the dark-mode invert filter above never touches it). Sits over
-   the tiles, under the DOM markers, and ignores the pointer. */
-.grade-cloud { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
 
 /* ---- "Reading the map" guide (bottom-left map overlay) ------------------- */
 .map-guide {
@@ -66,22 +62,13 @@ button { font-family: inherit; }
   font-size: 12px; color: var(--text-muted);
   display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2);
 }
-/* Panel look shared by the standalone cloud toggle and the collapsible guide. */
-.map-guide > .mg-cloud, .map-guide > details {
+/* Panel look for the collapsible guide. */
+.map-guide > details {
   background: color-mix(in srgb, var(--panel) 86%, transparent);
   border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: var(--shadow-pop); backdrop-filter: blur(9px);
   overflow: hidden;
 }
-/* Standalone live toggle -- lives OUTSIDE the dropdown so one click tints the map. */
-.map-guide > .mg-cloud {
-  display: flex; align-items: center; gap: 8px; cursor: pointer;
-  padding: 8px 12px; color: var(--text); font-weight: 600; font-size: 12.5px;
-  width: auto;
-}
-.map-guide > .mg-cloud:hover { background: var(--bg-elev); }
-.map-guide > .mg-cloud input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
-.map-guide > .mg-cloud .mg-ramp { width: 46px; }
 .map-guide > details > summary {
   display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
   padding: 10px 12px; font-weight: 600; color: var(--text); font-size: 12.5px;
@@ -96,8 +83,6 @@ button { font-family: inherit; }
 .mg-body p { margin: 0; }
 .mg-body b { color: var(--text); font-weight: 600; }
 .mg-body em { font-style: normal; color: var(--accent); }
-.mg-ramp { display: inline-flex; }
-.mg-ramp .bar { flex: 1; height: 8px; border-radius: 4px; }
 
 /* ---- Header ------------------------------------------------------------- */
 .app-header {
@@ -272,8 +257,9 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
 }
 
 /* Cluster bubble: a focusable count badge that zooms to its members. The ring is
-   a conic slice showing the in-season share (--skiable) without color-coding.
-   The button itself only carries position; the face (background/ring/count)
+   a conic slice in the average grade's color (--ring), as long as the share of
+   mountains with a grade (--graded). The button itself only carries position; the
+   face (background/ring/count)
    is a separate child so hover scale can't fight MapLibre's position transform. */
 .cluster-marker {
   cursor: pointer; border: 0; padding: 0; display: grid; place-items: center;
@@ -286,7 +272,7 @@ select:hover, input[type="date"]:hover { border-color: var(--accent); }
   background:
     radial-gradient(circle at center,
       color-mix(in srgb, var(--accent) 26%, var(--panel)) 0 62%, transparent 63%),
-    conic-gradient(var(--accent) calc(var(--skiable, 0) * 360deg),
+    conic-gradient(var(--ring, var(--accent)) calc(var(--graded, 0) * 360deg),
       color-mix(in srgb, var(--text-faint) 55%, transparent) 0);
   box-shadow: var(--shadow-pop);
   transition: transform var(--dur) var(--ease);
