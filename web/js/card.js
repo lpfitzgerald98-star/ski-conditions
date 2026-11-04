@@ -6,21 +6,34 @@ import { loadCard, loadTripPattern } from "./api.js";
 import { colorFor, badgeSVG, naColor, letterFor } from "./grades.js";
 import { state, skiableNow } from "./state.js";
 import { announce, focusSilently } from "./a11y.js";
+import { makeSheet, safeInsets } from "./sheet.js";
 
-let el = null;
+let panel = null;         // the card itself: shown, hidden and resized
+let el = null;            // its contents, replaced on each render
+let sheet = null;
 let lastFocus = null;      // element to restore focus to on close
 let reqToken = 0;          // guards against a slow load overwriting a newer one
 
 export function initCard() {
-  el = document.getElementById("detail");
+  panel = document.getElementById("detail");
+  el = document.getElementById("detail-body");
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && !el.hidden) close();
+    if (e.key === "Escape" && !panel.hidden) close();
+  });
+  // On a phone the card opens partway, so the pin stays in view above it.
+  sheet = makeSheet(panel, [document.getElementById("detail-grip")], {
+    snapHeights: () => {
+      const vh = window.innerHeight;
+      return [Math.round(vh * 0.55), vh - safeInsets().top - 12];
+    },
+    onClose: close,
   });
 }
 
 export async function openCard(key, { network = false } = {}) {
   lastFocus = document.activeElement;
-  el.hidden = false;
+  panel.hidden = false;
+  sheet.snapTo(0);
   const row = state.byKey[key];
   const token = ++reqToken;
   // Future (trip) and historical dates both render a compact card straight from the
@@ -46,8 +59,8 @@ export async function openCard(key, { network = false } = {}) {
 }
 
 export function close() {
-  if (!el || el.hidden) return;
-  el.hidden = true;
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
   el.dataset.key = "";
   state.selected = null;
   document.querySelectorAll('.item[aria-selected="true"]')

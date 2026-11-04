@@ -15,12 +15,13 @@ import { announce } from "./a11y.js";
 import { setRegionTree, optionsList } from "./regions.js";
 import * as sse from "./sse.js";
 import {
-  initMap, renderMarkers, updateMarker, markSelected as mapMarkSelected, flyToMountain, fitAll, fitRegion,
+  initMap, renderMarkers, updateMarker, markSelected as mapMarkSelected, flyToMountain, fitAll, fitDensest, fitRegion,
 } from "./map.js";
 import {
   initSidebar, renderList, markSelected as listMarkSelected, revealSelected,
 } from "./sidebar.js";
 import { initCard, openCard, close as closeCard } from "./card.js";
+import { isPhone, makeSheet, safeInsets } from "./sheet.js";
 
 const $ = id => document.getElementById(id);
 let renderListQueued = false;
@@ -33,7 +34,7 @@ let histIndex = null;   // retrospective-history manifest (static mode)
 function frameOnce() {
   if (framedOnce || !state.scores.length) return;
   framedOnce = true;
-  fitAll();
+  if (isPhone()) fitDensest(); else fitAll();
 }
 
 // -- selection -------------------------------------------------------------
@@ -58,6 +59,39 @@ function viewAll() {
   renderList();
   updateTagline();
   fitAll();
+}
+
+// -- phone layout ----------------------------------------------------------
+const LIST_PEEK_PX = 122;   // the grip, the list heading and one mountain
+
+function initLeaderboardSheet() {
+  makeSheet($("sheet"), [$("sheet-grip"), document.querySelector(".list-head")], {
+    snapHeights: () => {
+      const insets = safeInsets();
+      const vh = window.innerHeight;
+      return [LIST_PEEK_PX + insets.bottom, Math.round(vh * 0.5), vh - insets.top - 64];
+    },
+    // Lets the map's overlays and framing stay clear of the resting sheet.
+    onResize: () => document.documentElement.style.setProperty(
+      "--sheet-peek", `${LIST_PEEK_PX + safeInsets().bottom}px`),
+  });
+}
+
+function setFiltersOpen(open) {
+  $("filters-panel").classList.toggle("is-open", open);
+  $("filters-backdrop").hidden = !open;
+  $("filters-toggle").setAttribute("aria-expanded", String(open));
+  (open ? $("filters-close") : $("filters-toggle")).focus({ preventScroll: true });
+}
+const closeFiltersOnPhone = () => {
+  if (isPhone() && $("filters-panel").classList.contains("is-open")) setFiltersOpen(false);
+};
+
+function initFiltersPanel() {
+  $("filters-toggle").addEventListener("click", () => setFiltersOpen(true));
+  $("filters-close").addEventListener("click", () => setFiltersOpen(false));
+  $("filters-backdrop").addEventListener("click", () => setFiltersOpen(false));
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeFiltersOnPhone(); });
 }
 
 // -- date picker: today vs past (history) vs future (trip) -----------------
@@ -403,8 +437,9 @@ function wireControls() {
     updateTagline();
     if (state.region !== "All") fitRegion();
     announce(`Showing ${state.region === "All" ? "all regions" : state.region}.`);
+    closeFiltersOnPhone();
   });
-  $("fitall").addEventListener("click", viewAll);
+  $("fitall").addEventListener("click", () => { viewAll(); closeFiltersOnPhone(); });
   $("asof").addEventListener("change", onAsOfChange);
 
   // The map detected a zoom/pan out past the active region (map.js
@@ -458,6 +493,8 @@ async function boot() {
   initTheme();
   initCard();
   initSidebar(select);
+  initLeaderboardSheet();
+  initFiltersPanel();
   initMap(select, viewAll);
   if (LIVE) wireStream();
 

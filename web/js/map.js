@@ -12,6 +12,7 @@ import {
   CLUSTER_PX, CLUSTER_MAX_ZOOM, MARKER_SIZE, SELECT_ZOOM,
 } from "./config.js";
 import { badgeSVG, shapeFor, colorFor, naColor, GRADE_ORDER } from "./grades.js";
+import { isPhone, safeInsets } from "./sheet.js";
 import { state, visibleScores, displayValue, setSelected, emit, skiableNow } from "./state.js";
 import { leafSetOf } from "./regions.js";
 import { prefersReducedMotion } from "./a11y.js";
@@ -29,6 +30,7 @@ let cardFrameZoom = null;   // the zoom at which the open card's mountain was fr
 
 // Early-season snow counts for less than real skiing in a cluster's average.
 const NOT_OPEN_WEIGHT = 0.6;
+const DENSEST_SPAN_LNG = 70;   // degrees of longitude a phone opens on
 
 // A mountain's place on the grade scale and how much it counts, or null for one with
 // no grade to report. Uses the letter its pin shows, so a cluster's ring can't
@@ -320,9 +322,13 @@ function maybeAutoClearRegion(e) {
 // narrows to, so the leaderboard shows only what you're looking at.
 function viewportKeys() {
   const b = map.getBounds();
+  // On a phone, pins hidden behind the resting leaderboard sheet don't count as in view.
+  const peek = isPhone() ? sheetPeekPx() : 0;
+  const lowestLat = peek
+    ? map.unproject([0, map.getContainer().clientHeight - peek]).lat : -90;
   const keys = new Set();
   visibleScores().forEach(m => {
-    if (m.latitude != null && m.longitude != null &&
+    if (m.latitude != null && m.longitude != null && m.latitude >= lowestLat &&
         b.contains([m.longitude, m.latitude])) {
       keys.add(m.key);
     }
@@ -405,7 +411,8 @@ export function markSelected(key) {
   });
 }
 
-// Center on a mountain, offsetting left so the pin clears the detail card.
+// Center on a mountain, offsetting so the pin clears the detail card: to the left
+// on desktop, or up above the card's sheet on a phone.
 export function flyToMountain(key) {
   const row = state.byKey[key];
   if (!row || row.latitude == null) return;
@@ -413,7 +420,8 @@ export function flyToMountain(key) {
   // Baseline the card-dismiss zoom to where we're framing this mountain, so
   // zooming back out from here (not the earlier world view) is what closes it.
   cardFrameZoom = zoom;
-  const opts = { center: [row.longitude, row.latitude], zoom, offset: [-150, 0] };
+  const offset = isPhone() ? [0, -Math.round(window.innerHeight * 0.275)] : [-150, 0];
+  const opts = { center: [row.longitude, row.latitude], zoom, offset };
   if (prefersReducedMotion()) map.jumpTo(opts, PROGRAMMATIC);
   else map.easeTo({ ...opts, duration: 600 }, PROGRAMMATIC);
 }
@@ -434,8 +442,29 @@ export function fitAll() {
   const pts = state.scores.filter(m => m.latitude != null);
   fitBounds(pts);
 }
+// A phone is too narrow to show the world usefully, so it opens on the stretch of
+// longitude holding the most mountains. "View all" still frames everyone.
+export function fitDensest() {
+  const pts = state.scores.filter(m => m.latitude != null)
+    .sort((a, b) => a.longitude - b.longitude);
+  let best = [];
+  pts.forEach((p, i) => {
+    let j = i;
+    while (j + 1 < pts.length && pts[j + 1].longitude - p.longitude <= DENSEST_SPAN_LNG) j++;
+    if (j - i + 1 > best.length) best = pts.slice(i, j + 1);
+  });
+  fitBounds(best);
+}
 export function fitRegion() {
   fitBounds(visibleScores().filter(m => m.latitude != null));
+}
+function sheetPeekPx() {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sheet-peek")) || 0;
+}
+
+// Keep framed pins clear of the filters button on top and the leaderboard below.
+function phoneFitPadding() {
+  return { top: 80 + safeInsets().top, bottom: sheetPeekPx() + 24, left: 30, right: 30 };
 }
 function fitBounds(pts, maxZoom = 8) {
   if (!pts.length) return;
@@ -469,7 +498,7 @@ function fitBounds(pts, maxZoom = 8) {
     };
     map.on("zoom", restoreFloorWhenSafe);
     map.fitBounds(b, {
-      padding: { top: 50, bottom: 50, left: 50, right: wide ? 90 : 50 },
+      padding: wide ? { top: 50, bottom: 50, left: 50, right: 90 } : phoneFitPadding(),
       maxZoom, duration: prefersReducedMotion() ? 0 : 700,
     }, PROGRAMMATIC);
   };

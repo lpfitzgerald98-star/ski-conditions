@@ -16,6 +16,11 @@ html, body {
 h1, h2, h3, p { margin: 0; }
 button { font-family: inherit; }
 
+/* Wrappers that only mean something on a phone (see the Responsive section). */
+.filters-panel, .sheet { display: contents; }
+.sheet-grip, .filters-toggle, .filters-backdrop, .icon-btn.filters-close { display: none; }
+.header-actions { display: flex; gap: var(--sp-2); }
+
 /* ---- Accessibility utilities -------------------------------------------- */
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -449,8 +454,91 @@ details.forecast[open] .chev { transform: rotate(180deg); }
 .note.commentary { border-left-color: var(--accent); color: var(--text); }
 
 /* ---- Responsive --------------------------------------------------------- */
+/* The phone layout: a full-screen map, with the leaderboard and the mountain card as
+   sheets that drag up from the bottom (js/sheet.js sets their heights), and the
+   controls in a panel behind a button. */
 @media (max-width: 780px) {
-  #app { grid-template-columns: 1fr; grid-template-rows: minmax(0, 46%) minmax(0, 54%); }
-  #sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
-  .detail { width: auto; left: var(--sp-3); }
+  html, body { overflow: hidden; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+
+  #app { display: block; position: relative; overflow: hidden; }
+  #sidebar { display: contents; }
+  #main { position: absolute; inset: 0; }
+
+  /* Sheets */
+  .sheet, .detail {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--line); border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: var(--shadow-card);
+    transition: height var(--dur) var(--ease);
+  }
+  .sheet.is-dragging, .detail.is-dragging { transition: none; }
+  .sheet { z-index: 6; height: var(--sheet-peek, 122px); padding-bottom: env(safe-area-inset-bottom); }
+  .sheet-grip {
+    display: grid; place-items: center; flex: 0 0 auto;
+    width: 100%; height: 24px; padding: 0;
+    background: none; border: 0; cursor: grab; touch-action: none;
+  }
+  .sheet-grip::before {
+    content: ""; width: 40px; height: 5px; border-radius: 3px; background: var(--text-faint);
+  }
+  .list-head { padding-top: 0; touch-action: none; cursor: grab; flex: 0 0 auto; }
+  .list { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .sheet[data-snap="0"] .list { overflow: hidden; }
+
+  /* The mountain card */
+  .detail {
+    width: auto; max-height: none; height: 55dvh; padding: 0; overflow: hidden;
+    animation: sheet-up var(--dur) var(--ease);
+  }
+  .detail[hidden] { display: none; }
+  #detail-body {
+    flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 0 var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom));
+  }
+  .detail .close { width: 44px; height: 44px; font-size: 17px; }
+  .detail h2 { padding-right: 52px; }
+
+  /* The filters button and panel */
+  .filters-toggle {
+    display: flex; align-items: center; gap: var(--sp-2);
+    position: absolute; z-index: 4;
+    top: calc(env(safe-area-inset-top) + var(--sp-3)); left: var(--sp-3);
+    min-height: 44px; padding: 0 var(--sp-4);
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 999px; box-shadow: var(--shadow-pop);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .filters-backdrop:not([hidden]) {
+    display: block; position: absolute; inset: 0; z-index: 20; background: rgba(0, 0, 0, .45);
+  }
+  .filters-panel { display: none; }
+  .filters-panel.is-open {
+    display: block; position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+    max-height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding-top: env(safe-area-inset-top);
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg); box-shadow: var(--shadow-card);
+  }
+  .icon-btn.filters-close { display: grid; }
+  .tagline { max-width: 200px; }
+  .icon-btn { width: 44px; height: 44px; }
+  /* Safari zooms the whole page when a focused field's text is under 16px. */
+  select, input[type="date"] { font-size: 16px; min-height: 44px; }
+  .btn { min-height: 44px; font-size: 14px; }
+
+  /* The map's own controls and overlays */
+  .marker::after, .cluster-marker::after {
+    content: ""; position: absolute; inset: -8px;   /* a 44px tap area around each pin */
+  }
+  .map-tooltip { display: none !important; }   /* a tap opens the mountain instead */
+  .maplibregl-ctrl-top-right { top: env(safe-area-inset-top); }
+  .maplibregl-ctrl-group button { width: 44px; height: 44px; }
+  .maplibregl-ctrl-group button span { line-height: 44px !important; }
+  .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { bottom: var(--sheet-peek, 122px); }
+  .map-guide { bottom: calc(var(--sheet-peek, 122px) + 36px); }   /* clear of the map credit */
+  .map-guide > details[open] { max-height: 60dvh; overflow-y: auto; }
+  .toast { bottom: calc(var(--sheet-peek, 122px) + 56px); }
 }
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
