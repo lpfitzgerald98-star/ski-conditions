@@ -80,6 +80,7 @@ def _row_from_card(key: str, card: dict, profile: str) -> dict:
         preseason_score=(card.get("preseason") or {}).get("score"),
         preseason_grade=(card.get("preseason") or {}).get("grade"),
         preseason_opens=(card.get("preseason") or {}).get("opens"),
+        season_over_since=(card.get("season_over") or {}).get("ended"),
         in_season=card.get("in_season"),
         cover_depth=card.get("cover_depth"),
         season_grade=season.get("grade"),

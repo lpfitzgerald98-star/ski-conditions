@@ -4,7 +4,7 @@
 
 import { loadCard, loadTripPattern } from "./api.js";
 import { colorFor, badgeSVG, naColor, letterFor } from "./grades.js";
-import { state } from "./state.js";
+import { state, skiableNow } from "./state.js";
 import { announce, focusSilently } from "./a11y.js";
 
 let el = null;
@@ -127,6 +127,17 @@ function duo(card, key) {
     <div class="of">not a skiing grade</div>
   </div>` : "";
 
+  // Season over: lingering snow isn't skiing, so no letter, just what's left on the hill.
+  const over = card.season_over;
+  const overTile = over ? `<div class="side hero">
+    <div class="lbl">Season over</div>
+    <div class="score-row">
+      <span class="badge">${badgeSVG("—", "—", { size: 46 })}</span>
+      <span class="num">${card.cover_depth != null ? `${card.cover_depth}"<span> left</span>` : "—"}</span>
+    </div>
+    <div class="of">not a skiing grade</div>
+  </div>` : "";
+
   const relTile = scoreTile("Historical context",
     "vs this mountain's own normal", rel.grade,
     rel.score != null ? Math.round(rel.score) : null, " / 100");
@@ -136,7 +147,9 @@ function duo(card, key) {
   // own emphasized banner rather than sitting in the small pill row. Worldwide
   // rank stays as a secondary pill underneath; off-season falls back to a muted
   // pill when there's no regional rank to show instead.
-  const regionRank = pre
+  const regionRank = over
+    ? `<div class="rank-hero muted"><b>Season over.</b> Usually ends around ${over.ended}, though some resorts run later, so check with the resort.</div>`
+    : pre
     ? `<div class="rank-hero muted"><b>Not open yet.</b> Usually opens around ${pre.opens}, though some resorts open early, so check with the resort.</div>`
     : gRegion
     ? `<div class="rank-hero"><b>#${gRegion.rank}</b> of ${gRegion.total} in ${escapeHTML(r.name)} to ski right now</div>`
@@ -148,7 +161,7 @@ function duo(card, key) {
   if (gGlobal) bits.push(`<span class="rank"><b>#${gGlobal.rank}</b> of ${gGlobal.total} worldwide</span>`);
   const ranks = bits.length ? `<div class="ranks">${bits.join("")}</div>` : "";
 
-  return `<div class="duo">${preTile || skiTile}${relTile}</div>${regionRank}${ranks}`;
+  return `<div class="duo">${overTile || preTile || skiTile}${relTile}</div>${regionRank}${ranks}`;
 }
 
 function gradeCell(k, g) {
@@ -198,7 +211,7 @@ function _pctRank(v, others) {
 function rankBreakdown(key) {
   const row = state.byKey[key];
   if (!row) return "";
-  const pool = state.scores.filter(m => m.in_season === true && !m.preseason_grade && m.key !== key);
+  const pool = state.scores.filter(m => skiableNow(m) && m.key !== key);
   if (pool.length < 3) return "";
   const groups = RANK_DRIVERS.map(([title, sub, defs]) => {
     const bars = defs.map(([label, field]) => {
@@ -311,7 +324,9 @@ function render(card, key) {
   el.querySelector(".close").addEventListener("click", close);
   focusSilently(el.querySelector(".close"));
   const skg = (card.skiability || {}).grade;
-  announce(card.preseason
+  announce(card.season_over
+    ? `${card.mountain.name}. Season over.`
+    : card.preseason
     ? `${card.mountain.name}. Not open yet, early-season snow ${card.preseason.grade}.`
     : `${card.mountain.name}. Skiing right now ${skg || "not scored"}.`);
 }
@@ -336,7 +351,12 @@ function renderHistCard(row, key) {
     <h2 id="detail-title">${escapeHTML(row.name)}</h2>
     <div class="sub">as of ${state.histDate} · historical (snow-based)</div>
     <div class="duo">
-      ${row.preseason_grade ? `<div class="side hero">
+      ${row.season_over_since ? `<div class="side hero">
+        <div class="lbl">Season over</div>
+        <div class="score-row"><span class="badge">${badgeSVG("—", "—", { size: 34 })}</span>
+          <span class="num">${row.cover_depth != null ? `${row.cover_depth}"<span> left</span>` : "—"}</span></div>
+        <div class="of">usually ends ~${row.season_over_since}</div>
+      </div>` : row.preseason_grade ? `<div class="side hero">
         <div class="lbl">Early-season snow</div>
         <div class="score-row"><span class="badge is-preseason" style="--grade-color:${colorFor(row.preseason_grade)}">${badgeSVG(row.preseason_grade, row.preseason_grade, { size: 34 })}</span>
           <span class="num">${row.cover_depth}"<span> base</span></span></div>

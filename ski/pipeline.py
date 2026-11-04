@@ -17,7 +17,8 @@ from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, CRUST_MEMORY,
                     DB_PATH, DEFAULT_BASE_OFFSET_IN, DENSITY_MIN_SNOW_IN,
                     FORECAST_HORIZON_WEIGHTS,
                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
-                    INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, POWDER_DECAY,
+                    INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, NO_FIXED_SEASON,
+                    POST_SEASON, POWDER_DECAY, PRESEASON, SEASON_END_OVERRIDES,
                     SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, SITING_CALIBRATION,
                     SNOW_MODEL, SNOWFALL_NORMALS, STORM_THRESHOLDS, TERRAIN_STATS)
 from ski import forecast_log, quality_log
@@ -25,7 +26,7 @@ from ski import score as score_mod
 from ski.db import (get_station_meta, max_observation_date, read_observations,
                     set_station_meta, upsert_observations)
 from ski.watercalendar import (days_from_season_start, month_day_to_dowy,
-                               season_progress, water_year)
+                               season_ended_on, season_progress, water_year)
 from ski.grading import (
     BaseGrade,
     MonthGrade,
@@ -484,9 +485,18 @@ def mountain_scorecard(
     # Early-season head start (config.PRESEASON): replaces the skiing grade and the
     # live rank. A quiet station gets none rather than a grade off old snow.
     preseason = None
-    if window and not stale and score_mod.in_preseason_window(
-            days_from_season_start(as_of or date.today(), window["start"]), in_season):
-        preseason = score_mod.preseason_score(eff_depth, fresh, forecast_72h_in)
+    season_ended = None
+    if window and key not in NO_FIXED_SEASON:
+        when = as_of or date.today()
+        if not stale and score_mod.in_preseason_window(
+                days_from_season_start(when, window["start"]), in_season):
+            preseason = score_mod.preseason_score(eff_depth, fresh, forecast_72h_in)
+        # Snow can outlast the lifts, so past its season a mountain has no skiing
+        # grade or rank however deep the base (config.POST_SEASON).
+        override = SEASON_END_OVERRIDES.get(key)
+        season_ended = season_ended_on(when, window["start"], window["end"],
+                                       POST_SEASON["grace_days"], PRESEASON["lead_days"],
+                                       date(*override) if override else None)
     # Explainable "how good is the surface" signal (Phase 0 scaffold): one named,
     # debuggable number built from the surface-quality signals already computed
     # here. crust/thaw are only meaningful with a forecast, so they read None
@@ -541,7 +551,7 @@ def mountain_scorecard(
         "fresh_7d": fresh, "cover_factor": cover, "effective_depth": eff_depth,
         "in_season": in_season, "data_age_days": age, "stale": stale,
         "skiability": skiability, "snow_quality": snow_quality,
-        "preseason": preseason,
+        "preseason": preseason, "season_ended": season_ended,
         # New-snow water fraction (Phase 2), for the card + commentary. None when
         # there was no meaningful recent snow to judge.
         "new_snow_density": density_ratio,

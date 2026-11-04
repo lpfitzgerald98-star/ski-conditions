@@ -16,7 +16,8 @@ from build_snapshot import _row_from_card  # noqa: E402
 from config import GLOBAL_SCORE_WEIGHTS  # noqa: E402
 from ski.comparable import score_population  # noqa: E402
 from ski.score import in_preseason_window, preseason_score  # noqa: E402
-from ski.watercalendar import days_from_season_start, month_day_label  # noqa: E402
+from ski.watercalendar import (days_from_season_start, month_day_label,  # noqa: E402
+                               season_ended_on)
 
 
 def test_before_the_season_start_is_not_open_however_deep_the_snow():
@@ -40,6 +41,55 @@ def test_preseason_mountain_is_left_out_of_the_live_ranking():
     scores = score_population([row("open_a", 40.0, None), row("open_b", 20.0, None),
                                row("not_open", 90.0, "A")], GLOBAL_SCORE_WEIGHTS)
     assert scores["not_open"] is None
+    assert scores["open_a"] > scores["open_b"]
+
+
+NH = ((12, 1), (4, 20))
+SH = ((6, 15), (10, 1))
+
+
+def _ended(as_of, window, override=None):
+    return season_ended_on(as_of, *window, grace_days=14, lead_days=60, end_override=override)
+
+
+def test_season_is_not_over_during_the_season():
+    assert _ended(date(2027, 2, 1), NH) is None
+    assert _ended(date(2026, 8, 1), SH) is None
+
+
+def test_grace_days_allow_a_late_close():
+    assert _ended(date(2026, 10, 15), SH) is None
+    assert _ended(date(2026, 10, 16), SH) == date(2026, 10, 1)
+
+
+def test_season_over_ends_when_the_lead_window_starts():
+    assert _ended(date(2027, 4, 15), SH) == date(2026, 10, 1)
+    assert _ended(date(2027, 4, 16), SH) is None
+
+
+def test_northern_season_over_spans_the_summer():
+    assert _ended(date(2026, 7, 1), NH) == date(2026, 4, 20)
+    assert _ended(date(2026, 11, 4), NH) is None
+
+
+def test_override_extends_the_season_and_takes_no_grace():
+    late = date(2026, 11, 8)
+    assert _ended(date(2026, 11, 4), SH, late) is None
+    assert _ended(date(2026, 11, 8), SH, late) is None
+    assert _ended(date(2026, 11, 9), SH, late) == late
+
+
+def test_override_from_last_season_does_not_touch_the_next_one():
+    assert _ended(date(2027, 10, 10), SH, date(2026, 11, 8)) is None
+    assert _ended(date(2027, 10, 16), SH, date(2026, 11, 8)) == date(2027, 10, 1)
+
+
+def test_season_over_mountain_is_left_out_of_the_live_ranking():
+    def row(key, base, over):
+        return {"key": key, "in_season": True, "abs_base_in": base, "season_over_since": over}
+    scores = score_population([row("open_a", 40.0, None), row("open_b", 20.0, None),
+                               row("closed", 134.0, "Oct 1")], GLOBAL_SCORE_WEIGHTS)
+    assert scores["closed"] is None
     assert scores["open_a"] > scores["open_b"]
 
 

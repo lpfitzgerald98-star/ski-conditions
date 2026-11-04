@@ -79,13 +79,18 @@ function recomputeSelectionRanks() {
   const rows = visibleScores();
   const scored = rows.filter(r => r.score != null).map(r => r.score);
   rows.forEach(r => {
-    if (r.score == null || r.in_season !== true || r.preseason_grade) return;
+    if (r.score == null || !skiableNow(r)) return;
     const others = scored.slice();
     others.splice(others.indexOf(r.score), 1);   // never in its own denominator
     if (!others.length) return;
     const pct = Math.round(others.filter(s => s < r.score).length / others.length * 100);
     selRanks.set(r.key, { value: pct, grade: letterFor(pct) });
   });
+}
+
+// Can you ski here now? Mirrors comparable.rankable: skiable snow, within its season.
+export function skiableNow(row) {
+  return row.in_season === true && !row.preseason_grade && !row.season_over_since;
 }
 
 // Which number a row shows, given the region selection: absolute overall

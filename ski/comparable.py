@@ -138,6 +138,12 @@ def scheduled_weights(season_progress: float | None,
         weights, schedule["late_weight"] if late else schedule["early_weight"])
 
 
+def rankable(row: dict) -> bool:
+    """Can you ski here now? Needs skiable snow, within the mountain's season."""
+    return (row.get("in_season") is True and not row.get("preseason_grade")
+            and not row.get("season_over_since"))
+
+
 def score_population(
     rows: list[dict], weights: dict[str, float] = GLOBAL_SCORE_WEIGHTS,
     row_weights=None,
@@ -157,8 +163,7 @@ def score_population(
 
     Returns {row['key']: score_0_100_or_None}.
     """
-    eligible = [r for r in rows
-                if r.get("in_season") is True and not r.get("preseason_grade")]
+    eligible = [r for r in rows if rankable(r)]
     comp_pcts = _component_percentiles(eligible)
     out: dict[str, float | None] = {r["key"]: None for r in rows}
     for r in eligible:

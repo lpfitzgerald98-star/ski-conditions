@@ -2403,6 +2403,23 @@ PRESEASON = {
     "forecast_curve": [(0, 0), (3, 40), (6, 65), (12, 100)],
 }
 
+# Season over: past a mountain's season_window end, snow can linger long after the
+# lifts stop (Portillo led the Nov 4 2026 board with 134" and its season finished).
+# Such a mountain keeps its numbers but has no skiing grade or live rank, until
+# PRESEASON's lead window starts. in_season itself stays purely about snow.
+#
+# `grace_days` allows for ordinary late closes, since a good spring runs past the
+# usual date. A longer announced extension goes in SEASON_END_OVERRIDES, which is
+# exact and takes no grace: without one, Valle Nevado's historic 2026 season would
+# have been closed weeks early, which is why this rule needs the override at all.
+POST_SEASON = {"grace_days": 14}
+SEASON_END_OVERRIDES = {
+    "valle_nevado": (2026, 11, 8),   # announced extension, reported Oct 2026
+}
+# Glacier skiing with no fixed season (Zermatt's summer operation varies year to
+# year), so snow alone decides: exempt from both PRESEASON and POST_SEASON.
+NO_FIXED_SEASON = {"zermatt"}
+
 # ---------------------------------------------------------------------------
 # Staleness -- a live grade needs a station that is still reporting
 # ---------------------------------------------------------------------------
