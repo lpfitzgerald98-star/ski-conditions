@@ -502,9 +502,13 @@ MOUNTAINS = {
     },
     "june_mountain": {
         "name": "June Mountain, CA",
+        # Re-homed from CDEC "Gem Pass" (GEM: no SWE since 2023, no depth since
+        # Dec 2024) to "Dana Meadows" (9760ft, ~21km): SWE + depth daily since
+        # 2005, 119/121 winter days in 2025-26. Kept off Mammoth's MHP so June
+        # stays its own data point.
         "data_source": "cdec",
-        "cdec_station": "GEM",
-        "station_name": "Gem Pass",
+        "cdec_station": "DAN",
+        "station_name": "Dana Meadows",
         "nws_office": "REV",
         "nws_grid": (56, 23),
         "latitude": 37.7669,
@@ -571,9 +575,13 @@ MOUNTAINS = {
     },
     "red_mountain": {
         "name": "Red Mountain, BC",
+        # Re-homed from ECCC "Castlegar A" (1141455, silent since Mar 2026; its
+        # successor 1141460 reports no snow) to "Nelson Rixen Creek" (760m, 36
+        # winters): it records 1.5-2.5x the snow Castlegar's valley floor did.
+        # BC ASWS Farron (2B02AP, 1230m) fits better once it has ~5 winters (2029).
         "data_source": "eccc",
-        "eccc_station": "1141455",
-        "station_name": "Castlegar A",
+        "eccc_station": "114EMDM",
+        "station_name": "Nelson Rixen Creek",
         "latitude": 49.101,
         "longitude": -117.82,
         "verified": False,
@@ -593,9 +601,11 @@ MOUNTAINS = {
     },
     "mont_tremblant": {
         "name": "Mont Tremblant, QC",
-        "data_source": "eccc",
-        "eccc_station": "7033939",
-        "station_name": "La Macaza",
+        # ECCC "La Macaza" (7033939) went silent Aug 2024. The ECCC "Mont-Tremblant"
+        # station (7045335, 15km) is current but has only 2 winters, under the
+        # siting calibration's 5-year minimum, so Open-Meteo reanalysis until ~2029.
+        "data_source": "openmeteo",
+        "openmeteo_id": "46.21,-74.585",
         "latitude": 46.21,
         "longitude": -74.585,
         "verified": False,
@@ -615,9 +625,13 @@ MOUNTAINS = {
     },
     "blue_mountain": {
         "name": "Blue Mountain, ON",
+        # Re-homed from ECCC "Markdale" (6114979, silent since Feb 2025) to
+        # "Coldwater Warminster" (285m, 47 winters, 121/121 days in 2025-26). It is
+        # ~63km east but in the same Georgian Bay snowbelt; unverified against the
+        # resort, hence verified False.
         "data_source": "eccc",
-        "eccc_station": "6114979",
-        "station_name": "Markdale",
+        "eccc_station": "6111769",
+        "station_name": "Coldwater Warminster",
         "latitude": 44.501,
         "longitude": -80.311,
         "verified": False,
