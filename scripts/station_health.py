@@ -8,8 +8,13 @@ snow readings stop, so "last row" says nothing. This reports, per mountain:
 Blue Mountain, Mont Tremblant and June Mountain were silent for 1-2 years before
 anyone noticed; this is the check that would have caught them.
 
-Run:  python scripts/station_health.py [--as-of YYYY-MM-DD] [--all]
-Exit code 1 when any mountain is flagged, so CI can surface it.
+A mountain moved off a dead station keeps the old one under `watch_station` in
+config. `--watch` asks each watched station directly (network) whether it has
+sent snow readings again, so the move can be reconsidered.
+
+Run:  python scripts/station_health.py [--as-of YYYY-MM-DD] [--all] [--watch]
+Exit code 1 when any mountain is flagged, so CI can surface it. With --watch,
+exit code 3 when a watched station is back (it takes precedence).
 """
 
 from __future__ import annotations
@@ -57,10 +62,43 @@ def flagged(h: dict, in_season_now: bool) -> str | None:
     return None
 
 
+def station_back(obs: pd.DataFrame, silent_since: date) -> date | None:
+    """The latest snow reading after `silent_since`, or None while still silent."""
+    if obs is None or obs.empty:
+        return None
+    have = obs[obs[SNOW_FIELDS].notna().any(axis=1) & (obs["date"] > pd.Timestamp(silent_since))]
+    return have["date"].max().date() if len(have) else None
+
+
+def check_watched(as_of: date) -> list[str]:
+    """Fetch each watched station's recent data and list the ones sending snow again."""
+    back = []
+    for key, m in sorted(MOUNTAINS.items()):
+        w = m.get("watch_station")
+        if not w:
+            continue
+        silent_since = date.fromisoformat(w["silent_since"])
+        try:
+            obs = pipeline.SOURCES[w["data_source"]]["fetch"](w["id"], since=silent_since)
+            obs["date"] = pd.to_datetime(obs["date"])
+            last = station_back(obs, silent_since)
+        except Exception as e:  # noqa: BLE001 -- a fetch failure is "unknown", not "back"
+            print(f"{key}: couldn't check old station {w['name']} ({w['id']}): {e}")
+            continue
+        if last:
+            back.append(key)
+            print(f"{key}: old station {w['name']} ({w['data_source']} {w['id']}) is reporting "
+                  f"snow again, latest {last}. Consider moving back from {m.get('station_name')}.")
+        else:
+            print(f"{key}: old station {w['name']} still silent since {silent_since}.")
+    return back
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Report mountains whose stations stopped reporting snow.")
     ap.add_argument("--as-of", type=date.fromisoformat, default=date.today())
     ap.add_argument("--all", action="store_true", help="list every mountain, not just flagged ones")
+    ap.add_argument("--watch", action="store_true", help="also check stations kept under watch_station")
     args = ap.parse_args(argv)
 
     cache: dict[str, pd.DataFrame] = {}
@@ -79,6 +117,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{key:22} {m.get('data_source') or 'snotel':9} {st:14} silent={silent!s:>5}d "
                   f"season_coverage={h['season_coverage']:4.0%}  {why or 'ok'}")
     print(f"\n{problems} of {len(MOUNTAINS)} mountains flagged.")
+    if args.watch:
+        print()
+        if check_watched(args.as_of):
+            return 3
     return 1 if problems else 0
 
 

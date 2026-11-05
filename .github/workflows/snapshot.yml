@@ -33,6 +33,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write          # Station health opens an issue when a watched station returns
 
 concurrency:
   group: ski-pages
@@ -106,15 +107,28 @@ jobs:
           esac
 
       # List mountains whose station stopped sending snow readings on the run's
-      # summary page. Informational: it never fails the build.
+      # summary page, and open an issue (once) when a station a mountain was moved
+      # off starts reporting again (exit code 3). Never fails the build.
       - name: Station health
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          report="$RUNNER_TEMP/station_health.txt"
+          code=0
+          python scripts/station_health.py --watch > "$report" 2>&1 || code=$?
           {
             echo '### Station health'
             echo '```'
-            python scripts/station_health.py || true
+            cat "$report"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" = 3 ]; then
+            title="A watched weather station is reporting again"
+            open=$(gh issue list --state open --search "\"$title\" in:title" --json number -q 'length' || echo 0)
+            if [ "$open" = 0 ]; then
+              gh issue create --title "$title" --body-file "$report" || true
+            fi
+          fi
 
       # Save the updated DB back to the cache -- but only when ingest actually
       # ran (a code push scores off it unchanged, so there's nothing new to save).
