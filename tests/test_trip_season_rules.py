@@ -69,6 +69,14 @@ def test_a_closed_mountain_is_unranked_however_deep_the_typical_base():
     assert rows["mammoth"]["baseline_score"] is not None
 
 
+def test_the_may_list_follows_real_closing_dates():
+    rows = _rows(date(2027, 5, 1), "schweitzer", "baker", "snowbird", "whistler_blackcomb", base=100.0)
+    assert rows["schweitzer"]["baseline_score"] is None
+    assert rows["baker"]["baseline_score"] is None
+    assert rows["snowbird"]["baseline_score"] is not None
+    assert rows["whistler_blackcomb"]["baseline_score"] is not None
+
+
 def test_a_southern_mountain_is_unranked_in_the_northern_winter():
     rows = _rows(date(2026, 12, 1), "las_lenas", "alta", base=100.0)
     assert rows["las_lenas"]["baseline_score"] is None
