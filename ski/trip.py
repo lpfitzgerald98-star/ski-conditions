@@ -39,14 +39,15 @@ import numpy as np
 import pandas as pd
 
 from config import (COMPARABLE_FRESH_WINDOW_DAYS, CONSISTENCY_MIN_YEARS,
-                    COVER_GATE, PRESERVATION_FLOOR, PRESERVATION_WARM_F,
+                    COVER_GATE, MOUNTAINS, NO_FIXED_SEASON, PRESERVATION_FLOOR,
+                    PRESERVATION_WARM_F,
                     PRESERVATION_WARM_PENALTY, SEASON_SWE_TO_SNOWFALL_RATIO,
                     TERRAIN_STATS as _TERRAIN, TRIP_BASELINE_WEIGHTS,
                     TRIP_LEAD_DECAY, TRIP_WINDOW_DAYS)
 from ski import comparable
 from ski.grading import _daily_increment, _prepare
 from ski.score import decay_weight, density_from_temp, density_score, is_in_season
-from ski.watercalendar import day_of_water_year
+from ski.watercalendar import day_of_water_year, in_season_window
 
 DOWY_MAX = 366  # a water year with a Feb 29 reaches day 366; index 1..366 always
 
@@ -304,6 +305,15 @@ def target_dowy(target: date, wy_start: int) -> int:
     return day_of_water_year(target, wy_start)
 
 
+def open_for_trip(key: str, target: date) -> bool | None:
+    """Would this mountain usually be open on `target`? None when its calendar can't
+    say: no season window on record, or a glacier with no fixed season."""
+    window = MOUNTAINS.get(key, {}).get("season_window")
+    if not window or key in NO_FIXED_SEASON:
+        return None
+    return in_season_window(target, tuple(window["start"]), tuple(window["end"]))
+
+
 def baseline_row(clim: dict[int, dict], dowy: int, key: str, region: str) -> dict:
     """One ski.comparable-shaped row from a mountain's climatology at `dowy`.
 
@@ -395,13 +405,22 @@ def roster_baseline_rows(target: date, keys: list[str],
     each station's precomputed climatology (resorts sharing a station share it). Each
     mountain resolves the target to its OWN day-of-water-year, so one calendar date
     is peak-winter for a Northern resort and deep off-season for a Southern one --
-    exactly as it should be. Ranked in place with the trip weights (score_baseline)."""
+    exactly as it should be. Ranked in place with the trip weights (score_baseline).
+
+    A mountain's calendar, where it has one, decides who ranks on the date. A resort is
+    bookable through its usual season even if a low station has melted out, and a deep
+    typical base doesn't make it open after that. A station with no reading at all
+    stays unranked."""
     rows = []
     for key in keys:
         mk = meta_by_key[key]
         clim = clim_by_station.get(mk["station"], {})
         dowy = target_dowy(target, mk["wy_start"])
-        rows.append(baseline_row(clim, dowy, key, mk["region"]))
+        row = baseline_row(clim, dowy, key, mk["region"])
+        is_open = open_for_trip(key, target)
+        if is_open is not None and row["in_season"] is not None:
+            row["in_season"] = is_open
+        rows.append(row)
     return score_baseline(rows)
 
 

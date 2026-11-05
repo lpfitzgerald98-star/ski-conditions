@@ -116,6 +116,15 @@ def season_ended_on(as_of: date, start_md: tuple[int, int], end_md: tuple[int, i
     return end
 
 
+def in_season_window(target: date, start_md: tuple[int, int], end_md: tuple[int, int]) -> bool:
+    """Is `target` between a season's start and end, inclusive? Handles a season that
+    wraps the New Year."""
+    md = (target.month, target.day)
+    if start_md <= end_md:
+        return start_md <= md <= end_md
+    return md >= start_md or md <= end_md
+
+
 def month_day_label(md: tuple[int, int]) -> str:
     """(12, 1) -> "Dec 1"."""
     return f"{date(2023, *md):%b} {md[1]}"

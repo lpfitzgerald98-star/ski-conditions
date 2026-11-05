@@ -41,7 +41,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import (DB_PATH, DEFAULT_PROFILE, GRADE_THRESHOLDS,
                     LOW_CONFIDENCE_YEARS, MOUNTAINS, TRIP_LEAD_DECAY,
-                    TRIP_WINDOW_DAYS)
+                    TRIP_SEASON_START_DOWY, TRIP_WINDOW_DAYS)
 from ski import cache, pipeline, trip, trip_commentary
 from ski.db import read_observations
 from ski.grading import letter_grade
@@ -328,7 +328,7 @@ def _trip_context() -> dict:
                 p_prior, p_trust = trip.preservation_priors(region_for(m), src)
                 clim[station] = trip.climatology(
                     obs, pipeline.mountain_wy_start(m),
-                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m),
+                    TRIP_SEASON_START_DOWY, pipeline.mountain_metric(m),
                     density_prior=d_prior, density_trust=d_trust,
                     preservation_prior=p_prior, preservation_trust=p_trust,
                     siting_factor=pipeline.siting_factor(

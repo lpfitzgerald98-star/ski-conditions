@@ -19,7 +19,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import MOUNTAINS, TRIP_BASELINE_WEIGHTS  # noqa: E402
+from config import MOUNTAINS, TRIP_BASELINE_WEIGHTS, TRIP_SEASON_START_DOWY  # noqa: E402
 from ski import comparable, pipeline, trip  # noqa: E402
 from ski import score as score_mod  # noqa: E402
 from ski.backtest import assert_no_leak, obs_asof, outcome_window  # noqa: E402
@@ -60,7 +60,7 @@ def predict(target: date, T: date) -> dict[str, float]:
         d_prior, d_trust = trip.density_priors(region_for(m), src)
         p_prior, p_trust = trip.preservation_priors(region_for(m), src)
         clim_by_station[st] = trip.climatology(
-            cut, wy, pipeline.mountain_season_start(m), metric,
+            cut, wy, TRIP_SEASON_START_DOWY, metric,
             density_prior=d_prior, density_trust=d_trust,
             preservation_prior=p_prior, preservation_trust=p_trust,
             siting_factor=pipeline.siting_factor(key, cut, wy, metric))
