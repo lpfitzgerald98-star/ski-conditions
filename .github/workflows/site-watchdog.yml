@@ -1,0 +1,56 @@
+# Checks that the published site is fresh, and fixes it when it isn't.
+#
+# GitHub sometimes delays or skips scheduled runs, and a Pages publish can fail
+# twice in a row. Every 6 hours this reads the live meta.json; if the data is
+# older than MAX_AGE_HOURS it starts "Ski snapshot" (unless one is already
+# running) and opens one issue so the owner hears about it.
+
+name: Site watchdog
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write      # start the snapshot workflow
+  issues: write
+  contents: read
+
+env:
+  SITE: https://lpfitzgerald98-star.github.io/ski-conditions
+  MAX_AGE_HOURS: 30
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check the published data's age
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          generated=$(curl -fsS "$SITE/data/meta.json?v=$(date +%s)" | python3 -c "import json,sys; print(json.load(sys.stdin)['generated_at'])") || generated=""
+          if [ -z "$generated" ]; then
+            age=999
+            echo "Couldn't read $SITE/data/meta.json"
+          else
+            age=$(python3 -c "from datetime import datetime, timezone; import sys; print(int((datetime.now(timezone.utc) - datetime.fromisoformat(sys.argv[1])).total_seconds() // 3600))" "$generated")
+            echo "Site data generated $generated, $age hours ago"
+          fi
+          if [ "$age" -lt "$MAX_AGE_HOURS" ]; then
+            exit 0
+          fi
+          active=$(gh run list --workflow snapshot.yml --json status -q '[.[] | select(.status != "completed")] | length')
+          if [ "$active" = 0 ]; then
+            gh workflow run snapshot.yml --ref main
+            started="Started a fresh Ski snapshot run."
+          else
+            started="A Ski snapshot run is already in progress; left it alone."
+          fi
+          echo "$started"
+          title="Site data is stale"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number -q 'length' || echo 0)
+          if [ "$open" = 0 ]; then
+            gh issue create --title "$title" --body "The published data is $age hours old (generated: ${generated:-unreadable}). $started Close this once the site updates."
+          fi
