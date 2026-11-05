@@ -70,7 +70,7 @@ from datetime import date, timedelta
 from config import LOW_CONFIDENCE_YEARS
 from ski.commentary_rules import _MAX_PLAUSIBLE_BASE_IN
 from ski.score import is_in_season
-from ski.trip import DOWY_MAX, target_dowy
+from ski.trip import DOWY_MAX, open_for_trip, target_dowy
 from ski.watercalendar import season_progress
 
 # How far on either side of the target day to look for the base-depth TREND
@@ -398,7 +398,11 @@ def seasonal_pattern_text(key: str, name: str, wy_start: int,
     # window "early season" just because it precedes the mountain's OWN
     # season_window (season_progress reads "before the season starts" and
     # "early in the season" as the same 0.0 -- they are not the same thing).
-    if is_in_season(c.get("base_in"), c.get("fresh_in")) is not True:
+    # The ranking lets a mountain's calendar overrule that test (trip.open_for_trip), so
+    # a resort it lists stays described as open even where a low station has melted out.
+    snowy = is_in_season(c.get("base_in"), c.get("fresh_in")) is True
+    is_open = open_for_trip(key, target)
+    if is_open is False or (is_open is None and not snowy):
         return r.choice(_OFF_SEASON_CLAUSE).format(date=date_str, short=short) + "."
 
     if season_window and season_window.get("start") and season_window.get("end"):
@@ -415,7 +419,7 @@ def seasonal_pattern_text(key: str, name: str, wy_start: int,
         sentence1 = f"{open_clause}."
 
     parts = [sentence1]
-    if base is not None:
+    if base is not None and snowy:
         parts.append(r.choice(_BASE_NUMBER_CLAUSE).format(
             base=f"{int(round(base))} inches") + ".")
     elif trend is None:

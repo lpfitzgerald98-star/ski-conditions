@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import (DEFAULT_PROFILE, GRADE_THRESHOLDS, MOUNTAINS,  # noqa: E402
-                    TRIP_LEAD_DECAY, TRIP_WINDOW_DAYS)
+                    TRIP_LEAD_DECAY, TRIP_SEASON_START_DOWY, TRIP_WINDOW_DAYS)
 from ski import commentary, pipeline, trip, trip_commentary  # noqa: E402
 from ski.card import scorecard  # noqa: E402
 from ski.db import read_observations  # noqa: E402
@@ -298,7 +298,7 @@ def _build_climatology(keys: list[str]) -> tuple[dict[str, dict], dict[str, dict
                 p_prior, p_trust = trip.preservation_priors(region_for(m), src)
                 clim_by_station[station] = trip.climatology(
                     obs, pipeline.mountain_wy_start(m),
-                    pipeline.mountain_season_start(m), pipeline.mountain_metric(m),
+                    TRIP_SEASON_START_DOWY, pipeline.mountain_metric(m),
                     density_prior=d_prior, density_trust=d_trust,
                     preservation_prior=p_prior, preservation_trust=p_trust,
                     # NOTE: the climatology cache is per STATION; resorts sharing
