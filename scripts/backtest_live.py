@@ -141,9 +141,6 @@ def predict(target: date) -> dict[str, dict]:
             continue
         siting = pipeline.siting_factor(key, cut, wy, metric)
         base = pipeline.grade_base(cut, as_of=target, wy_start_month=wy)
-        season = pipeline.grade_season_to_date(
-            cut, as_of=target, metric=metric,
-            season_start_dowy=pipeline.mountain_season_start(m), wy_start_month=wy)
         fresh_7d = pipeline.fresh_snow_total(cut, as_of=target)
         fresh_72h = pipeline.fresh_snow_total(
             cut, as_of=target, window_days=COMPARABLE_FRESH_WINDOW_DAYS)
@@ -161,7 +158,6 @@ def predict(target: date) -> dict[str, dict]:
             density=density_quality, refreeze=crust, thaw=None, wind=None,
             weather_q=None).value
 
-        season_snow = pipeline.season_snow_equivalent_in(season)
         terrain = pipeline.mountain_terrain(key)
         rows[key] = {
             "key": key,
@@ -169,7 +165,7 @@ def predict(target: date) -> dict[str, dict]:
             "in_season": in_season,
             "abs_base_in": None if eff_depth is None else eff_depth * siting,
             "abs_fresh_in": None if fresh_72h is None else fresh_72h * siting,
-            "abs_season_in": None if season_snow is None else season_snow * siting,
+            "abs_season_in": pipeline.comparable_season_in(cut, m, target, siting),
             "abs_forecast_in": None,   # unarchived -- see module docstring
             "abs_quality": quality,
             "abs_vertical_ft": terrain.get("vertical_drop_ft"),

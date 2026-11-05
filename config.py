@@ -1802,11 +1802,14 @@ TRIP_WINDOW_DAYS = 7
 # Canada +0.578), pooled +0.696. Effect: Jackson rises #13 -> #8 and Grand Targhee
 # holds #4 -- close, but Targhee's real ~30% snowfall edge (on-mountain station)
 # keeps it ahead, which is correct: overriding it would mean randomising 3 regions.
-# Every mountain's season total counts from this day of its water year, for a trip
-# ranking. Counting from each mountain's own season_window start handed an earlier listed
-# opening a head start that lasted for months: on Dec 1, Alta read 3" from its Dec 1 start
-# and Wolf Creek 55" from Nov 1.
-TRIP_SEASON_START_DOWY = 1
+# Every mountain's season total counts from this day of its water year, for both the
+# trip ranking and the live board. Counting from each mountain's own season_window start
+# handed an earlier listed opening a head start that lasted for months: on Dec 1, Alta
+# read 3" from its Dec 1 start and Wolf Creek 55" from Nov 1. Live backtest, 7 seasons,
+# against listed starts: rank correlation +0.053 for Nov 15-Dec 1, fading to +0.004 by
+# April, flat in the Southern Hemisphere. A station silent before its listed start (Whistler)
+# undercounts early snow here; the season grade keeps the mountain's own start for that.
+SEASON_TOTAL_START_DOWY = 1
 TRIP_BASELINE_WEIGHTS = {
     "base": 0.2990, "season": 0.2790,
     "preservation": 0.1916,

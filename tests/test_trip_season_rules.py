@@ -1,5 +1,5 @@
-"""Tests for how the trip ranking treats the season: a common start date for season
-totals, and a mountain's calendar deciding who ranks.
+"""Tests for how the rankings treat the season: a common start date for season
+totals, and a mountain's calendar deciding who ranks on the trip list.
 
 No network, no DB: synthetic climatology and real config season windows.
 """
@@ -11,8 +11,9 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-from config import TRIP_SEASON_START_DOWY
-from ski import trip
+from config import SEASON_TOTAL_START_DOWY
+from ski import pipeline, trip
+from ski.grading import grade_season_to_date
 from ski.trip_commentary import seasonal_pattern_text
 from ski.watercalendar import in_season_window
 
@@ -45,9 +46,40 @@ def _rows(target, *keys, base=40.0, clim=None):
 def test_a_later_listed_opening_no_longer_means_a_smaller_season_total():
     obs = _winter([2021, 2022, 2023])
     jan = trip.target_dowy(date(2023, 1, 15), 10)
-    from_oct = trip.climatology(obs, 10, TRIP_SEASON_START_DOWY, "new_snow")
+    from_oct = trip.climatology(obs, 10, SEASON_TOTAL_START_DOWY, "new_snow")
     from_dec = trip.climatology(obs, 10, 62, "new_snow")
     assert from_oct[jan]["season_in"] > from_dec[jan]["season_in"]
+
+
+SNOW_REPORTER = {"data_source": "acis", "season_window": {"start": (12, 1), "end": (4, 10)}}
+
+
+def test_the_live_season_total_counts_snow_before_the_listed_opening():
+    obs = _winter([2021, 2022, 2023])
+    as_of = date(2022, 12, 31)    # Oct 1 -> Dec 31 is 92 days at 1" a day
+    assert pipeline.comparable_season_in(obs, SNOW_REPORTER, as_of, 1.0) == 92.0
+
+
+def test_the_live_season_total_exists_before_the_listed_opening():
+    obs = _winter([2021, 2022, 2023])
+    assert pipeline.comparable_season_in(obs, SNOW_REPORTER, date(2022, 11, 15), 1.0) == 46.0
+
+
+def test_the_live_season_total_applies_the_siting_factor():
+    obs = _winter([2021, 2022, 2023])
+    assert pipeline.comparable_season_in(obs, SNOW_REPORTER, date(2022, 12, 31), 1.5) == 138.0
+
+
+def test_the_live_season_total_is_none_without_observations():
+    assert pipeline.comparable_season_in(pd.DataFrame(), SNOW_REPORTER, date(2022, 12, 31), 1.0) is None
+
+
+def test_the_season_grade_keeps_the_mountains_own_start():
+    obs = _winter([2021, 2022, 2023])
+    start = pipeline.mountain_season_start(SNOW_REPORTER)
+    grade = grade_season_to_date(obs, as_of=date(2022, 12, 31), metric="new_snow",
+                                 season_start_dowy=start, wy_start_month=10)
+    assert grade.current_value == 31.0
 
 
 def test_in_season_window_wraps_the_new_year():

@@ -19,8 +19,9 @@ from config import (COMPARABLE_FRESH_WINDOW_DAYS, COVER_GATE, CRUST_MEMORY,
                     FORECAST_HORIZONS_HOURS, FRESH_WINDOW_DAYS, IN_SEASON_GATE,
                     INGEST_OVERLAP_DAYS, MEDIUM_RANGE, MOUNTAINS, NO_FIXED_SEASON,
                     POST_SEASON, POWDER_DECAY, PRESEASON, SEASON_END_OVERRIDES,
-                    SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, SITING_CALIBRATION,
-                    SNOW_MODEL, SNOWFALL_NORMALS, STORM_THRESHOLDS, TERRAIN_STATS)
+                    SEASON_METRIC, SEASON_SWE_TO_SNOWFALL_RATIO, SEASON_TOTAL_START_DOWY,
+                    SITING_CALIBRATION, SNOW_MODEL, SNOWFALL_NORMALS, STORM_THRESHOLDS,
+                    TERRAIN_STATS)
 from ski import forecast_log, quality_log
 from ski import score as score_mod
 from ski.db import (get_station_meta, max_observation_date, read_observations,
@@ -582,8 +583,7 @@ def mountain_scorecard(
         "comparable_inputs": {
             "base_in": None if eff_depth is None else eff_depth * siting,
             "fresh_in": None if fresh_72h is None else fresh_72h * siting,
-            "season_in": (None if (season_snow := season_snow_equivalent_in(season)) is None
-                          else season_snow * siting),
+            "season_in": comparable_season_in(obs, m, as_of, siting),
             "forecast_in": forecast_72h_in,
             # Phase 4: the 0-100 SnowQuality value joins the leaderboard blend as a
             # quality component (percentile-ranked across the population like the
@@ -884,6 +884,17 @@ def season_snow_equivalent_in(season: SeasonGrade) -> float | None:
     if season.metric == "swe_gain":
         return season.current_value * SEASON_SWE_TO_SNOWFALL_RATIO
     return season.current_value
+
+
+def comparable_season_in(obs: pd.DataFrame, m: dict, as_of: date | None,
+                         siting: float) -> float | None:
+    """Siting-calibrated season total for the live ranking, counted from the same day
+    for every mountain (config.SEASON_TOTAL_START_DOWY). The season GRADE stays on the
+    mountain's own start, which keeps its coverage check honest."""
+    snow = season_snow_equivalent_in(grade_season_to_date(
+        obs, as_of=as_of, metric=mountain_metric(m),
+        season_start_dowy=SEASON_TOTAL_START_DOWY, wy_start_month=mountain_wy_start(m)))
+    return None if snow is None else snow * siting
 
 
 def weighted_incoming_percentile(
