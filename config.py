@@ -553,12 +553,20 @@ MOUNTAINS = {
     },
     "fernie": {
         "name": "Fernie, BC",
-        "data_source": "eccc",
-        "eccc_station": "1152850",
-        "station_name": "Fernie",
+        # Re-homed from ECCC "Fernie" (1152850, the town station: no gap over 15
+        # days since 2010, then silent from 2026-08-24) to BC ASWS "Morrissey Ridge"
+        # (2C09Q): a snow pillow at 1860m, ~9km away and inside the ski area's
+        # elevation range, reporting since 1983. SWE only, so the card's base depth
+        # reads N/A (as for Kicking Horse). `watch_station` keeps checking the old
+        # one: scripts/station_health.py --watch reports when it comes back.
+        "data_source": "bcsws",
+        "bcsws_station": "2C09Q",
+        "station_name": "Morrissey Ridge",
+        "watch_station": {"data_source": "eccc", "id": "1152850", "name": "Fernie",
+                          "silent_since": "2026-08-24"},
         "latitude": 49.463,
         "longitude": -115.091,
-        "verified": True,
+        "verified": False,
         "storm_floor_inches": {24: 8, 72: 15},
         "season_window": {"start": (11, 25), "end": (4, 15)},
     },

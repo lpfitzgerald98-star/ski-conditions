@@ -48,3 +48,12 @@ def test_a_station_gone_quiet_in_season_is_flagged():
 def test_a_station_with_no_rows_never_reported():
     h = station_health(pd.DataFrame(), date(2026, 11, 5), WINDOW)
     assert flagged(h, in_season_now=True) == "never reported snow"
+
+
+def test_a_watched_station_is_back_once_it_sends_snow_after_going_silent():
+    from station_health import station_back
+    silent = date(2026, 8, 24)
+    quiet = _obs("2026-08-25", "2026-11-05", snow=False)
+    assert station_back(quiet, silent) is None
+    back = pd.concat([quiet, _obs("2026-11-06", "2026-11-08")])
+    assert station_back(back, silent) == date(2026, 11, 8)
