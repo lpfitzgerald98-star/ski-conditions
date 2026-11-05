@@ -42,7 +42,9 @@ MOUNTAINS = {
         "storm_floor_inches": {24: 8, 72: 15},
         # Core lift-served season as (month, day). Drives dynamic score weighting.
         # A Southern-Hemisphere resort would use e.g. (6, 15) -> (10, 10).
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        # Usual dates of daily operation, from resort announcements where they exist:
+        # a weekend-only finish doesn't count, and one poor spring doesn't move the end.
+        "season_window": {"start": (11, 20), "end": (4, 26)},
     },
     # --- North America roster (Phase 2) --------------------------------------
     # Each SNOTEL station was chosen as the nearest NRCS SNTL to the resort from
@@ -65,7 +67,7 @@ MOUNTAINS = {
         "longitude": -111.6556,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (11, 27), "end": (5, 3)},
     },
     "park_city": {
         "name": "Park City, UT",
@@ -77,7 +79,7 @@ MOUNTAINS = {
         "longitude": -111.508,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (11, 20), "end": (4, 20)},
     },
     "deer_valley": {
         "name": "Deer Valley, UT",
@@ -89,7 +91,7 @@ MOUNTAINS = {
         "longitude": -111.4783,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (12, 5), "end": (4, 20)},
     },
     # --- Utah: Big Cottonwood + Wasatch-back ---
     "brighton": {
@@ -114,7 +116,7 @@ MOUNTAINS = {
         "longitude": -111.5919,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (11, 20), "end": (4, 20)},
     },
     "powder_mtn": {
         "name": "Powder Mountain, UT",
@@ -139,7 +141,7 @@ MOUNTAINS = {
         "longitude": -106.355,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (11, 13), "end": (4, 19)},
     },
     "breckenridge": {
         "name": "Breckenridge, CO",
@@ -151,7 +153,7 @@ MOUNTAINS = {
         "longitude": -106.0384,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (11, 6), "end": (4, 26)},
     },
     "aspen": {
         "name": "Aspen Mountain, CO",
@@ -163,7 +165,7 @@ MOUNTAINS = {
         "longitude": -106.8175,
         "verified": False,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (11, 26), "end": (4, 19)},
     },
     "steamboat": {
         "name": "Steamboat, CO",
@@ -175,7 +177,7 @@ MOUNTAINS = {
         "longitude": -106.8045,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (11, 21), "end": (4, 19)},
     },
     "winter_park": {
         "name": "Winter Park, CO",
@@ -187,7 +189,7 @@ MOUNTAINS = {
         "longitude": -105.7625,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (12, 1), "end": (4, 22)},
     },
     "telluride": {
         "name": "Telluride, CO",
@@ -201,7 +203,7 @@ MOUNTAINS = {
         "longitude": -107.8123,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (12, 1), "end": (4, 5)},
     },
     "copper": {
         "name": "Copper Mountain, CO",
@@ -213,7 +215,7 @@ MOUNTAINS = {
         "longitude": -106.1497,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (11, 6), "end": (5, 3)},
     },
     "keystone": {
         "name": "Keystone, CO",
@@ -225,7 +227,7 @@ MOUNTAINS = {
         "longitude": -105.9437,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (12, 1), "end": (4, 5)},
     },
     "arapahoe_basin": {
         "name": "Arapahoe Basin, CO",
@@ -250,7 +252,7 @@ MOUNTAINS = {
         "longitude": -110.8279,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (11, 27), "end": (4, 13)},
     },
     "grand_targhee": {
         "name": "Grand Targhee, WY",
@@ -262,7 +264,7 @@ MOUNTAINS = {
         "longitude": -110.9573,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (11, 20), "end": (4, 20)},
     },
     "big_sky": {
         "name": "Big Sky, MT",
@@ -274,7 +276,7 @@ MOUNTAINS = {
         "longitude": -111.401,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (11, 25), "end": (4, 26)},
     },
     "bridger_bowl": {
         "name": "Bridger Bowl, MT",
@@ -298,7 +300,7 @@ MOUNTAINS = {
         "longitude": -114.351,
         "verified": False,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 20)},
+        "season_window": {"start": (11, 26), "end": (4, 20)},
     },
     "schweitzer": {
         "name": "Schweitzer, ID",
@@ -310,7 +312,7 @@ MOUNTAINS = {
         "longitude": -116.623,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (5, 10)},
+        "season_window": {"start": (11, 27), "end": (4, 12)},
     },
     # --- California: Tahoe / Sierra ---
     "palisades_tahoe": {
@@ -323,7 +325,7 @@ MOUNTAINS = {
         "longitude": -120.2357,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 25), "end": (4, 25)},
+        "season_window": {"start": (11, 25), "end": (5, 24)},
     },
     "heavenly": {
         "name": "Heavenly, CA",
@@ -335,7 +337,7 @@ MOUNTAINS = {
         "longitude": -119.94,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 25), "end": (4, 25)},
+        "season_window": {"start": (11, 20), "end": (4, 25)},
     },
     "kirkwood": {
         "name": "Kirkwood, CA",
@@ -347,7 +349,7 @@ MOUNTAINS = {
         "longitude": -120.0654,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 25), "end": (4, 25)},
+        "season_window": {"start": (12, 4), "end": (4, 13)},
     },
     # --- Pacific Northwest ---
     "crystal_mtn": {
@@ -360,7 +362,7 @@ MOUNTAINS = {
         "longitude": -121.474,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (5, 10)},
+        "season_window": {"start": (11, 27), "end": (5, 3)},
     },
     "stevens_pass": {
         "name": "Stevens Pass, WA",
@@ -372,7 +374,7 @@ MOUNTAINS = {
         "longitude": -121.089,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (5, 10)},
+        "season_window": {"start": (12, 4), "end": (4, 15)},
     },
     "baker": {
         "name": "Mt Baker, WA",
@@ -384,7 +386,7 @@ MOUNTAINS = {
         "longitude": -121.679,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (5, 10)},
+        "season_window": {"start": (11, 20), "end": (4, 20)},
     },
     "hood_meadows": {
         "name": "Mt Hood Meadows, OR",
@@ -396,7 +398,7 @@ MOUNTAINS = {
         "longitude": -121.665,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (5, 10)},
+        "season_window": {"start": (11, 20), "end": (5, 3)},
     },
     "bachelor": {
         "name": "Mt Bachelor, OR",
@@ -408,7 +410,7 @@ MOUNTAINS = {
         "longitude": -121.688,
         "verified": False,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (5, 10)},
+        "season_window": {"start": (12, 4), "end": (5, 10)},
     },
     # --- New Mexico ---
     "taos": {
@@ -421,7 +423,7 @@ MOUNTAINS = {
         "longitude": -105.447,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (11, 26), "end": (4, 15)},
     },
     # --- Alaska + additional US majors (SNOTEL; stations on-mountain) ---
     "alyeska": {
@@ -434,7 +436,7 @@ MOUNTAINS = {
         "longitude": -149.09,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (4, 30)},
+        "season_window": {"start": (11, 28), "end": (4, 25)},
     },
     "wolf_creek": {
         "name": "Wolf Creek, CO",
@@ -446,7 +448,7 @@ MOUNTAINS = {
         "longitude": -106.793,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 1), "end": (4, 15)},
+        "season_window": {"start": (11, 1), "end": (4, 5)},
     },
     "mt_rose": {
         "name": "Mt Rose, NV",
@@ -482,7 +484,7 @@ MOUNTAINS = {
         "longitude": -112.8497,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (11, 6), "end": (4, 10)},
     },
     # --- Eastern Sierra (CDEC; SWE pillows, so swe_gain metric) ---
     "mammoth": {
@@ -496,7 +498,7 @@ MOUNTAINS = {
         "longitude": -119.0326,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 1), "end": (5, 31)},
+        "season_window": {"start": (11, 13), "end": (5, 31)},
     },
     "june_mountain": {
         "name": "June Mountain, CA",
@@ -509,7 +511,7 @@ MOUNTAINS = {
         "longitude": -119.09,
         "verified": False,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 15), "end": (5, 1)},
+        "season_window": {"start": (12, 19), "end": (5, 1)},
     },
     # --- Canada (ECCC/MSC; no SWE -> new_snow metric; NWS is US-only so no
     #     forecast/weather -- these score on history + base). Whistler uses the
@@ -523,7 +525,7 @@ MOUNTAINS = {
         "longitude": -122.948,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 20), "end": (5, 1)},
+        "season_window": {"start": (11, 20), "end": (5, 18)},
     },
     "kicking_horse": {
         "name": "Kicking Horse, BC",
@@ -565,7 +567,7 @@ MOUNTAINS = {
         "longitude": -119.888,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (11, 25), "end": (4, 10)},
+        "season_window": {"start": (11, 21), "end": (4, 10)},
     },
     "red_mountain": {
         "name": "Red Mountain, BC",
@@ -587,7 +589,7 @@ MOUNTAINS = {
         "longitude": -115.156,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (11, 25), "end": (4, 10)},
+        "season_window": {"start": (11, 25), "end": (4, 19)},
     },
     "mont_tremblant": {
         "name": "Mont Tremblant, QC",
@@ -598,7 +600,7 @@ MOUNTAINS = {
         "longitude": -74.585,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 5)},
+        "season_window": {"start": (11, 26), "end": (4, 5)},
     },
     "mont_sainte_anne": {
         "name": "Mont-Sainte-Anne, QC",
@@ -633,7 +635,7 @@ MOUNTAINS = {
         "longitude": -118.163,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 25), "end": (4, 20)},
+        "season_window": {"start": (12, 5), "end": (4, 14)},
     },
     "silver_star": {
         "name": "Silver Star, BC",
@@ -644,7 +646,7 @@ MOUNTAINS = {
         "longitude": -119.0625,
         "verified": True,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 25), "end": (4, 20)},
+        "season_window": {"start": (11, 27), "end": (4, 6)},
     },
     "big_white": {
         "name": "Big White, BC",
@@ -655,7 +657,7 @@ MOUNTAINS = {
         "longitude": -118.933,
         "verified": False,
         "storm_floor_inches": {24: 8, 72: 15},
-        "season_window": {"start": (11, 25), "end": (4, 20)},
+        "season_window": {"start": (11, 25), "end": (4, 6)},
     },
     # --- Northeast (ACIS/COOP source; SNOTEL has no NE stations) -------------
     # No SWE from COOP, so these grade on the "new_snow" metric (config knob:
@@ -678,7 +680,7 @@ MOUNTAINS = {
         "longitude": -72.7814,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (12, 1), "end": (4, 26)},
     },
     "killington": {
         "name": "Killington, VT",
@@ -692,7 +694,7 @@ MOUNTAINS = {
         "longitude": -72.8201,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (12, 1), "end": (5, 17)},
     },
     "sugarbush": {
         "name": "Sugarbush, VT",
@@ -706,7 +708,7 @@ MOUNTAINS = {
         "longitude": -72.9037,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (11, 21), "end": (5, 3)},
     },
     "stratton": {
         "name": "Stratton, VT",
@@ -720,7 +722,7 @@ MOUNTAINS = {
         "longitude": -72.9081,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (11, 25), "end": (4, 10)},
     },
     "sugarloaf": {
         "name": "Sugarloaf, ME",
@@ -734,7 +736,7 @@ MOUNTAINS = {
         "longitude": -70.3131,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (11, 20), "end": (5, 3)},
     },
     "sunday_river": {
         "name": "Sunday River, ME",
@@ -748,7 +750,7 @@ MOUNTAINS = {
         "longitude": -70.8568,
         "verified": False,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (11, 15), "end": (5, 3)},
     },
     "wildcat": {
         "name": "Wildcat, NH",
@@ -776,7 +778,7 @@ MOUNTAINS = {
         "longitude": -73.9026,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (12, 1), "end": (4, 18)},
     },
     "hunter": {
         "name": "Hunter Mountain, NY",
@@ -806,7 +808,7 @@ MOUNTAINS = {
         "longitude": -116.1653,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 10), "end": (5, 5)},
+        "season_window": {"start": (11, 10), "end": (5, 3)},
     },
     "sunshine_village": {
         "name": "Sunshine Village, AB",
@@ -816,7 +818,7 @@ MOUNTAINS = {
         "longitude": -115.7767,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 10), "end": (5, 20)},
+        "season_window": {"start": (11, 10), "end": (5, 18)},
     },
     "norquay": {
         "name": "Mt Norquay, AB",
@@ -826,7 +828,7 @@ MOUNTAINS = {
         "longitude": -115.5952,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 25), "end": (4, 15)},
+        "season_window": {"start": (11, 25), "end": (4, 19)},
     },
     "marmot_basin": {
         "name": "Marmot Basin, AB",
@@ -2419,7 +2421,7 @@ PRESEASON = {
 # have been closed weeks early, which is why this rule needs the override at all.
 POST_SEASON = {"grace_days": 14}
 SEASON_END_OVERRIDES = {
-    "valle_nevado": (2026, 11, 8),   # announced extension, reported Oct 2026
+    "valle_nevado": (2026, 12, 1),   # select dates, announced Oct 30 2026
 }
 # Glacier skiing with no fixed season (Zermatt's summer operation varies year to
 # year), so snow alone decides: exempt from both PRESEASON and POST_SEASON.
