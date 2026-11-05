@@ -7,9 +7,14 @@
 #      station) is CACHED between runs. A warm run fetches only each station's
 #      recent tail (see scripts/build_snapshot.py --> pipeline.ingest_mountain),
 #      not the whole period of record. A cache miss self-heals with a full pull.
-#   2. Ingest only runs when there's new data to get. The daily cron refreshes
-#      stations; a plain code/site push (a CSS tweak, say) scores off the cached
-#      DB with --no-ingest and deploys in a minute or two, hitting no upstreams.
+#   2. Every run (cron, push or manual) fetches only each station's recent tail,
+#      a few minutes. A push used to skip ingest entirely, which left a mountain
+#      moved to a new station blank until the next cron; now the push itself pulls
+#      the new station's full history.
+#
+# Reliability: the Pages publish is retried once (it has hung for 10 minutes on
+# GitHub's side), a failed run opens an issue, and site-watchdog.yml re-runs this
+# workflow if the published data goes stale.
 #
 # One-time setup by the repo owner: Settings -> Pages -> Source: "GitHub Actions".
 # Manual refresh anytime: Actions tab -> this workflow -> "Run workflow".
@@ -18,10 +23,12 @@ name: Ski snapshot
 
 on:
   schedule:
-    # 12:37 UTC daily (~morning in North America). Deliberately OFF the top of the
-    # hour: GitHub queues scheduled runs and :00 is its busiest slot -- the old
-    # "0 13" actually started 4-8h late (17:30-21:30 UTC) through Sep-Oct 2026.
-    - cron: "37 12 * * *"
+    # Twice daily, OFF the top of the hour (GitHub queues scheduled runs and :00 is
+    # its busiest slot). Runs start late: "37 12" landed 16:00-20:15 UTC through
+    # Oct-Nov 2026, so the morning slot is set early enough to land around the
+    # North American morning, and the evening one refreshes forecasts.
+    - cron: "37 7 * * *"
+    - cron: "37 19 * * *"
   workflow_dispatch:           # allow manual runs
   push:
     branches: [main]           # rebuild when the site or scoring changes
@@ -33,7 +40,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
-  issues: write          # Station health opens an issue when a watched station returns
+  issues: write          # station-health and failed-build issues
 
 concurrency:
   group: ski-pages
@@ -44,7 +51,7 @@ jobs:
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to Ubuntu 26 on 2026-10-19
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,8 +85,8 @@ jobs:
 
       # Decide how much to ingest:
       #   full        - no usable DB (cache miss / first run): pull full history
-      #   none        - code/site push with a warm DB: score off it, no fetches
-      #   incremental - cron/dispatch with a warm DB: fetch each station's tail
+      #   incremental - warm DB: fetch each station's tail (a station new to the
+      #                 DB, e.g. a mountain just moved to it, gets its full history)
       - name: Decide ingest mode
         id: mode
         run: |
@@ -87,8 +94,6 @@ jobs:
           echo "db rows: $rows"
           if [ "$rows" -eq 0 ]; then
             echo "mode=full" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            echo "mode=none" >> "$GITHUB_OUTPUT"
           else
             echo "mode=incremental" >> "$GITHUB_OUTPUT"
           fi
@@ -155,6 +160,31 @@ jobs:
         with:
           path: web
 
+      # GitHub Pages has hung at "updating_pages" until the 10-minute timeout
+      # (3 runs on 2026-11-05, status page green) and then published fine on the
+      # next try. Retry once from the same artifact; re-running a failed run
+      # instead re-uploads and fails on "Multiple artifacts named github-pages".
       - name: Deploy to Pages
         id: deploy
+        continue-on-error: true
         uses: actions/deploy-pages@v4
+
+      - name: Deploy to Pages (retry)
+        id: deploy_retry
+        if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+
+      # One open issue at a time, so a bad stretch doesn't pile up notifications.
+      - name: Report a failed build
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Site build failed"
+          url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number -q 'length' || echo 0)
+          if [ "$open" = 0 ]; then
+            gh issue create --title "$title" --body "The ${{ github.event_name }} build failed: $url. The site keeps serving the last good build until a run succeeds."
+          else
+            echo "An open '$title' issue already exists; not opening another."
+          fi
