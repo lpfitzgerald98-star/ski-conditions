@@ -852,7 +852,7 @@ MOUNTAINS = {
         "longitude": 148.4131,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (6, 1), "end": (10, 5)},
+        "season_window": {"start": (6, 8), "end": (10, 5)},
         "snow_model": {"precip_multiplier": 1.5, "elevation_m": 1830},  # Spencers Creek snow course height (calibration site); grid point is 1722m
     },
     "thredbo": {
@@ -863,7 +863,7 @@ MOUNTAINS = {
         "longitude": 148.3025,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (6, 1), "end": (10, 5)},
+        "season_window": {"start": (6, 8), "end": (10, 5)},
         "snow_model": {"precip_multiplier": 1.5, "elevation_m": 1700},  # mid-mountain (1365-2037m); grid point 1481m is the valley
     },
     "falls_creek": {
@@ -874,7 +874,7 @@ MOUNTAINS = {
         "longitude": 147.2861,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (6, 1), "end": (10, 1)},
+        "season_window": {"start": (6, 8), "end": (10, 1)},
         "snow_model": {"precip_multiplier": 1.5},  # see config.SNOW_MODEL
     },
     "mt_buller": {
@@ -885,7 +885,7 @@ MOUNTAINS = {
         "longitude": 146.4473,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (6, 1), "end": (9, 25)},
+        "season_window": {"start": (6, 8), "end": (9, 25)},
         "snow_model": {"precip_multiplier": 1.5},  # see config.SNOW_MODEL
     },
     "mt_hotham": {
@@ -896,7 +896,7 @@ MOUNTAINS = {
         "longitude": 147.1358,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (6, 1), "end": (10, 1)},
+        "season_window": {"start": (6, 8), "end": (10, 1)},
         "snow_model": {"precip_multiplier": 1.5},  # see config.SNOW_MODEL
     },
     "coronet_peak": {
@@ -907,7 +907,7 @@ MOUNTAINS = {
         "longitude": 168.735,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (6, 10), "end": (10, 5)},
+        "season_window": {"start": (6, 13), "end": (10, 5)},
         "snow_model": {"precip_multiplier": 0.51},  # fit to 90cm top, 2026-09-27 (snow-forecast)
     },
     "the_remarkables": {
@@ -918,7 +918,7 @@ MOUNTAINS = {
         "longitude": 168.8144,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (6, 10), "end": (10, 10)},
+        "season_window": {"start": (6, 14), "end": (10, 10)},
         "snow_model": {"precip_multiplier": 0.65},  # no dated report: mean of Coronet + Cardrona (same basin)
     },
     "cardrona": {
@@ -929,7 +929,7 @@ MOUNTAINS = {
         "longitude": 168.9481,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (6, 10), "end": (10, 10)},
+        "season_window": {"start": (6, 14), "end": (10, 10)},
         "snow_model": {"precip_multiplier": 0.79},  # fit to 112cm upper, 2026-09-26 (snow-forecast)
     },
     "treble_cone": {
@@ -940,7 +940,7 @@ MOUNTAINS = {
         "longitude": 168.8975,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (6, 15), "end": (10, 1)},
+        "season_window": {"start": (6, 27), "end": (9, 28)},
         "snow_model": {"precip_multiplier": 0.49, "elevation_m": 1580},  # mid-mountain (1200-1960m; grid point 1270m is the base); mult fit to 150cm upper, 2026-09-22
     },
     "mt_hutt": {
@@ -951,7 +951,7 @@ MOUNTAINS = {
         "longitude": 171.5306,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (6, 10), "end": (10, 10)},
+        "season_window": {"start": (6, 13), "end": (10, 10)},
         "snow_model": {"precip_multiplier": 1.0},  # fit to 5 reports at 2 elevations, Sep-Oct 2026 (log-RMSE 0.11)
     },
     "whakapapa": {
@@ -962,7 +962,7 @@ MOUNTAINS = {
         "longitude": 175.5606,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (6, 20), "end": (10, 20)},
+        "season_window": {"start": (7, 1), "end": (10, 25)},
         "snow_model": {"precip_multiplier": 0.35},  # fit to 69cm upper, 2026-09-19 (skiresort.com)
     },
     "valle_nevado": {
@@ -983,7 +983,7 @@ MOUNTAINS = {
         "longitude": -70.1281,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (6, 15), "end": (10, 1)},
+        "season_window": {"start": (6, 22), "end": (9, 27)},
     },
     "nevados_de_chillan": {
         "name": "Nevados de Chillan, CL",
@@ -993,7 +993,7 @@ MOUNTAINS = {
         "longitude": -71.4064,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (6, 15), "end": (10, 5)},
+        "season_window": {"start": (6, 15), "end": (9, 20)},
     },
     "cerro_catedral": {
         "name": "Cerro Catedral, AR",
@@ -1003,7 +1003,7 @@ MOUNTAINS = {
         "longitude": -71.4406,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (6, 15), "end": (10, 1)},
+        "season_window": {"start": (6, 27), "end": (10, 1)},
     },
     "las_lenas": {
         "name": "Las Lenas, AR",
@@ -1013,7 +1013,7 @@ MOUNTAINS = {
         "longitude": -70.0781,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (6, 20), "end": (9, 30)},
+        "season_window": {"start": (6, 27), "end": (9, 30)},
     },
     # --- Europe (Open-Meteo ERA5 reanalysis, same rationale as the Southern
     #     Hemisphere block: no single open station network spans the continent,
@@ -1041,7 +1041,7 @@ MOUNTAINS = {
         "longitude": 6.9797,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 25), "end": (5, 1)},
+        "season_window": {"start": (11, 28), "end": (5, 1)},
     },
     "val_thorens": {
         "name": "Val Thorens, FR",
@@ -1061,7 +1061,7 @@ MOUNTAINS = {
         "longitude": 6.0686,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 25)},
+        "season_window": {"start": (12, 5), "end": (4, 25)},
     },
     "la_plagne": {
         "name": "La Plagne, FR",
@@ -1071,7 +1071,7 @@ MOUNTAINS = {
         "longitude": 6.6786,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 25)},
+        "season_window": {"start": (12, 12), "end": (4, 25)},
     },
     # Alps -- Switzerland
     "zermatt": {
@@ -1092,7 +1092,7 @@ MOUNTAINS = {
         "longitude": 7.2281,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 25), "end": (4, 25)},
+        "season_window": {"start": (12, 3), "end": (4, 25)},
     },
     "st_moritz": {
         "name": "St. Moritz, CH",
@@ -1102,7 +1102,7 @@ MOUNTAINS = {
         "longitude": 9.8355,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 25), "end": (4, 20)},
+        "season_window": {"start": (11, 28), "end": (4, 5)},
     },
     "engelberg": {
         "name": "Engelberg, CH",
@@ -1112,7 +1112,7 @@ MOUNTAINS = {
         "longitude": 8.4013,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 20), "end": (5, 10)},
+        "season_window": {"start": (11, 20), "end": (5, 3)},
     },
     "davos": {
         "name": "Davos, CH",
@@ -1122,7 +1122,7 @@ MOUNTAINS = {
         "longitude": 9.837,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (11, 25), "end": (4, 15)},
+        "season_window": {"start": (11, 20), "end": (4, 8)},
     },
     # Alps -- Austria
     "st_anton": {
@@ -1133,7 +1133,7 @@ MOUNTAINS = {
         "longitude": 10.2643,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 25)},
+        "season_window": {"start": (12, 1), "end": (4, 19)},
     },
     "kitzbuehel": {
         "name": "Kitzbuhel, AT",
@@ -1143,7 +1143,7 @@ MOUNTAINS = {
         "longitude": 12.3925,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (11, 20), "end": (4, 10)},
+        "season_window": {"start": (11, 27), "end": (4, 10)},
     },
     "soelden": {
         "name": "Solden, AT",
@@ -1184,7 +1184,7 @@ MOUNTAINS = {
         "longitude": 6.879,
         "verified": True,
         "storm_floor_inches": {24: 6, 72: 12},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (12, 5), "end": (4, 15)},
     },
     # Alps -- Germany / Slovenia
     "zugspitze": {
@@ -1195,7 +1195,7 @@ MOUNTAINS = {
         "longitude": 10.9863,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (11, 20), "end": (5, 1)},
+        "season_window": {"start": (11, 27), "end": (5, 1)},
     },
     "kranjska_gora": {
         "name": "Kranjska Gora, SI",
@@ -1205,7 +1205,7 @@ MOUNTAINS = {
         "longitude": 13.7837,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (12, 10), "end": (3, 31)},
+        "season_window": {"start": (12, 5), "end": (3, 20)},
     },
     "cortina": {
         "name": "Cortina d'Ampezzo, IT",
@@ -1215,7 +1215,7 @@ MOUNTAINS = {
         "longitude": 12.1357,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (11, 25), "end": (4, 15)},
+        "season_window": {"start": (12, 1), "end": (4, 15)},
     },
     "val_gardena": {
         "name": "Val Gardena, IT",
@@ -1225,7 +1225,7 @@ MOUNTAINS = {
         "longitude": 11.762,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 10)},
+        "season_window": {"start": (12, 4), "end": (4, 6)},
     },
     "baqueira_beret": {
         "name": "Baqueira-Beret, ES",
@@ -1235,7 +1235,7 @@ MOUNTAINS = {
         "longitude": 0.9311,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (12, 1), "end": (4, 8)},
     },
     "formigal": {
         "name": "Formigal, ES",
@@ -1255,7 +1255,7 @@ MOUNTAINS = {
         "longitude": 1.7333,
         "verified": True,
         "storm_floor_inches": {24: 4, 72: 8},
-        "season_window": {"start": (12, 1), "end": (4, 15)},
+        "season_window": {"start": (12, 4), "end": (4, 8)},
     },
     "saint_lary": {
         "name": "Saint-Lary-Soulan, FR",
@@ -1276,7 +1276,7 @@ MOUNTAINS = {
         "longitude": 13.0815,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (11, 20), "end": (5, 1)},
+        "season_window": {"start": (12, 9), "end": (5, 1)},
     },
     "trysil": {
         "name": "Trysil, NO",
@@ -1286,7 +1286,7 @@ MOUNTAINS = {
         "longitude": 12.2827,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (11, 15), "end": (4, 20)},
+        "season_window": {"start": (12, 1), "end": (4, 20)},
     },
     "hemsedal": {
         "name": "Hemsedal, NO",
@@ -1296,7 +1296,7 @@ MOUNTAINS = {
         "longitude": 8.551,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (11, 15), "end": (5, 1)},
+        "season_window": {"start": (12, 9), "end": (5, 1)},
     },
     "levi": {
         "name": "Levi, FI",
@@ -1316,7 +1316,7 @@ MOUNTAINS = {
         "longitude": 29.1417,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (11, 1), "end": (5, 10)},
+        "season_window": {"start": (11, 1), "end": (5, 3)},
     },
     # Carpathians
     "poiana_brasov": {
@@ -1327,7 +1327,7 @@ MOUNTAINS = {
         "longitude": 25.5559,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (12, 10), "end": (3, 31)},
+        "season_window": {"start": (12, 16), "end": (3, 31)},
     },
     "jasna": {
         "name": "Jasna, SK",
@@ -1337,7 +1337,7 @@ MOUNTAINS = {
         "longitude": 19.5836,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (12, 5), "end": (4, 10)},
+        "season_window": {"start": (11, 28), "end": (4, 10)},
     },
     "kasprowy_wierch": {
         "name": "Kasprowy Wierch, PL",
@@ -1347,7 +1347,7 @@ MOUNTAINS = {
         "longitude": 19.9817,
         "verified": True,
         "storm_floor_inches": {24: 3, 72: 6},
-        "season_window": {"start": (12, 1), "end": (4, 25)},
+        "season_window": {"start": (12, 20), "end": (4, 25)},
     },
     # Balkans
     "bansko": {

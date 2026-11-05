@@ -239,6 +239,17 @@ function clusterPoints(rows) {
   return groups;
 }
 
+// MapLibre stamps its generic "Map marker" aria-label on the element when the
+// marker is added, which would hide our descriptive label from screen readers,
+// so put ours back afterwards.
+function addMarker(el, lngLat) {
+  const label = el.getAttribute("aria-label");
+  const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+    .setLngLat(lngLat).addTo(map);
+  if (label) el.setAttribute("aria-label", label);
+  return marker;
+}
+
 export function renderMarkers() {
   // map.project() is available as soon as the map is constructed (it uses the
   // transform, not the tiles), so we can cluster + place markers before the style
@@ -254,13 +265,11 @@ export function renderMarkers() {
         const row = g.members[0];
         const d = displayValue(row);
         const el = makeMarkerEl(row, d);
-        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-          .setLngLat([row.longitude, row.latitude]).addTo(map);
+        const marker = addMarker(el, [row.longitude, row.latitude]);
         markers[row.key] = { marker, el };
       } else {
         const el = makeClusterEl(g);
-        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-          .setLngLat(g.center).addTo(map);
+        const marker = addMarker(el, g.center);
         markers[`cluster-${i}`] = { marker, el };
       }
     });

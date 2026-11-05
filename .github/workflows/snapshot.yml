@@ -105,6 +105,17 @@ jobs:
                    python scripts/build_snapshot.py --history ;;
           esac
 
+      # List mountains whose station stopped sending snow readings on the run's
+      # summary page. Informational: it never fails the build.
+      - name: Station health
+        run: |
+          {
+            echo '### Station health'
+            echo '```'
+            python scripts/station_health.py || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Save the updated DB back to the cache -- but only when ingest actually
       # ran (a code push scores off it unchanged, so there's nothing new to save).
       - name: Save observation DB cache
