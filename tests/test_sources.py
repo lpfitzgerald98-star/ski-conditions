@@ -83,6 +83,20 @@ def test_eccc_derives_new_snow_when_snowfall_absent():
     assert ns[2] == 0.0
 
 
+def test_eccc_falls_back_to_depth_on_days_without_reported_snowfall():
+    # Banff CS: reported TOTAL_SNOW in old years only. Later days must still get
+    # new snow from the depth change, not stay empty.
+    feats = [
+        _feat("2007-01-01 00:00:00", snow_cm=2.54, depth_cm=25.4),   # reported: 1 in
+        _feat("2024-01-01 00:00:00", snow_cm=None, depth_cm=25.4),
+        _feat("2024-01-02 00:00:00", snow_cm=None, depth_cm=38.1),   # depth +5 in
+    ]
+    ns = list(parse_features(feats)["new_snow_24hr"])
+    assert round(ns[0], 3) == 1.0
+    assert _isnan(ns[1])                  # day gap before it: no depth change to use
+    assert round(ns[2], 3) == 5.0
+
+
 def test_eccc_mean_temp_celsius_to_fahrenheit():
     feats = [
         _feat("2024-01-01 00:00:00", snow_cm=2.54, depth_cm=25.4, temp_c=0.0),    # 32 F

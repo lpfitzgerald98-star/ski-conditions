@@ -598,9 +598,15 @@ MOUNTAINS = {
     },
     "nakiska": {
         "name": "Nakiska, AB",
+        # Re-homed from ECCC "Kananaskis" (3053600: no rows May-Aug 2026, five days
+        # in late Sep, then silent) to ECCC "Banff CS" (3050519, 1397m, ~39km,
+        # depth daily since 1995). Live backtest Nakiska rank error 0.06 on Banff
+        # vs 0.12 on Open-Meteo. `watch_station` keeps checking Kananaskis.
         "data_source": "eccc",
-        "eccc_station": "3053600",
-        "station_name": "Kananaskis",
+        "eccc_station": "3050519",
+        "station_name": "Banff CS",
+        "watch_station": {"data_source": "eccc", "id": "3053600", "name": "Kananaskis",
+                          "silent_since": "2026-09-24"},
         "latitude": 50.942,
         "longitude": -115.156,
         "verified": True,

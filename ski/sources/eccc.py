@@ -84,10 +84,11 @@ def parse_features(features: list) -> pd.DataFrame:
     if df.empty:
         return df.drop(columns="_reported_snow").assign(new_snow_24hr=[])
 
-    if df["_reported_snow"].notna().any():
-        df["new_snow_24hr"] = df["_reported_snow"]
-    else:
-        df["new_snow_24hr"] = _derive_new_snow(df)
+    # Reported snowfall where the day has it, else the depth change. Per day, not
+    # per station: Banff CS reported TOTAL_SNOW only until 2007, and an all-or-
+    # nothing choice left every later winter with no new snow at all.
+    df["new_snow_24hr"] = df["_reported_snow"].where(df["_reported_snow"].notna(),
+                                                     _derive_new_snow(df))
     return df.drop(columns="_reported_snow")
 
 
