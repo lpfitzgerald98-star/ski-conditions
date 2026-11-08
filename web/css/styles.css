@@ -112,6 +112,7 @@ button { font-family: inherit; }
   transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .icon-btn:hover { border-color: var(--accent); }
+.icon-btn[hidden] { display: none; }   /* .icon-btn's display:grid would beat [hidden] */
 
 /* ---- Controls ----------------------------------------------------------- */
 .controls { padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line-soft); }

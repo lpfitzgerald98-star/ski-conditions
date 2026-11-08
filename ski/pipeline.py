@@ -345,6 +345,7 @@ def mountain_scorecard(
         sp = season_progress(as_of or date.today(), window["start"], window["end"])
 
     fresh = fresh_snow_total(obs, as_of=as_of)
+    fresh_24h = fresh_snow_total(obs, as_of=as_of, window_days=1)   # powder alerts
     # The comparable score's "fresh" input: a shorter, more "right now" window
     # than the 7-day figure above (see config.GLOBAL_SCORE_WEIGHTS docstring).
     fresh_72h = fresh_snow_total(obs, as_of=as_of, window_days=COMPARABLE_FRESH_WINDOW_DAYS)
@@ -549,7 +550,7 @@ def mountain_scorecard(
     return {
         "season": season, "month": month, "base": base,
         "incoming": incoming, "weather": weather, "weather_quality": weather_q,
-        "fresh_7d": fresh, "cover_factor": cover, "effective_depth": eff_depth,
+        "fresh_7d": fresh, "fresh_24h": fresh_24h, "cover_factor": cover, "effective_depth": eff_depth,
         "in_season": in_season, "data_age_days": age, "stale": stale,
         "skiability": skiability, "snow_quality": snow_quality,
         "preseason": preseason, "season_ended": season_ended,

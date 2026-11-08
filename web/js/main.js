@@ -12,6 +12,7 @@ import {
   state, on, setScores, upsertRow, setRegion, setSelected, setInView, visibleScores,
 } from "./state.js";
 import { announce } from "./a11y.js";
+import { initAlerts } from "./alerts.js";
 import { setRegionTree, optionsList } from "./regions.js";
 import * as sse from "./sse.js";
 import {
@@ -491,6 +492,7 @@ function initProfiles(meta) {
 // -- boot ------------------------------------------------------------------
 async function boot() {
   initTheme();
+  initAlerts();
   initCard();
   initSidebar(select);
   initLeaderboardSheet();
@@ -516,6 +518,10 @@ async function boot() {
 
   wireControls();
   await loadProfile(defaultProfile);
+
+  // A snow alert (or a shared link) can point at one mountain: ?m=<key>.
+  const linked = new URLSearchParams(location.search).get("m");
+  if (linked && state.scores.some(r => r.key === linked)) select(linked);
 
   // Open the date picker after first paint (so it never delays the map): past
   // dates browse the prebuilt history (static only); future dates run a Trip

@@ -87,6 +87,7 @@ def _row_from_card(key: str, card: dict, profile: str) -> dict:
         base_grade=base.get("grade"),
         base_depth=card["conditions"]["base_depth"],
         fresh_7d=card["conditions"]["fresh_7d"],
+        fresh_24h=card["conditions"].get("fresh_24h"),
         season_progress=card["season_progress"],
         incoming_inches=fc.get("inches"),
         alert=bool(fc.get("alert")),
@@ -111,7 +112,7 @@ def _null_row(key: str, error: str) -> dict:
     """A roster row for a mountain whose scoring failed -- a gray pin, not a gap."""
     row = mountain_summary(key)
     row.update(score=None, grade="N/A", in_season=None, cover_depth=None,
-               season_grade=None, base_grade=None, base_depth=None, fresh_7d=None,
+               season_grade=None, base_grade=None, base_depth=None, fresh_7d=None, fresh_24h=None,
                season_progress=None, incoming_inches=None, alert=False,
                status="error", error=error)
     return row

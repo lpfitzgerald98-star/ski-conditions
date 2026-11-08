@@ -1,0 +1,15 @@
+# Cloudflare Worker that stores GladeGrade's push subscriptions (see src/index.js).
+# Setup steps are in push-worker/README.md.
+name = "gladegrade-push"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://lpfitzgerald98-star.github.io"
+
+# `npx wrangler kv namespace create SUBS` prints the id to paste here.
+[[kv_namespaces]]
+binding = "SUBS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# ADMIN_TOKEN is a secret: `npx wrangler secret put ADMIN_TOKEN`

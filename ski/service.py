@@ -146,6 +146,7 @@ def score_mountain(
         base_grade=base.get("grade"),
         base_depth=card["conditions"]["base_depth"],
         fresh_7d=card["conditions"]["fresh_7d"],
+        fresh_24h=card["conditions"].get("fresh_24h"),
         season_progress=card["season_progress"],
         incoming_inches=fc.get("inches"),
         alert=bool(fc.get("alert")),
