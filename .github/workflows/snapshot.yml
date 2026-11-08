@@ -111,28 +111,26 @@ jobs:
                    python scripts/build_snapshot.py --history ;;
           esac
 
-      # List mountains whose station stopped sending snow readings on the run's
-      # summary page, and open an issue (once) when a station a mountain was moved
-      # off starts reporting again (exit code 3). Never fails the build.
+      # Station health: list mountains whose station stopped sending snow
+      # readings on the run's summary page, and keep GitHub issues in step with
+      # it (scripts/station_issues.py: one issue, opened on the first problem,
+      # commented when the set changes, closed when all report again; plus one
+      # when a station a mountain was moved off returns). Never fails the build.
       - name: Station health
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           report="$RUNNER_TEMP/station_health.txt"
-          code=0
-          python scripts/station_health.py --watch > "$report" 2>&1 || code=$?
+          findings="$RUNNER_TEMP/station_health.json"
+          python scripts/station_health.py --watch --json "$findings" > "$report" 2>&1 || true
           {
             echo '### Station health'
             echo '```'
             cat "$report"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$code" = 3 ]; then
-            title="A watched weather station is reporting again"
-            open=$(gh issue list --state open --search "\"$title\" in:title" --json number -q 'length' || echo 0)
-            if [ "$open" = 0 ]; then
-              gh issue create --title "$title" --body-file "$report" || true
-            fi
+          if [ -f "$findings" ]; then
+            python scripts/station_issues.py "$findings" || echo "Couldn't update station issues"
           fi
 
       # Save the updated DB back to the cache -- but only when ingest actually
