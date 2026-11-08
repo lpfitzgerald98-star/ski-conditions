@@ -61,7 +61,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install pandas numpy requests anthropic
+        run: pip install pandas numpy requests anthropic pywebpush
 
       # Restore the raw-observation DB from the previous run. Keyed uniquely per
       # run (caches are immutable) with a prefix restore-key, so each run reads
@@ -76,6 +76,11 @@ jobs:
           key: ski-db-${{ github.run_id }}
           restore-keys: |
             ski-db-
+
+      # Snow alerts compare this build with the one that's live now (openings,
+      # grades reaching A), so grab the live scores before anything is rebuilt.
+      - name: Save the live scores for snow alerts
+        run: curl -fsS "https://lpfitzgerald98-star.github.io/ski-conditions/data/scores.dynamic.json?v=${{ github.run_id }}" -o "$RUNNER_TEMP/prev_scores.json" || echo "no live scores to compare with"
 
       # Put back any forecast_log / quality_log rows the cache doesn't have (a cold
       # cache would otherwise lose the season's prediction history for good --
@@ -171,6 +176,23 @@ jobs:
         id: deploy_retry
         if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
+
+      # Push the best new snow alert to every phone that turned the bell on
+      # (scripts/push_alerts.py). Only after a successful deploy, so the link in the
+      # notification shows the new data. Without the secrets it just logs what it
+      # would send. Never fails the build.
+      - name: Send snow alerts
+        env:
+          PUSH_API: ${{ vars.PUSH_API }}
+          PUSH_ADMIN_TOKEN: ${{ secrets.PUSH_ADMIN_TOKEN }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: |
+          python scripts/push_alerts.py --previous "$RUNNER_TEMP/prev_scores.json" || echo "snow alerts failed"
+          if [ -n "$(git status --porcelain logs/push)" ]; then
+            git add logs/push
+            git commit -m "Snow alerts: sent log [skip ci]"
+            git pull --rebase --quiet && git push || echo "couldn't save the sent log"
+          fi
 
       # One open issue at a time, so a bad stretch doesn't pile up notifications.
       - name: Report a failed build
