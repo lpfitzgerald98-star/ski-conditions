@@ -12,14 +12,16 @@ A mountain moved off a dead station keeps the old one under `watch_station` in
 config. `--watch` asks each watched station directly (network) whether it has
 sent snow readings again, so the move can be reconsidered.
 
-Run:  python scripts/station_health.py [--as-of YYYY-MM-DD] [--all] [--watch]
+Run:  python scripts/station_health.py [--as-of YYYY-MM-DD] [--all] [--watch] [--json PATH]
 Exit code 1 when any mountain is flagged, so CI can surface it. With --watch,
-exit code 3 when a watched station is back (it takes precedence).
+exit code 3 when a watched station is back (it takes precedence). --json writes
+{"as_of", "flagged": [...], "back": [...]} for scripts/station_issues.py.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -70,7 +72,7 @@ def station_back(obs: pd.DataFrame, silent_since: date) -> date | None:
     return have["date"].max().date() if len(have) else None
 
 
-def check_watched(as_of: date) -> list[str]:
+def check_watched(as_of: date) -> list[dict]:
     """Fetch each watched station's recent data and list the ones sending snow again."""
     back = []
     for key, m in sorted(MOUNTAINS.items()):
@@ -86,7 +88,9 @@ def check_watched(as_of: date) -> list[str]:
             print(f"{key}: couldn't check old station {w['name']} ({w['id']}): {e}")
             continue
         if last:
-            back.append(key)
+            back.append({"key": key, "name": m.get("name", key), "old_station": w["name"],
+                         "old_id": f"{w['data_source']} {w['id']}", "latest": str(last),
+                         "current_station": m.get("station_name")})
             print(f"{key}: old station {w['name']} ({w['data_source']} {w['id']}) is reporting "
                   f"snow again, latest {last}. Consider moving back from {m.get('station_name')}.")
         else:
@@ -99,10 +103,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--as-of", type=date.fromisoformat, default=date.today())
     ap.add_argument("--all", action="store_true", help="list every mountain, not just flagged ones")
     ap.add_argument("--watch", action="store_true", help="also check stations kept under watch_station")
+    ap.add_argument("--json", type=Path, help="also write the findings to this file")
     args = ap.parse_args(argv)
 
     cache: dict[str, pd.DataFrame] = {}
-    problems = 0
+    found = []
     for key, m in sorted(MOUNTAINS.items()):
         st = pipeline.mountain_station(m)
         if st not in cache:
@@ -111,17 +116,23 @@ def main(argv: list[str] | None = None) -> int:
         h = station_health(cache[st], args.as_of, window)
         now = bool(window) and in_season_window(args.as_of, tuple(window["start"]), tuple(window["end"]))
         why = flagged(h, now)
-        problems += why is not None
+        if why:
+            found.append({"key": key, "name": m.get("name", key), "station": m.get("station_name", st),
+                          "source": f"{m.get('data_source') or 'snotel'} {st}", "reason": why})
         if why or args.all:
             silent = "-" if h["days_silent"] is None else h["days_silent"]
             print(f"{key:22} {m.get('data_source') or 'snotel':9} {st:14} silent={silent!s:>5}d "
                   f"season_coverage={h['season_coverage']:4.0%}  {why or 'ok'}")
-    print(f"\n{problems} of {len(MOUNTAINS)} mountains flagged.")
+    print(f"\n{len(found)} of {len(MOUNTAINS)} mountains flagged.")
+    back = []
     if args.watch:
         print()
-        if check_watched(args.as_of):
-            return 3
-    return 1 if problems else 0
+        back = check_watched(args.as_of)
+    if args.json:
+        args.json.write_text(json.dumps({"as_of": str(args.as_of), "flagged": found, "back": back}, indent=2))
+    if back:
+        return 3
+    return 1 if found else 0
 
 
 if __name__ == "__main__":

@@ -12,6 +12,13 @@ export const LIVE = API_BASE !== "";
 // Where the static snapshot lives, relative to the page.
 export const DATA_BASE = "data";
 
+// Snow alerts (web push). PUSH_API is the gladegrade-push Cloudflare Worker that
+// stores subscriptions (push-worker/); VAPID_PUBLIC_KEY pairs with the private key
+// the daily build signs pushes with. Both are public values. While either is
+// empty the alerts bell stays hidden.
+export const PUSH_API = "";
+export const VAPID_PUBLIC_KEY = "";
+
 // Base map. Any OpenFreeMap style URL works, no API key:
 //   https://tiles.openfreemap.org/styles/liberty    (fuller color -- current)
 //   https://tiles.openfreemap.org/styles/positron   (muted greyscale)
