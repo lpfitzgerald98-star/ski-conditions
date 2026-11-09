@@ -10,6 +10,6 @@ ALLOWED_ORIGIN = "https://lpfitzgerald98-star.github.io"
 # `npx wrangler kv namespace create SUBS` prints the id to paste here.
 [[kv_namespaces]]
 binding = "SUBS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "202d575e82f346b69eafc7ab5005f0bc"
 
 # ADMIN_TOKEN is a secret: `npx wrangler secret put ADMIN_TOKEN`
