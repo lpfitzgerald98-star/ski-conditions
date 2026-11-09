@@ -16,8 +16,8 @@ export const DATA_BASE = "data";
 // stores subscriptions (push-worker/); VAPID_PUBLIC_KEY pairs with the private key
 // the daily build signs pushes with. Both are public values. While either is
 // empty the alerts bell stays hidden.
-export const PUSH_API = "";
-export const VAPID_PUBLIC_KEY = "";
+export const PUSH_API = "https://gladegrade-push.gladegrade.workers.dev";
+export const VAPID_PUBLIC_KEY = "BKA9wWUEPhmcX0JvalE9kTv3vafmBSao6DhR8im-UU3ICdXx0u-9iXqCF3ZMOMfV0uHcy2Ul-B24whVXVXPInps";
 
 // Base map. Any OpenFreeMap style URL works, no API key:
 //   https://tiles.openfreemap.org/styles/liberty    (fuller color -- current)
