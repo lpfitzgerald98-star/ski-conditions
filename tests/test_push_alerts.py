@@ -75,7 +75,9 @@ def test_the_same_event_isnt_resent_within_its_cooldown():
     events = find_events([row(fresh_24h=10.0)], None, {})
     assert pick(events, [{"date": "2026-12-10", "kind": "powder", "key": "alta"}], TODAY) == []
     assert pick(events, [{"date": "2026-12-09", "kind": "powder", "key": "alta"}], TODAY) != []
-    storm = find_events([row(alert=True)], None, {})
+    storm = find_events([row(alert=True)], None,
+                        {"alta": {"forecast_horizons": [{"horizon_hours": 24, "inches": 10, "percentile": 95}]}})
+    assert storm
     assert pick(storm, [{"date": "2026-12-08", "kind": "storm", "key": "alta"}], TODAY) == []
     assert pick(storm, [{"date": "2026-12-07", "kind": "storm", "key": "alta"}], TODAY) != []
 
@@ -238,3 +240,25 @@ def test_an_old_worker_without_history_falls_back_to_the_shared_log(monkeypatch,
     push_alerts.send(three_powder_days(), "https://w.dev", "t", "k", TODAY)
     assert pushed[0]["title"] == "Powder day: Mammoth, CA"   # alta already went out today
     assert puts == []
+
+
+def test_a_storm_flag_without_snow_the_card_counts_sends_nothing():
+    # 2026-11-17 Snowbird: the provider said 18" but the high was 41F, so the
+    # card's temperature-checked forecast was 0" at every horizon. No alert, and
+    # never the raw 18" or a made-up "top 10%".
+    cards = {"snowbird": {"forecast_horizons": [
+        {"horizon_hours": h, "inches": 0.0, "percentile": 0.0, "tmax_f": 41} for h in (24, 48, 72)]}}
+    assert find_events([row("snowbird", alert=True, incoming_inches=18.0)], None, cards) == []
+    assert find_events([row("snowbird", alert=True, incoming_inches=18.0)], None, {}) == []
+
+
+def test_a_storm_needs_the_mountains_floor_and_top_decile():
+    def ev(inches, pct, hours=24):
+        cards = {"alta": {"forecast_horizons": [{"horizon_hours": hours, "inches": inches, "percentile": pct}]}}
+        return find_events([row(alert=True)], None, cards)
+    assert ev(7, 95) == []                 # under Alta's 8" 24h floor
+    assert ev(9, 85) == []                 # not top 10%
+    assert ev(9, None) == []               # no ranking, no claim
+    assert ev(14, 95, hours=72) == []      # under the 15" 72h floor
+    [e] = ev(9, 95)
+    assert '9" forecast in the next 24 hours, top 5%' in e.body

@@ -294,3 +294,26 @@ def test_forecast_accuracy_skips_unelapsed_horizon():
         assert df.empty
     finally:
         os.remove(db_path)
+
+
+def test_storm_alert_uses_the_same_temperature_check_as_the_score():
+    # 2026-11-17 Snowbird: 18" of provider snow under a 41F high raised a storm
+    # alert while the forecast score counted 0". The alert now sees what the score sees.
+    from ski.pipeline import forecast_incoming_storms
+    db_path = _tmp_db()
+    try:
+        key = next(iter(MOUNTAINS))
+        m = MOUNTAINS[key]
+        station = m.get("snotel_station") or m.get("acis_sid") or m.get("cdec_station") \
+            or m.get("eccc_station") or m.get("bcsws_station") or m.get("openmeteo_id")
+        _seed_station(db_path, station)
+        warm = Outlook(provider="test", snow_in={24: 18.0, 72: 18.0},
+                       tmax_by_window={24: 41.0, 72: 41.0})
+        assert all(s.total_inches == 0.0 and not s.alert
+                   for s in forecast_incoming_storms(key, db_path, outlook=warm))
+        cold = Outlook(provider="test", snow_in={24: 18.0, 72: 18.0},
+                       tmax_by_window={24: 28.0, 72: 28.0})
+        storms = forecast_incoming_storms(key, db_path, outlook=cold)
+        assert storms[0].total_inches == 18.0 and storms[0].alert
+    finally:
+        os.remove(db_path)

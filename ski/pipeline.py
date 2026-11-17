@@ -1027,7 +1027,11 @@ def forecast_incoming_storms(
         if not obs.empty else None)
     out = []
     for wh in windows_hours:
-        total = outlook.snow_in.get(wh, 0.0)
+        # The same temperature check the forecast score applies: snow forecast
+        # with a 41F high is mostly rain at the resort, and must not raise a
+        # storm alert the score itself wouldn't count (score.phase_adjusted_snow_in).
+        total = score_mod.phase_adjusted_snow_in(
+            outlook.snow_in.get(wh, 0.0), (outlook.tmax_by_window or {}).get(wh))
         end_date = (now + pd.Timedelta(hours=wh)).date()
         floor = mountain_alert_floor(key, wh, season_pct)
         out.append(grade_storm(total, obs, wh, end_date, alert_floor=floor))
