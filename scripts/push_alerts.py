@@ -80,9 +80,16 @@ def _region(row: dict) -> str:
     return region_for(m) if m else ""
 
 
-def _floor_24h(key: str) -> float:
+def _floor(key: str, hours: int) -> float:
+    """The mountain's own storm floor for a window, nearest configured window."""
     m = MOUNTAINS.get(key, {})
-    return float((m.get("storm_floor_inches") or {}).get(24, STORM_THRESHOLDS["min_inches"][24]))
+    floors = {**STORM_THRESHOLDS["min_inches"], **(m.get("storm_floor_inches") or {})}
+    near = min(floors, key=lambda h: abs(h - hours))
+    return float(floors[near])
+
+
+def _floor_24h(key: str) -> float:
+    return _floor(key, 24)
 
 
 def _skiable(row: dict) -> bool:
@@ -100,14 +107,18 @@ def find_events(rows: list[dict], previous: list[dict] | None, cards: dict[str, 
         if r.get("season_over_since"):
             continue
         if r.get("alert"):
-            horizons = (cards.get(key) or {}).get("forecast_horizons") or []
-            best = max(horizons, key=lambda h: h.get("inches") or 0, default=None)
-            inches = (best or {}).get("inches") or r.get("incoming_inches") or 0
-            hours = (best or {}).get("horizon_hours", 24)
-            pct = (best or {}).get("percentile") or 90
-            out.append(Event("storm", key, name, strength=1.0 + (pct - 90) / 10,
-                             title=f"Big storm coming: {name}",
-                             body=f'{inches:.0f}" forecast in the next {hours} hours, top {max(1, round(100 - pct))}% for {name.split(",")[0]}.'))
+            # Only what the card's own forecast counts as snow (temperature-checked,
+            # ranked against this mountain's storms). No horizon that clears the
+            # mountain's storm floor with a real percentile -> no storm alert.
+            horizons = [h for h in (cards.get(key) or {}).get("forecast_horizons") or []
+                        if (h.get("inches") or 0) >= _floor(key, h.get("horizon_hours", 24))
+                        and h.get("percentile") is not None and h["percentile"] >= 90]
+            best = max(horizons, key=lambda h: h["percentile"], default=None)
+            if best:
+                inches, hours, pct = best["inches"], best.get("horizon_hours", 24), best["percentile"]
+                out.append(Event("storm", key, name, strength=1.0 + (pct - 90) / 10,
+                                 title=f"Big storm coming: {name}",
+                                 body=f'{inches:.0f}" forecast in the next {hours} hours, top {max(1, round(100 - pct))}% for {name.split(",")[0]}.'))
         fresh = r.get("fresh_24h")
         if _skiable(r) and fresh is not None and fresh >= _floor_24h(key):
             out.append(Event("powder", key, name, strength=fresh / _floor_24h(key),
