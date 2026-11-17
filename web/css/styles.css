@@ -18,7 +18,7 @@ button { font-family: inherit; }
 
 /* Wrappers that only mean something on a phone (see the Responsive section). */
 .filters-panel, .sheet { display: contents; }
-.sheet-grip, .filters-toggle, .filters-backdrop, .icon-btn.filters-close { display: none; }
+.sheet-grip, .filters-toggle, .filters-backdrop, .icon-btn.filters-close, .alerts-fab { display: none; }
 .header-actions { display: flex; gap: var(--sp-2); }
 
 /* ---- Accessibility utilities -------------------------------------------- */
@@ -523,6 +523,14 @@ details.forecast[open] .chev { transform: rotate(180deg); }
     border-radius: 0 0 var(--radius-lg) var(--radius-lg); box-shadow: var(--shadow-card);
   }
   .icon-btn.filters-close { display: grid; }
+  .alerts-fab:not([hidden]) {
+    display: grid; place-items: center; position: absolute; z-index: 4;
+    top: calc(env(safe-area-inset-top) + var(--sp-3)); left: calc(var(--sp-3) + 116px);
+    width: 44px; height: 44px; padding: 0; font-size: 18px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 999px; box-shadow: var(--shadow-pop); cursor: pointer;
+  }
+  .alerts-dialog .check input { width: 20px; height: 20px; }
   .tagline { max-width: 200px; }
   .icon-btn { width: 44px; height: 44px; }
   /* Safari zooms the whole page when a focused field's text is under 16px. */
@@ -543,3 +551,49 @@ details.forecast[open] .chev { transform: rotate(180deg); }
   .toast { bottom: calc(var(--sheet-peek, 122px) + 56px); }
 }
 @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---- Snow alerts: follow button + settings sheet ---------------------------- */
+.follow-btn {
+  margin-top: var(--sp-2); padding: 5px 12px; min-height: 32px;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.follow-btn:hover { border-color: var(--accent); }
+.follow-btn[aria-pressed="true"] { border-color: var(--alert); color: var(--alert); }
+@media (max-width: 780px) { .follow-btn { min-height: 40px; font-size: 14px; } }
+
+.alerts-dialog {
+  width: min(440px, calc(100vw - 2 * var(--sp-4))); max-height: 86dvh; overflow-y: auto;
+  overscroll-behavior: contain; padding: var(--sp-4);
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
+}
+.alerts-dialog::backdrop { background: rgba(0, 0, 0, .5); }
+.alerts-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-2); }
+.alerts-head h2 { font-size: 17px; font-weight: 700; }
+.alerts-state, .alerts-note { font-size: 13.5px; line-height: 1.45; }
+.alerts-note { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--sp-3); }
+.alerts-dialog .btn-primary { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); font-weight: 600; }
+.alerts-dialog .btn-primary:hover { background: var(--accent-strong); }
+.alerts-dialog fieldset { border: 0; border-top: 1px solid var(--line-soft); margin-top: var(--sp-4); padding: var(--sp-3) 0 0; }
+.alerts-dialog legend {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted); padding: 0 var(--sp-2) 0 0;
+}
+.alerts-dialog .check { align-items: flex-start; font-size: 13px; color: var(--text); margin-top: var(--sp-2); }
+.alerts-dialog .check input { margin-top: 2px; flex: 0 0 auto; accent-color: var(--accent); }
+.alerts-dialog .check small { display: block; color: var(--text-muted); font-size: 12px; margin-top: 1px; }
+.alerts-dialog .check span small { display: inline; }
+.alerts-dialog .check b + small { display: block; }
+.alerts-hint { font-size: 12px; color: var(--text-muted); margin-top: var(--sp-2); }
+.alerts-saved { font-size: 12px; color: var(--text-muted); min-height: 1em; margin-top: var(--sp-2); }
+.alerts-regions { max-height: 220px; overflow-y: auto; margin-top: var(--sp-1); padding-right: var(--sp-2); }
+.alerts-chips { list-style: none; display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); padding: 0; }
+.alerts-chips li {
+  display: flex; align-items: center; gap: var(--sp-1); padding: 3px 4px 3px 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px;
+}
+.alerts-chips button {
+  width: 26px; height: 26px; border: 0; background: none; color: var(--text-muted); cursor: pointer; border-radius: 999px;
+}
+.alerts-chips button:hover { color: var(--text); background: var(--line-soft); }
