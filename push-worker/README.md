@@ -7,8 +7,14 @@ Worker with a KV store, and it runs on Cloudflare's free plan.
 
 - **Turning alerts on:** the bell in the app (`web/js/alerts.js`) subscribes the
   device to web push and sends the subscription here.
-- **Choosing alerts:** after each site build, `scripts/push_alerts.py` picks the
-  best new snow alert.
+- **Choosing what to hear about:** the bell opens alert settings. Each device
+  follows mountains (the ☆ Follow button on a card) and regions, picks the kinds
+  of alert, and can also get the best snow anywhere. The settings are stored with
+  the subscription (`POST /prefs`).
+- **Choosing alerts:** after each site build, `scripts/push_alerts.py` picks each
+  device's alert: its best event at a mountain it follows, otherwise (if it wants
+  it) the best snow anywhere. At most two a day per device, and each device's
+  recent alerts are kept with its subscription so nothing repeats.
 - **Sending:** the same script fetches the subscription list from this Worker,
   using a bearer token, and sends the alert from GitHub Actions. The signing key
   stays in GitHub secrets, so this Worker never sees it.

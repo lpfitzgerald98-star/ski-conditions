@@ -7,6 +7,7 @@ import { colorFor, badgeSVG, naColor, letterFor } from "./grades.js";
 import { state, skiableNow } from "./state.js";
 import { announce, focusSilently } from "./a11y.js";
 import { makeSheet, safeInsets } from "./sheet.js";
+import { followButton } from "./alerts.js";
 
 let panel = null;         // the card itself: shown, hidden and resized
 let el = null;            // its contents, replaced on each render
@@ -251,6 +252,7 @@ function render(card, key) {
 
   let html = `<button class="close" type="button" aria-label="Close details">✕</button>
     <h2 id="detail-title">${escapeHTML(card.mountain.name)}</h2>
+    ${followButton(key)}
     <div class="sub">${card.mountain.verified ? "✓ verified station" : "⚠ unverified station"} · ${card.mountain.key}</div>`;
 
   // Current weather: a compact one-liner right under the name, not its own
@@ -362,6 +364,7 @@ function renderHistCard(row, key) {
 
   el.innerHTML = `<button class="close" type="button" aria-label="Close details">✕</button>
     <h2 id="detail-title">${escapeHTML(row.name)}</h2>
+    ${followButton(key)}
     <div class="sub">as of ${state.histDate} · historical (snow-based)</div>
     <div class="duo">
       ${row.season_over_since ? `<div class="side hero">
@@ -537,6 +540,7 @@ async function renderTripCard(row, key, token) {
 
   el.innerHTML = `<button class="close" type="button" aria-label="Close details">✕</button>
     <h2 id="detail-title">${escapeHTML(row.name)}</h2>
+    ${followButton(key)}
     <div class="sub">trip prediction · ${state.tripDate} · ${info.lead_days} days out</div>
     <div class="duo">
       <div class="side hero">
