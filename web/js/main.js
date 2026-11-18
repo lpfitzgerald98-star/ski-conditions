@@ -13,6 +13,7 @@ import {
 } from "./state.js";
 import { announce } from "./a11y.js";
 import { initAlerts } from "./alerts.js";
+import { initTopPicks, openPicks, closePicks } from "./toppicks.js";
 import { setRegionTree, optionsList } from "./regions.js";
 import * as sse from "./sse.js";
 import {
@@ -40,6 +41,7 @@ function frameOnce() {
 
 // -- selection -------------------------------------------------------------
 function select(key) {
+  closePicks({ refocus: false });
   setSelected(key);
   mapMarkSelected(key);
   listMarkSelected(key);
@@ -495,6 +497,7 @@ async function boot() {
   initAlerts();
   initCard();
   initSidebar(select);
+  initTopPicks(select);
   initLeaderboardSheet();
   initFiltersPanel();
   initMap(select, viewAll);
@@ -519,9 +522,16 @@ async function boot() {
   wireControls();
   await loadProfile(defaultProfile);
 
-  // A snow alert (or a shared link) can point at one mountain: ?m=<key>.
-  const linked = new URLSearchParams(location.search).get("m");
-  if (linked && state.scores.some(r => r.key === linked)) select(linked);
+  // A snow alert opens Top picks on its tab (?top=recent|24|48|72, &hl=<key> marks
+  // the mountain it was about); a shared link can still open one mountain: ?m=<key>.
+  const params = new URLSearchParams(location.search);
+  const linked = params.get("m");
+  if (params.has("top")) openPicks(params.get("top"), params.get("hl"));
+  else if (linked && state.scores.some(r => r.key === linked)) select(linked);
+  if (params.has("top") || params.has("hl")) {
+    // Drop the alert's query so a reload doesn't reopen the panel.
+    history.replaceState(null, "", location.pathname + location.hash);
+  }
 
   // Open the date picker after first paint (so it never delays the map): past
   // dates browse the prebuilt history (static only); future dates run a Trip

@@ -1,6 +1,6 @@
 // Bump this string any time index.html, css, or js changes.
 // Without a bump, installed instances keep serving the OLD cached shell.
-const CACHE_VERSION = "gladegrade-v5";
+const CACHE_VERSION = "gladegrade-v6";
 
 const SHELL_ASSETS = [
   "./",
@@ -68,7 +68,8 @@ self.addEventListener("fetch", (event) => {
 });
 
 // Snow alerts (web push, see js/alerts.js and scripts/push_alerts.py). The payload
-// is {title, body, url, tag}; tapping the notification opens that mountain, reusing
+// is {title, body, url, tag}; tapping the notification opens the Top picks panel
+// (url ?top=<tab>&hl=<key>), reusing
 // an open GladeGrade window when there is one.
 self.addEventListener("push", (event) => {
   let data = {};
