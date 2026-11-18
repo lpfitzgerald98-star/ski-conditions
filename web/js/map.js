@@ -48,6 +48,15 @@ function gradeSignal(m) {
 // survey the map again" does.
 const CARD_DISMISS_DELTA = 1.2;
 
+// Camera moves wait for the map's "load" event, in call order. isStyleLoaded()
+// turns true before "load" fires, so checking it let a later mountain zoom run
+// first and then the queued first-load world fit undo it (a ?m= link opened the
+// card over the world view).
+let loaded = false;
+function whenLoaded(run) {
+  if (loaded) run(); else map.once("load", run);
+}
+
 export function initMap(onSelect, onViewAll) {
   map = new maplibregl.Map({
     container: "map",
@@ -85,6 +94,7 @@ export function initMap(onSelect, onViewAll) {
   };
   map.on("zoom", applyMarkerScale);
   map.on("load", applyMarkerScale);
+  map.once("load", () => { loaded = true; });
 
   // Re-cluster after every pan/zoom settles. moveend (not move) fires once per
   // gesture, so markers pan smoothly during a drag and only regroup when it stops.
@@ -431,8 +441,12 @@ export function flyToMountain(key) {
   cardFrameZoom = zoom;
   const offset = isPhone() ? [0, -Math.round(window.innerHeight * 0.275)] : [-150, 0];
   const opts = { center: [row.longitude, row.latitude], zoom, offset };
-  if (prefersReducedMotion()) map.jumpTo(opts, PROGRAMMATIC);
-  else map.easeTo({ ...opts, duration: 600 }, PROGRAMMATIC);
+  const run = () => {
+    if (prefersReducedMotion()) map.jumpTo(opts, PROGRAMMATIC);
+    else map.easeTo({ ...opts, duration: 600 }, PROGRAMMATIC);
+  };
+  // Queued behind the first-load framing, so the mountain framing wins.
+  whenLoaded(run);
 }
 
 // Dismiss the open scorecard once the user has zoomed OUT past its framing zoom.
@@ -512,7 +526,7 @@ function fitBounds(pts, maxZoom = 8) {
     }, PROGRAMMATIC);
   };
   // Fitting before the style loads throws; defer to first load in that case.
-  if (map.isStyleLoaded()) run(); else map.once("load", run);
+  whenLoaded(run);
 }
 
 // --- tooltip ---------------------------------------------------------------

@@ -45,6 +45,7 @@ from ski.service import (  # noqa: E402
     NA_COLOR,
     mountain_summary,
     rank_within_regions,
+    recent_and_forecast,
 )
 
 WEB_DATA = Path(__file__).resolve().parent.parent / "web" / "data"
@@ -88,6 +89,7 @@ def _row_from_card(key: str, card: dict, profile: str) -> dict:
         base_depth=card["conditions"]["base_depth"],
         fresh_7d=card["conditions"]["fresh_7d"],
         fresh_24h=card["conditions"].get("fresh_24h"),
+        **recent_and_forecast(card),
         season_progress=card["season_progress"],
         incoming_inches=fc.get("inches"),
         alert=bool(fc.get("alert")),
@@ -113,6 +115,7 @@ def _null_row(key: str, error: str) -> dict:
     row = mountain_summary(key)
     row.update(score=None, grade="N/A", in_season=None, cover_depth=None,
                season_grade=None, base_grade=None, base_depth=None, fresh_7d=None, fresh_24h=None,
+               fresh_48h=None, fresh_72h=None, forecast_24h=None, forecast_48h=None, forecast_72h=None,
                season_progress=None, incoming_inches=None, alert=False,
                status="error", error=error)
     return row

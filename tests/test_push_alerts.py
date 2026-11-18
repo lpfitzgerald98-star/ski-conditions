@@ -68,7 +68,8 @@ def test_the_best_event_leads_and_names_the_next_ones():
     msg = message(ranked)
     assert msg["title"] == "Powder day: Alta, UT"
     assert "Also worth a look: Brighton, Snowbird." in msg["body"]
-    assert msg["url"].endswith("?m=alta")
+    # A tap opens the Top picks panel (not one mountain), with the lead one marked.
+    assert msg["url"].endswith("?top=recent&hl=alta")
 
 
 def test_the_same_event_isnt_resent_within_its_cooldown():
@@ -262,3 +263,9 @@ def test_a_storm_needs_the_mountains_floor_and_top_decile():
     assert ev(14, 95, hours=72) == []      # under the 15" 72h floor
     [e] = ev(9, 95)
     assert '9" forecast in the next 24 hours, top 5%' in e.body
+
+
+def test_a_storm_alert_opens_the_forecast_tab_for_its_window():
+    cards = {"alta": {"forecast_horizons": [{"horizon_hours": 48, "inches": 14, "percentile": 96}]}}
+    [e] = find_events([row(alert=True)], None, cards)
+    assert message([e])["url"].endswith("?top=48&hl=alta")

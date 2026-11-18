@@ -83,6 +83,22 @@ def color_for(grade: str | None) -> str:
     return GRADE_COLORS.get(grade or "", NA_COLOR)
 
 
+def recent_and_forecast(card: dict) -> dict:
+    """Snow over the last 24/48/72 hours and forecast for the next 24/48/72, flat on
+    the row so the web app's Top picks panel can rank every mountain without
+    loading each card. Forecast inches are the card's own temperature-checked
+    horizons; no horizon -> None (off the live path, or no forecast)."""
+    cond = card.get("conditions") or {}
+    fc = {h.get("horizon_hours"): h.get("inches") for h in card.get("forecast_horizons") or []}
+    return {
+        "fresh_48h": cond.get("fresh_48h"),
+        "fresh_72h": cond.get("fresh_72h"),
+        "forecast_24h": fc.get(24),
+        "forecast_48h": fc.get(48),
+        "forecast_72h": fc.get(72),
+    }
+
+
 def mountain_summary(key: str) -> dict:
     """Static roster fields for one mountain -- no scoring, no IO."""
     m = MOUNTAINS[key]
@@ -147,6 +163,7 @@ def score_mountain(
         base_depth=card["conditions"]["base_depth"],
         fresh_7d=card["conditions"]["fresh_7d"],
         fresh_24h=card["conditions"].get("fresh_24h"),
+        **recent_and_forecast(card),
         season_progress=card["season_progress"],
         incoming_inches=fc.get("inches"),
         alert=bool(fc.get("alert")),

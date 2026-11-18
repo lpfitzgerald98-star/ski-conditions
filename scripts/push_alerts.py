@@ -71,6 +71,7 @@ class Event:
     title: str
     body: str
     region: str = ""
+    tab: str = "recent"   # which Top picks tab the tap opens: recent, 24, 48 or 72
 
 
 def _region(row: dict) -> str:
@@ -117,6 +118,7 @@ def find_events(rows: list[dict], previous: list[dict] | None, cards: dict[str, 
             if best:
                 inches, hours, pct = best["inches"], best.get("horizon_hours", 24), best["percentile"]
                 out.append(Event("storm", key, name, strength=1.0 + (pct - 90) / 10,
+                                 tab=str(hours) if hours in (24, 48, 72) else "72",
                                  title=f"Big storm coming: {name}",
                                  body=f'{inches:.0f}" forecast in the next {hours} hours, top {max(1, round(100 - pct))}% for {name.split(",")[0]}.'))
         fresh = r.get("fresh_24h")
@@ -233,7 +235,7 @@ def message(ranked: list[Event], note: str = "") -> dict:
         body += f" Also worth a look: {', '.join(others)}."
     if note:
         body += f" {note}"
-    return {"title": top.title, "body": body, "url": f"{SITE}?m={top.key}", "tag": f"{top.kind}-{top.key}"}
+    return {"title": top.title, "body": body, "url": f"{SITE}?top={top.tab}&hl={top.key}", "tag": f"{top.kind}-{top.key}"}
 
 
 def trim_history(history: list[dict], today: date) -> list[dict]:

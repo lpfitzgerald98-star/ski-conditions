@@ -275,6 +275,8 @@ def scorecard(
             "base_grade": base.grade if base else None,
             "fresh_7d": _round(card.get("fresh_7d"), 1),
             "fresh_24h": _round(card.get("fresh_24h"), 1),
+            "fresh_48h": _round(card.get("fresh_48h"), 1),
+            "fresh_72h": _round(card.get("fresh_72h"), 1),
             "weather": _weather_json(card["weather"]),
             "weather_quality": _round(card["weather_quality"], 0),
         },

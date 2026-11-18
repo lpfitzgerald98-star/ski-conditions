@@ -113,6 +113,26 @@
             aria-pressed="false" aria-label="Get snow alerts" title="Get snow alerts">
       <span aria-hidden="true">🔕</span>
     </button>
+    <!-- Top picks (js/toppicks.js): every mountain ranked by recent snow and by the
+         24/48/72h forecast. A snow alert opens it. -->
+    <button id="picks-toggle" class="picks-toggle" type="button"
+            aria-expanded="false" aria-controls="picks-panel">
+      <span aria-hidden="true">★</span> Top picks <span class="picks-caret" aria-hidden="true">▾</span>
+    </button>
+    <section id="picks-panel" class="picks-panel" aria-labelledby="picks-title" hidden>
+      <div class="picks-head">
+        <div>
+          <h2 id="picks-title">Top picks</h2>
+          <p id="picks-sub" class="picks-sub"></p>
+        </div>
+        <button id="picks-close" class="icon-btn" type="button" aria-label="Close top picks">
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
+      <div class="picks-tabs" role="tablist" aria-label="Snow window"></div>
+      <ol id="picks-list" class="picks-list" role="tabpanel" aria-labelledby="picks-title"></ol>
+      <p class="picks-foot">Tap a mountain to see it on the map.</p>
+    </section>
     <div id="filters-backdrop" class="filters-backdrop" hidden></div>
     <div id="map-tooltip" class="map-tooltip" hidden></div>
     <!-- Bottom-left "how to read the map" guide (populated by main.buildMapGuide):
